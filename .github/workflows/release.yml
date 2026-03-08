@@ -25,7 +25,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and publish
+      - name: Build and package
+        run: npm run package
+
+      - name: Create GitHub Release and upload installer
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run release
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $exe = Get-ChildItem dist/DustForge-Setup-*.exe | Select-Object -First 1
+          gh release create $tag $exe.FullName --title $tag --generate-notes
