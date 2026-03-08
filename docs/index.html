@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DustForge - Advanced System Cleaner for Windows</title>
+  <meta name="description" content="A modern, open-source system cleaner, optimizer, and security tool for Windows. Clean junk files, fix registry issues, scan for malware, and protect your privacy.">
+  <meta name="theme-color" content="#f59e0b">
+  <link rel="icon" type="image/png" href="icon.png">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="DustForge - Advanced System Cleaner for Windows">
+  <meta property="og:description" content="Open-source system cleaner, optimizer, and security tool for Windows.">
+  <meta property="og:image" content="screenshots/dashboard.png">
+  <meta property="og:type" content="website">
+
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --amber: #f59e0b;
+      --amber-dark: #d97706;
+      --amber-glow: rgba(245, 158, 11, 0.15);
+      --bg: #09090b;
+      --bg-surface: #111114;
+      --bg-card: #16161a;
+      --bg-elevated: #1c1c21;
+      --border: rgba(255,255,255,0.06);
+      --text: #e4e4e7;
+      --text-muted: #71717a;
+      --text-dim: #52525b;
+      --green: #22c55e;
+      --red: #ef4444;
+      --blue: #3b82f6;
+      --purple: #a855f7;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── Utility ─────────────────────────── */
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+
+    /* ── Nav ──────────────────────────────── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(9,9,11,0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.3s;
+    }
+    .nav-inner {
+      max-width: 1200px; margin: 0 auto; padding: 0 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 64px;
+    }
+    .nav-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+    .nav-brand img { width: 36px; height: 36px; border-radius: 8px; }
+    .nav-brand span { font-size: 18px; font-weight: 700; color: var(--text); }
+    .nav-brand small { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin-left: 2px; }
+    .nav-links { display: flex; align-items: center; gap: 32px; }
+    .nav-links a {
+      font-size: 14px; color: var(--text-muted); text-decoration: none;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--amber); color: #000; font-weight: 600;
+      padding: 8px 20px; border-radius: 10px; font-size: 14px;
+      text-decoration: none; transition: all 0.2s;
+    }
+    .nav-cta:hover { background: var(--amber-dark); transform: translateY(-1px); }
+
+    .nav-mobile-toggle {
+      display: none; background: none; border: none; cursor: pointer; padding: 8px;
+    }
+    .nav-mobile-toggle span {
+      display: block; width: 22px; height: 2px; background: var(--text-muted);
+      margin: 5px 0; transition: all 0.3s;
+    }
+
+    /* ── Hero ─────────────────────────────── */
+    .hero {
+      padding: 160px 0 100px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+      width: 800px; height: 800px;
+      background: radial-gradient(circle, var(--amber-glow) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 100px; padding: 6px 16px 6px 8px;
+      font-size: 13px; color: var(--text-muted); margin-bottom: 32px;
+    }
+    .hero-badge .dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; }
+    .hero h1 {
+      font-size: clamp(40px, 6vw, 72px); font-weight: 800;
+      line-height: 1.1; margin-bottom: 24px;
+      background: linear-gradient(135deg, var(--text) 0%, var(--amber) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p {
+      font-size: clamp(16px, 2vw, 20px); color: var(--text-muted);
+      max-width: 640px; margin: 0 auto 48px;
+    }
+    .hero-actions { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: var(--amber); color: #000; font-weight: 700;
+      padding: 14px 32px; border-radius: 14px; font-size: 16px;
+      text-decoration: none; transition: all 0.25s; border: none; cursor: pointer;
+    }
+    .btn-primary:hover { background: var(--amber-dark); transform: translateY(-2px); box-shadow: 0 12px 40px rgba(245,158,11,0.25); }
+    .btn-primary svg { width: 20px; height: 20px; }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: var(--bg-card); color: var(--text); font-weight: 600;
+      padding: 14px 32px; border-radius: 14px; font-size: 16px;
+      text-decoration: none; transition: all 0.25s;
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--bg-elevated); border-color: rgba(255,255,255,0.1); transform: translateY(-2px); }
+    .btn-secondary svg { width: 18px; height: 18px; }
+
+    .hero-note {
+      margin-top: 20px; font-size: 13px; color: var(--text-dim);
+    }
+    .hero-note span { color: var(--text-muted); }
+
+    /* ── Hero Screenshot ─────────────────── */
+    .hero-screenshot {
+      margin-top: 72px; position: relative;
+    }
+    .hero-screenshot img {
+      width: 100%; max-width: 1100px; border-radius: 16px;
+      border: 1px solid var(--border);
+      box-shadow: 0 40px 120px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03);
+    }
+    .hero-screenshot::after {
+      content: '';
+      position: absolute; bottom: -2px; left: 0; right: 0; height: 180px;
+      background: linear-gradient(to top, var(--bg), transparent);
+      pointer-events: none;
+    }
+
+    /* ── Section ──────────────────────────── */
+    section { padding: 100px 0; }
+    .section-label {
+      font-size: 12px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 3px; color: var(--amber); margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: clamp(28px, 4vw, 44px); font-weight: 800;
+      line-height: 1.15; margin-bottom: 16px;
+    }
+    .section-subtitle {
+      font-size: 17px; color: var(--text-muted); max-width: 560px;
+    }
+    .section-header { text-align: center; margin-bottom: 64px; }
+    .section-header .section-subtitle { margin: 0 auto; }
+
+    /* ── Feature Showcase (tabbed screenshots) ── */
+    .showcase { background: var(--bg-surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .showcase-tabs {
+      display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;
+      margin-bottom: 48px;
+    }
+    .showcase-tab {
+      padding: 10px 20px; border-radius: 10px; font-size: 14px;
+      font-weight: 600; cursor: pointer; transition: all 0.2s;
+      background: transparent; border: 1px solid transparent;
+      color: var(--text-muted); white-space: nowrap;
+    }
+    .showcase-tab:hover { color: var(--text); background: var(--bg-card); }
+    .showcase-tab.active {
+      background: var(--bg-card); color: var(--amber);
+      border-color: rgba(245,158,11,0.2);
+      box-shadow: 0 0 20px rgba(245,158,11,0.06);
+    }
+    .showcase-display {
+      position: relative; max-width: 1060px; margin: 0 auto;
+    }
+    .showcase-panel { display: none; animation: fadeScale 0.4s ease; }
+    .showcase-panel.active { display: block; }
+    .showcase-image-wrap {
+      border-radius: 16px; overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 20px 80px rgba(0,0,0,0.4);
+    }
+    .showcase-image-wrap img { width: 100%; display: block; }
+    .showcase-info {
+      margin-top: 32px; text-align: center; padding: 0 20px;
+    }
+    .showcase-info h3 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+    .showcase-info p { font-size: 15px; color: var(--text-muted); max-width: 600px; margin: 0 auto; }
+
+    @keyframes fadeScale {
+      from { opacity: 0; transform: scale(0.98) translateY(8px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    /* ── Feature Grid ────────────────────── */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+    }
+    .feature-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 32px; transition: all 0.3s;
+    }
+    .feature-card:hover {
+      border-color: rgba(245,158,11,0.15);
+      transform: translateY(-4px);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+    }
+    .feature-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 20px; font-size: 20px;
+    }
+    .feature-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+    .feature-card p { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
+
+    /* ── Stats ────────────────────────────── */
+    .stats {
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    }
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px;
+      text-align: center;
+    }
+    .stats-grid .stat-value {
+      font-size: 42px; font-weight: 800;
+      background: linear-gradient(135deg, var(--amber), #fbbf24);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .stats-grid .stat-label { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
+
+    /* ── Tech Stack ──────────────────────── */
+    .tech-grid {
+      display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;
+    }
+    .tech-item {
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      font-size: 13px; color: var(--text-muted);
+    }
+    .tech-item .tech-logo {
+      width: 48px; height: 48px; border-radius: 12px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; font-weight: 700; color: var(--text);
+    }
+
+    /* ── CTA ──────────────────────────────── */
+    .cta-section { text-align: center; position: relative; overflow: hidden; }
+    .cta-section::before {
+      content: '';
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, var(--amber-glow) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cta-section h2 {
+      font-size: clamp(32px, 4vw, 48px); font-weight: 800; margin-bottom: 16px;
+    }
+    .cta-section p { font-size: 17px; color: var(--text-muted); margin-bottom: 40px; }
+
+    /* ── Footer ───────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border); padding: 40px 0;
+    }
+    .footer-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 16px;
+    }
+    .footer-inner p { font-size: 13px; color: var(--text-dim); }
+    .footer-links { display: flex; gap: 24px; }
+    .footer-links a { font-size: 13px; color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
+    .footer-links a:hover { color: var(--amber); }
+
+    /* ── Responsive ───────────────────────── */
+    @media (max-width: 900px) {
+      .features-grid { grid-template-columns: repeat(2, 1fr); }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 24px; }
+    }
+    @media (max-width: 640px) {
+      .features-grid { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .nav-links { display: none; }
+      .nav-mobile-toggle { display: block; }
+      .showcase-tabs { gap: 2px; }
+      .showcase-tab { padding: 8px 12px; font-size: 12px; }
+      section { padding: 64px 0; }
+      .hero { padding: 120px 0 60px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <div class="nav-inner">
+      <a href="#" class="nav-brand">
+        <img src="icon.png" alt="DustForge">
+        <span>DustForge</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#showcase">Screenshots</a>
+        <a href="#tech">Tech Stack</a>
+        <a href="https://github.com/dbfx/dustforge" target="_blank">GitHub</a>
+        <a href="https://github.com/dbfx/dustforge/releases/latest" class="nav-cta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download
+        </a>
+      </div>
+      <button class="nav-mobile-toggle" onclick="document.querySelector('.nav-links').style.display = document.querySelector('.nav-links').style.display === 'flex' ? 'none' : 'flex'" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">
+        <span class="dot"></span>
+        v1.1.0 &mdash; Now with Malware Scanner & Privacy Shield
+      </div>
+      <h1>Your Windows,<br>dust-free.</h1>
+      <p>An advanced open-source system cleaner, optimizer, and security tool built for Windows power users. 10+ specialized tools in one beautiful interface.</p>
+      <div class="hero-actions">
+        <a href="https://github.com/dbfx/dustforge/releases/latest" class="btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download for Windows
+        </a>
+        <a href="https://github.com/dbfx/dustforge" target="_blank" class="btn-secondary">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          View Source
+        </a>
+      </div>
+      <p class="hero-note">Free & open source &middot; Windows 10/11 &middot; <span>MIT License</span></p>
+      <div class="hero-screenshot">
+        <img src="screenshots/dashboard.png" alt="DustForge Dashboard" loading="eager">
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats -->
+  <section class="stats">
+    <div class="container">
+      <div class="stats-grid">
+        <div>
+          <div class="stat-value">10+</div>
+          <div class="stat-label">Specialized Tools</div>
+        </div>
+        <div>
+          <div class="stat-value">6</div>
+          <div class="stat-label">Cleaner Categories</div>
+        </div>
+        <div>
+          <div class="stat-value">30+</div>
+          <div class="stat-label">Privacy Settings</div>
+        </div>
+        <div>
+          <div class="stat-value">100%</div>
+          <div class="stat-label">Open Source</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Feature Showcase (tabbed screenshots) -->
+  <section class="showcase" id="showcase">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-label">Screenshots</div>
+        <h2 class="section-title">See it in action</h2>
+        <p class="section-subtitle">Every tool is designed with clarity and purpose. Tab through the features below.</p>
+      </div>
+
+      <div class="showcase-tabs" role="tablist">
+        <button class="showcase-tab active" onclick="showTab(0)" role="tab">Dashboard</button>
+        <button class="showcase-tab" onclick="showTab(1)" role="tab">System Cleaner</button>
+        <button class="showcase-tab" onclick="showTab(2)" role="tab">Malware Scanner</button>
+        <button class="showcase-tab" onclick="showTab(3)" role="tab">Privacy Shield</button>
+        <button class="showcase-tab" onclick="showTab(4)" role="tab">Registry</button>
+        <button class="showcase-tab" onclick="showTab(5)" role="tab">Startup Manager</button>
+        <button class="showcase-tab" onclick="showTab(6)" role="tab">Disk Analyzer</button>
+        <button class="showcase-tab" onclick="showTab(7)" role="tab">Debloater</button>
+        <button class="showcase-tab" onclick="showTab(8)" role="tab">Network</button>
+      </div>
+
+      <div class="showcase-display">
+        <div class="showcase-panel active" data-tab="0">
+          <div class="showcase-image-wrap"><img src="screenshots/dashboard.png" alt="Dashboard" loading="lazy"></div>
+          <div class="showcase-info">
+            <h3>Dashboard</h3>
+            <p>Your system at a glance. Health score, storage overview, quick actions, and recent activity &mdash; all in one place. Launch a full clean or jump into any tool with a single click.</p>
+          </div>
+        </div>
+        <div class="showcase-panel" data-tab="1">
+          <div class="showcase-image-wrap"><img src="screenshots/cleaner.png" alt="System Cleaner" loading="lazy"></div>
+          <div class="showcase-info">
+            <h3>System Cleaner</h3>
+            <p>Scan and remove junk files across 6 categories: system temp files, browser data, app caches, gaming redistributables, recycle bin, and uninstall leftovers. Every item is individually selectable.</p>
+          </div>
+        </div>
+        <div class="showcase-panel" data-tab="2">
+          <div class="showcase-image-wrap"><img src="screenshots/malware.png" alt="Malware Scanner" loading="lazy"></div>
+          <div class="showcase-info">
+            <h3>Malware Scanner</h3>
+            <p>Multi-engine threat detection using signature matching, heuristic analysis, and Windows Defender integration. Quarantine or delete threats with full progress tracking across each scan phase.</p>
+          </div>
+        </div>
+        <div class="showcase-panel" data-tab="3">
+          <div class="showcase-image-wrap"><img src="screenshots/privacy.png" alt="Privacy Shield" loading="lazy"></div>
+          <div class="showcase-info">
+            <h3>Privacy Shield</h3>
+            <p>Take control of 30+ Windows privacy settings. Disable telemetry, advertising ID, Cortana, Bing search, and more. See your privacy score and apply all protections with one click.</p>
+          </div>
+        </div>
+        <div class="showcase-panel" data-tab="4">
+          <div class="showcase-image-wrap"><img src="screenshots/registry.png" alt="Registry & System" loading="lazy"></div>
+          <div class="showcase-info">
+            <h3>Registry & System</h3>
+            <p>Deep registry analysis covering broken paths, orphaned entries, security vulnerabilities, performance tweaks, network settings, service audits, and scheduled tasks. Auto-backup before any fix.</p>
+          </div>
+        </div>
+        <div class="showcase-panel" data-tab="5">
+          <div class="showcase-image-wrap"><img src="screenshots/startup-times.png" alt="Startup Manager" loading="lazy"></div>
+          <div class="showcase-info">
+            <h3>Startup Manager</h3>
+            <p>Visualize boot impact with real-time analysis from Windows Event Trace. See exactly which apps slow your boot the most, with per-app timing charts and one-toggle control.</p>
+          </div>
+        </div>
+        <div class="showcase-panel" data-tab="6">
+          <div class="showcase-image-wrap"><img src="screenshots/disk-analyzer.png" alt="Disk Analyzer" loading="lazy"></div>
+          <div class="showcase-info">
+            <h3>Disk Analyzer</h3>
+            <p>Interactive treemap visualization showing exactly where your disk space is going. Drill into any folder, see sizes at a glance, and identify the biggest space hogs across all drives.</p>
+          </div>
+        </div>
+        <div class="showcase-panel" data-tab="7">
+          <div class="showcase-image-wrap"><img src="screenshots/debloater.png" alt="Debloater" loading="lazy"></div>
+          <div class="showcase-info">
+            <h3>Debloater</h3>
+            <p>Remove pre-installed Windows bloatware you don't need. Filter by category &mdash; Microsoft, Gaming, Media, Communication &mdash; and reclaim resources from apps running in the background.</p>
+          </div>
+        </div>
+        <div class="showcase-panel" data-tab="8">
+          <div class="showcase-image-wrap"><img src="screenshots/network.png" alt="Network Cleanup" loading="lazy"></div>
+          <div class="showcase-info">
+            <h3>Network Cleanup</h3>
+            <p>Clear DNS cache, manage saved Wi-Fi profiles, flush ARP cache, and clean network history. Keep your network configuration lean and your connection data private.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Grid -->
+  <section id="features">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-label">Features</div>
+        <h2 class="section-title">Everything you need, nothing you don't</h2>
+        <p class="section-subtitle">Purpose-built tools for maintaining, optimizing, and securing your Windows system.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(245,158,11,0.1); color: var(--amber);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
+          </div>
+          <h3>Smart Scanning</h3>
+          <p>Scans system files, browsers, app caches, gaming folders, recycle bin, and uninstall leftovers with real-time progress tracking.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(239,68,68,0.1); color: var(--red);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+          </div>
+          <h3>Malware Detection</h3>
+          <p>Three-engine scanning with signature matching, heuristic analysis, and Windows Defender integration. Quarantine or delete threats.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(34,197,94,0.1); color: var(--green);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+          <h3>Privacy Shield</h3>
+          <p>Control 30+ Windows privacy settings. Disable telemetry, ads, Cortana, and tracking with a privacy score and one-click hardening.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(59,130,246,0.1); color: var(--blue);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
+          </div>
+          <h3>Registry Cleaner</h3>
+          <p>Deep scan for broken paths, orphaned entries, security vulnerabilities, and performance issues. Auto-backup before any fix.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(168,85,247,0.1); color: var(--purple);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+          </div>
+          <h3>Disk Analyzer</h3>
+          <p>Interactive treemap visualization showing where your space goes. Navigate folders and identify the biggest space consumers.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(251,146,60,0.1); color: #fb923c;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
+          </div>
+          <h3>Startup Optimizer</h3>
+          <p>Analyze boot impact with Windows Event Trace data. See per-app timing charts and disable high-impact startup entries.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(236,72,153,0.1); color: #ec4899;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m20 5-8.5 8.5"/><path d="m3 3 4.5 4.5"/><path d="m18 22-4.5-4.5"/><path d="m21 11-8.5 8.5"/><path d="m3 21 4.5-4.5"/><circle cx="12" cy="12" r="1"/></svg>
+          </div>
+          <h3>Debloater</h3>
+          <p>Remove pre-installed Windows apps and bloatware by category. Reclaim resources from apps you never asked for.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(99,102,241,0.1); color: #6366f1;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+          </div>
+          <h3>Network Cleanup</h3>
+          <p>Flush DNS, manage Wi-Fi profiles, clear ARP cache, and remove network history to keep your connections private and clean.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(20,184,166,0.1); color: #14b8a6;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <h3>Scheduled Scans</h3>
+          <p>Set it and forget it. Configure automatic scans on your schedule with system tray integration and notification alerts.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tech Stack -->
+  <section class="stats" id="tech">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-label">Built With</div>
+        <h2 class="section-title">Modern tech stack</h2>
+        <p class="section-subtitle">Built with tools developers trust.</p>
+      </div>
+      <div class="tech-grid">
+        <div class="tech-item">
+          <div class="tech-logo">E</div>
+          Electron
+        </div>
+        <div class="tech-item">
+          <div class="tech-logo" style="color: #61dafb;">R</div>
+          React
+        </div>
+        <div class="tech-item">
+          <div class="tech-logo" style="color: #3178c6;">TS</div>
+          TypeScript
+        </div>
+        <div class="tech-item">
+          <div class="tech-logo" style="color: #38bdf8;">T</div>
+          Tailwind CSS
+        </div>
+        <div class="tech-item">
+          <div class="tech-logo" style="color: #f59e0b;">Z</div>
+          Zustand
+        </div>
+        <div class="tech-item">
+          <div class="tech-logo" style="color: #bd34fe;">V</div>
+          Vite
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="container">
+      <h2>Ready to clean house?</h2>
+      <p>Download DustForge and take back control of your Windows system.</p>
+      <div class="hero-actions">
+        <a href="https://github.com/dbfx/dustforge/releases/latest" class="btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download for Windows
+        </a>
+        <a href="https://github.com/dbfx/dustforge" target="_blank" class="btn-secondary">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          Star on GitHub
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-inner">
+        <p>&copy; 2024 DustForge Contributors &middot; MIT License</p>
+        <div class="footer-links">
+          <a href="https://github.com/dbfx/dustforge" target="_blank">GitHub</a>
+          <a href="https://github.com/dbfx/dustforge/releases" target="_blank">Releases</a>
+          <a href="https://github.com/dbfx/dustforge/issues" target="_blank">Report a Bug</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    function showTab(index) {
+      document.querySelectorAll('.showcase-tab').forEach((tab, i) => {
+        tab.classList.toggle('active', i === index);
+      });
+      document.querySelectorAll('.showcase-panel').forEach((panel, i) => {
+        panel.classList.toggle('active', i === index);
+      });
+    }
+
+    // Keyboard navigation for tabs
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        const tabs = document.querySelectorAll('.showcase-tab');
+        const current = [...tabs].findIndex(t => t.classList.contains('active'));
+        if (current === -1) return;
+        const next = e.key === 'ArrowRight'
+          ? (current + 1) % tabs.length
+          : (current - 1 + tabs.length) % tabs.length;
+        showTab(next);
+      }
+    });
+  </script>
+
+</body>
+</html>
