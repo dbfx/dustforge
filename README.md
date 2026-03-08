@@ -41,46 +41,20 @@
 - [electron-vite](https://electron-vite.org/) — Build tooling
 - [TypeScript](https://www.typescriptlang.org/) — Type safety
 
-## Getting Started
+## Download
 
-### Prerequisites
+Get the latest installer from the [Releases](https://github.com/dbfx/dustforge/releases) page.
 
-- [Node.js](https://nodejs.org/) 18+
-- npm
+## ⚠️ Disclaimer
 
-### Install
+DustForge is intended for **advanced users** who understand system maintenance and the implications of removing files, registry entries, and other system data. By using this software, you acknowledge that:
 
-```bash
-git clone https://github.com/dbfx/dustforge.git
-cd dustforge
-npm install
-```
+- **You are solely responsible** for reviewing all items before removal. Always inspect scan results carefully before cleaning.
+- **We accept no responsibility or liability** for any data loss, system instability, or other damage resulting from the use of this software.
+- **Create backups** before performing any cleaning operations, especially registry cleaning and debloating.
+- This software is provided **"as is"**, without warranty of any kind, express or implied.
 
-### Development
-
-```bash
-npm run dev
-```
-
-### Build
-
-```bash
-npm run build
-```
-
-### Package Installer
-
-```bash
-npm run package
-```
-
-### Create a Release
-
-```bash
-npm run release
-```
-
-This builds the app and publishes a draft GitHub release with the installer attached. Set the `GH_TOKEN` environment variable to a GitHub personal access token with `repo` scope.
+Use at your own risk.
 
 ## License
 
