@@ -25,9 +25,11 @@ function getConfigPath(): string {
 interface StoreData {
   settings: DustForgeSettings
   stats: AppStats
+  onboardingComplete: boolean
 }
 
 const defaults: StoreData = {
+  onboardingComplete: false,
   settings: {
     minimizeToTray: false,
     showNotificationOnComplete: true,
@@ -106,6 +108,16 @@ export function getSettings(): DustForgeSettings {
 export function setSettings(partial: Partial<DustForgeSettings>): void {
   const data = readStore()
   data.settings = deepMerge(data.settings, partial)
+  writeStore(data)
+}
+
+export function getOnboardingComplete(): boolean {
+  return readStore().onboardingComplete
+}
+
+export function setOnboardingComplete(value: boolean): void {
+  const data = readStore()
+  data.onboardingComplete = value
   writeStore(data)
 }
 

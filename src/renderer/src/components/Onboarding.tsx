@@ -1,0 +1,299 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Sparkles, Rocket, Check, ChevronRight, ChevronLeft } from 'lucide-react'
+import logoSrc from '@/assets/logo.png'
+
+interface OnboardingProps {
+  onComplete: () => void
+}
+
+interface OnboardingSettings {
+  runAtStartup: boolean
+  minimizeToTray: boolean
+  scheduledClean: boolean
+}
+
+const TOTAL_STEPS = 3
+
+export function Onboarding({ onComplete }: OnboardingProps) {
+  const navigate = useNavigate()
+  const [step, setStep] = useState(0)
+  const [settings, setSettings] = useState<OnboardingSettings>({
+    runAtStartup: true,
+    minimizeToTray: true,
+    scheduledClean: true
+  })
+
+  const applyAndFinish = async () => {
+    try {
+      const settingsPayload: Record<string, any> = {
+        runAtStartup: settings.runAtStartup,
+        minimizeToTray: settings.minimizeToTray
+      }
+      if (settings.scheduledClean) {
+        settingsPayload.schedule = { enabled: true, frequency: 'weekly', day: 1, hour: 9 }
+      }
+      await window.dustforge?.settingsSet?.(settingsPayload)
+      window.dustforge?.applyStartup?.(settings.runAtStartup)
+      window.dustforge?.applyTray?.(settings.minimizeToTray)
+    } catch {
+      // Best-effort
+    }
+    onComplete()
+    navigate('/')
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.85)' }}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+        className="relative w-full max-w-lg rounded-2xl p-8"
+        style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.06)' }}
+      >
+        <AnimatePresence mode="wait">
+          {step === 0 && <WelcomeStep key="welcome" onNext={() => setStep(1)} />}
+          {step === 1 && (
+            <SettingsStep
+              key="settings"
+              settings={settings}
+              onChange={setSettings}
+              onBack={() => setStep(0)}
+              onNext={() => setStep(2)}
+            />
+          )}
+          {step === 2 && (
+            <FinishStep
+              key="finish"
+              scheduledClean={settings.scheduledClean}
+              onBack={() => setStep(1)}
+              onFinish={applyAndFinish}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Step dots */}
+        <div className="mt-8 flex justify-center gap-2">
+          {Array.from({ length: TOTAL_STEPS }, (_, i) => (
+            <div
+              key={i}
+              className="h-1.5 rounded-full transition-all duration-300"
+              style={{
+                width: i === step ? 24 : 8,
+                background: i === step ? '#f59e0b' : 'rgba(255,255,255,0.1)'
+              }}
+            />
+          ))}
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+function StepWrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      transition={{ duration: 0.2 }}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+function WelcomeStep({ onNext }: { onNext: () => void }) {
+  return (
+    <StepWrapper>
+      <div className="flex flex-col items-center text-center">
+        <img src={logoSrc} alt="DustForge" className="mb-5 h-20 w-20 rounded-2xl" />
+        <h2 className="mb-2 text-[22px] font-bold text-zinc-100">Welcome to DustForge</h2>
+        <p className="mb-2 text-[13px] leading-relaxed text-zinc-400">
+          Your all-in-one Windows system cleaner. DustForge removes junk files,
+          fixes registry issues, manages startup programs, and keeps your PC running fast.
+        </p>
+        <div className="mb-6 mt-4 flex gap-4">
+          <Feature icon={Sparkles} label="Smart Cleaning" />
+          <Feature icon={Rocket} label="Faster Boot" />
+          <Feature icon={Check} label="Safe & Secure" />
+        </div>
+        <button
+          onClick={onNext}
+          className="flex items-center gap-2 rounded-xl px-8 py-3 text-[14px] font-semibold text-zinc-900 transition-opacity hover:opacity-90"
+          style={{ background: '#f59e0b' }}
+        >
+          Get Started <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </StepWrapper>
+  )
+}
+
+function Feature({ icon: Icon, label }: { icon: typeof Sparkles; label: string }) {
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'rgba(245,158,11,0.1)' }}>
+        <Icon className="h-4.5 w-4.5" style={{ color: '#f59e0b' }} strokeWidth={1.8} />
+      </div>
+      <span className="text-[11px] font-medium text-zinc-500">{label}</span>
+    </div>
+  )
+}
+
+function SettingsStep({
+  settings,
+  onChange,
+  onBack,
+  onNext
+}: {
+  settings: OnboardingSettings
+  onChange: (s: OnboardingSettings) => void
+  onBack: () => void
+  onNext: () => void
+}) {
+  return (
+    <StepWrapper>
+      <div>
+        <h2 className="mb-1 text-[18px] font-bold text-zinc-100">Recommended Setup</h2>
+        <p className="mb-6 text-[13px] text-zinc-500">
+          We recommend these settings for the best experience. You can change them later in Settings.
+        </p>
+
+        <div className="space-y-1">
+          <SettingRow
+            label="Run at startup"
+            desc="Launch DustForge when Windows starts so your PC stays clean automatically"
+            checked={settings.runAtStartup}
+            onChange={(v) => onChange({ ...settings, runAtStartup: v })}
+          />
+          <SettingRow
+            label="Minimize to tray"
+            desc="Keep DustForge running quietly in the background"
+            checked={settings.minimizeToTray}
+            onChange={(v) => onChange({ ...settings, minimizeToTray: v })}
+          />
+          <SettingRow
+            label="Weekly automatic clean"
+            desc="Scan and clean junk files every Monday at 9:00 AM"
+            checked={settings.scheduledClean}
+            onChange={(v) => onChange({ ...settings, scheduledClean: v })}
+            last
+          />
+        </div>
+
+        <div className="mt-6 flex items-center justify-between">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-500 transition-colors"
+            style={{ border: '1px solid rgba(255,255,255,0.06)' }}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" /> Back
+          </button>
+          <button
+            onClick={onNext}
+            className="flex items-center gap-2 rounded-xl px-6 py-2.5 text-[14px] font-semibold text-zinc-900 transition-opacity hover:opacity-90"
+            style={{ background: '#f59e0b' }}
+          >
+            Continue <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </StepWrapper>
+  )
+}
+
+function SettingRow({
+  label,
+  desc,
+  checked,
+  onChange,
+  last
+}: {
+  label: string
+  desc: string
+  checked: boolean
+  onChange: (v: boolean) => void
+  last?: boolean
+}) {
+  return (
+    <div
+      className="flex items-center justify-between rounded-xl px-4 py-3.5"
+      style={{
+        background: 'rgba(255,255,255,0.02)',
+        ...(last ? {} : { marginBottom: 4 })
+      }}
+    >
+      <div className="mr-4">
+        <p className="text-[13px] font-medium text-zinc-300">{label}</p>
+        <p className="mt-0.5 text-[12px]" style={{ color: '#52525e' }}>{desc}</p>
+      </div>
+      <Toggle checked={checked} onChange={onChange} />
+    </div>
+  )
+}
+
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      className="relative h-[26px] w-[46px] shrink-0 rounded-full transition-colors"
+      style={{ background: checked ? '#f59e0b' : 'rgba(255,255,255,0.08)' }}
+    >
+      <div
+        className={`absolute top-[3px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${checked ? 'translate-x-[22px]' : 'translate-x-[3px]'}`}
+      />
+    </button>
+  )
+}
+
+function FinishStep({
+  scheduledClean,
+  onBack,
+  onFinish
+}: {
+  scheduledClean: boolean
+  onBack: () => void
+  onFinish: () => void
+}) {
+  return (
+    <StepWrapper>
+      <div className="flex flex-col items-center text-center">
+        <div
+          className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl"
+          style={{ background: 'rgba(34,197,94,0.1)' }}
+        >
+          <Check className="h-8 w-8" style={{ color: '#22c55e' }} strokeWidth={1.8} />
+        </div>
+        <h2 className="mb-2 text-[18px] font-bold text-zinc-100">You're All Set!</h2>
+        <p className="mb-1 text-[13px] leading-relaxed text-zinc-400">
+          DustForge will keep your PC running smoothly in the background.
+        </p>
+        {scheduledClean && (
+          <p className="text-[12px]" style={{ color: '#f59e0b' }}>
+            Your first automatic scan is scheduled for Monday at 9:00 AM.
+          </p>
+        )}
+
+        <div className="mt-6 flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-500 transition-colors"
+            style={{ border: '1px solid rgba(255,255,255,0.06)' }}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" /> Back
+          </button>
+          <button
+            onClick={onFinish}
+            className="flex items-center gap-2 rounded-xl px-8 py-3 text-[14px] font-semibold text-zinc-900 transition-opacity hover:opacity-90"
+            style={{ background: '#f59e0b' }}
+          >
+            Start Cleaning <Rocket className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </StepWrapper>
+  )
+}
