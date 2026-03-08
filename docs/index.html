@@ -353,10 +353,10 @@
     <div class="container">
       <div class="hero-badge">
         <span class="dot"></span>
-        v1.1.0 &mdash; Now with Malware Scanner & Privacy Shield
+        v1.2.0 &mdash; Driver Manager, Performance Monitor & more
       </div>
       <h1>Your Windows,<br>dust-free.</h1>
-      <p>An advanced open-source system cleaner, optimizer, and security tool built for Windows power users. 10+ specialized tools in one beautiful interface.</p>
+      <p>An advanced open-source system cleaner, optimizer, and security tool built for Windows power users. 15+ specialized tools in one beautiful interface.</p>
       <div class="hero-actions">
         <a href="https://github.com/dbfx/dustforge/releases/latest" class="btn-primary">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -379,7 +379,7 @@
     <div class="container">
       <div class="stats-grid">
         <div>
-          <div class="stat-value">10+</div>
+          <div class="stat-value">15+</div>
           <div class="stat-label">Specialized Tools</div>
         </div>
         <div>
@@ -422,13 +422,15 @@
             <button class="showcase-tab" onclick="showTab(6)" role="tab">Disk Analyzer</button>
             <button class="showcase-tab" onclick="showTab(7)" role="tab">Debloater</button>
             <button class="showcase-tab" onclick="showTab(8)" role="tab">Network</button>
+            <button class="showcase-tab" onclick="showTab(9)" role="tab">Driver Manager</button>
+            <button class="showcase-tab" onclick="showTab(10)" role="tab">Performance</button>
           </div>
         </div>
         <button class="showcase-nav-btn" onclick="navTab(1)" aria-label="Next">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
       </div>
-      <div class="showcase-counter"><span id="tabCurrent">1</span> / 9</div>
+      <div class="showcase-counter"><span id="tabCurrent">1</span> / 11</div>
 
       <div class="showcase-display">
         <div class="showcase-panel active" data-tab="0">
@@ -492,6 +494,20 @@
           <div class="showcase-info">
             <h3>Network Cleanup</h3>
             <p>Clear DNS cache, manage saved Wi-Fi profiles, flush ARP cache, and clean network history. Keep your network configuration lean and your connection data private.</p>
+          </div>
+        </div>
+        <div class="showcase-panel" data-tab="9">
+          <div class="showcase-image-wrap"><img src="screenshots/dashboard.png" alt="Driver Manager" loading="lazy"></div>
+          <div class="showcase-info">
+            <h3>Driver Manager</h3>
+            <p>Scan your DriverStore for stale driver packages consuming disk space. Remove old versions safely, and check for driver updates through Windows Update &mdash; all from one interface.</p>
+          </div>
+        </div>
+        <div class="showcase-panel" data-tab="10">
+          <div class="showcase-image-wrap"><img src="screenshots/dashboard.png" alt="Performance Monitor" loading="lazy"></div>
+          <div class="showcase-info">
+            <h3>Performance Monitor</h3>
+            <p>Real-time system monitoring with CPU, memory, disk, and network gauges. Per-core utilization, time-series charts, and a built-in process manager to identify and kill resource-hungry processes.</p>
           </div>
         </div>
       </div>
@@ -565,6 +581,20 @@
           <p>Flush DNS, manage Wi-Fi profiles, clear ARP cache, and remove network history to keep your connections private and clean.</p>
         </div>
         <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(168,85,247,0.1); color: var(--purple);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+          </div>
+          <h3>Driver Manager</h3>
+          <p>Scan for stale driver packages consuming disk space and check for driver updates via Windows Update. Clean old versions safely.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(14,165,233,0.1); color: #0ea5e9;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          <h3>Performance Monitor</h3>
+          <p>Real-time CPU, memory, disk, and network monitoring with per-core stats, time-series charts, and a process manager to kill resource hogs.</p>
+        </div>
+        <div class="feature-card">
           <div class="feature-icon" style="background: rgba(20,184,166,0.1); color: #14b8a6;">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </div>
@@ -609,7 +639,7 @@
 
   <script>
     let currentTab = 0;
-    const totalTabs = 9;
+    const totalTabs = 11;
 
     function showTab(index) {
       currentTab = index;
