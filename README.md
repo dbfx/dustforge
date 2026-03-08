@@ -16,6 +16,10 @@
 
 ---
 
+<p align="center">
+  <img src="screenshots/dashboard.png" alt="DustForge Dashboard" width="800" />
+</p>
+
 ## Features
 
 - **System Cleaner** — Remove temp files, logs, caches, and other system junk
