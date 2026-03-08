@@ -65,7 +65,7 @@ function ensureDir(): void {
 }
 
 /** Deep merge that handles nested objects like cleaner and schedule */
-function deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>): T {
+export function deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>): T {
   const result = { ...target }
   for (const key of Object.keys(source) as Array<keyof T>) {
     const srcVal = source[key]

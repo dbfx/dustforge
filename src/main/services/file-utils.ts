@@ -15,7 +15,7 @@ export interface DeleteResult {
  * Check if a path matches any of the configured exclusions.
  * Supports exact path prefixes and *.ext glob patterns.
  */
-function isExcluded(filePath: string, exclusions: string[]): boolean {
+export function isExcluded(filePath: string, exclusions: string[]): boolean {
   if (exclusions.length === 0) return false
   const normalized = filePath.toLowerCase().replace(/\//g, '\\')
   for (const exc of exclusions) {
