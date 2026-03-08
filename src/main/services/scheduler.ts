@@ -116,6 +116,8 @@ function triggerScheduledScan(mainWindow: BrowserWindow | null): void {
  */
 export function notifyScheduledScanComplete(totalSize: number, itemCount: number): void {
   if (!Notification.isSupported()) return
+  const settings = getSettings()
+  if (!settings.showNotificationOnComplete) return
 
   const sizeMB = (totalSize / (1024 * 1024)).toFixed(1)
   const notification = new Notification({

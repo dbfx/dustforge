@@ -222,13 +222,13 @@ export function SettingsPage() {
           <div className="flex items-center gap-4">
             <img src={logoSrc} alt="DustForge" className="h-11 w-11 rounded-xl" />
             <div>
-              <p className="text-[14px] font-medium text-zinc-200">DustForge v1.0.0</p>
+              <p className="text-[14px] font-medium text-zinc-200">DustForge v{__APP_VERSION__}</p>
               <p className="text-[12px]" style={{ color: '#52525e' }}>MIT License · Open Source</p>
             </div>
           </div>
           <div className="mt-5 flex items-center gap-2.5">
-            <LinkButton icon={Github} label="GitHub" href="https://github.com/dustforge/dustforge" />
-            <LinkButton icon={Bug} label="Report Bug" href="https://github.com/dustforge/dustforge/issues" />
+            <LinkButton icon={Github} label="GitHub" href="https://github.com/dbfx/dustforge" />
+            <LinkButton icon={Bug} label="Report Bug" href="https://github.com/dbfx/dustforge/issues" />
           </div>
         </div>
       </Section>
