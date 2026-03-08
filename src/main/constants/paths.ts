@@ -22,7 +22,6 @@ export const SYSTEM_PATHS = {
   fontCache: join(WINDIR, 'ServiceProfiles', 'LocalService', 'AppData', 'Local', 'FontCache'),
   dxShaderCache: join(LOCALAPPDATA, 'D3DSCache'),
   inetCache: join(LOCALAPPDATA, 'Microsoft', 'Windows', 'INetCache'),
-  recentFiles: join(APPDATA, 'Microsoft', 'Windows', 'Recent'),
   searchIndex: join(PROGRAMDATA, 'Microsoft', 'Search', 'Data'),
 
   // Windows Update & Delivery
@@ -186,6 +185,15 @@ export const GPU_CACHE_PATHS = [
     join(LOCALAPPDATA, 'AMD', 'GLCache'),
     join(LOCALAPPDATA, 'AMD', 'VkCache'),
   ]},
+]
+
+// Directories to scan for uninstall leftovers (top-level folders only)
+export const UNINSTALL_LEFTOVER_DIRS = [
+  { id: 'localappdata', name: 'AppData Local', path: LOCALAPPDATA },
+  { id: 'appdata', name: 'AppData Roaming', path: APPDATA },
+  { id: 'programfiles', name: 'Program Files', path: PROGRAMFILES },
+  { id: 'programfiles-x86', name: 'Program Files (x86)', path: PROGRAMFILES_X86 },
+  { id: 'programdata', name: 'ProgramData', path: PROGRAMDATA },
 ]
 
 // Known redistributable folder names found inside game directories

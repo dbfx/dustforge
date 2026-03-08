@@ -5,11 +5,13 @@ import {
   AppWindow,
   Gamepad2,
   Trash2,
+  PackageX,
   Search,
   Sparkles,
   CheckCircle2,
   ChevronRight,
-  Folder
+  Folder,
+  AlertTriangle
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ScanProgress } from '@/components/shared/ScanProgress'
@@ -35,7 +37,8 @@ const categories: CategoryDef[] = [
   { type: CleanerType.Browser, label: 'Browsers', icon: Globe, description: 'Cache, cookies, history' },
   { type: CleanerType.App, label: 'Applications', icon: AppWindow, description: 'App caches and dev tools' },
   { type: CleanerType.Gaming, label: 'Gaming', icon: Gamepad2, description: 'Launcher caches, redistributables' },
-  { type: CleanerType.RecycleBin, label: 'Recycle Bin', icon: Trash2, description: 'Deleted files' }
+  { type: CleanerType.RecycleBin, label: 'Recycle Bin', icon: Trash2, description: 'Deleted files' },
+  { type: CleanerType.UninstallLeftovers, label: 'Leftovers', icon: PackageX, description: 'Orphaned files from removed programs' }
 ]
 
 export function CleanerPage() {
@@ -62,7 +65,8 @@ export function CleanerPage() {
         [CleanerType.Browser]: () => window.dustforge.browserScan(),
         [CleanerType.App]: () => window.dustforge.appScan(),
         [CleanerType.Gaming]: () => window.dustforge.gamingScan(),
-        [CleanerType.RecycleBin]: () => window.dustforge.recycleBinScan()
+        [CleanerType.RecycleBin]: () => window.dustforge.recycleBinScan(),
+        [CleanerType.UninstallLeftovers]: () => window.dustforge.uninstallLeftoversScan()
       }
       for (const cat of categories) {
         try {
@@ -88,7 +92,8 @@ export function CleanerPage() {
         [CleanerType.Browser]: (ids) => window.dustforge.browserClean(ids),
         [CleanerType.App]: (ids) => window.dustforge.appClean(ids),
         [CleanerType.Gaming]: (ids) => window.dustforge.gamingClean(ids),
-        [CleanerType.RecycleBin]: () => window.dustforge.recycleBinClean()
+        [CleanerType.RecycleBin]: () => window.dustforge.recycleBinClean(),
+        [CleanerType.UninstallLeftovers]: (ids) => window.dustforge.uninstallLeftoversClean(ids)
       }
       let totalCleaned = 0, totalFiles = 0, totalSkipped = 0
       const allErrors: { path: string; reason: string }[] = []
@@ -311,6 +316,20 @@ export function CleanerPage() {
 
           {hasResults && (
             <div key={activeCategory} className="space-y-2">
+              {activeCategory === CleanerType.UninstallLeftovers && (
+                <div
+                  className="mb-3 flex items-start gap-3 rounded-xl px-4 py-3"
+                  style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.12)' }}
+                >
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-400" strokeWidth={1.8} />
+                  <div>
+                    <p className="text-[12px] font-medium text-amber-300">Review before cleaning</p>
+                    <p className="text-[11px] mt-0.5" style={{ color: '#8e8e76' }}>
+                      These folders may be leftovers from uninstalled programs. Review the list and deselect any folders you still need before cleaning.
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="mb-3 flex items-center justify-between px-1">
                 <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>
                   {categories.find((c) => c.type === activeCategory)?.label} Items

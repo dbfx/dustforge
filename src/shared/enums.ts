@@ -4,6 +4,7 @@ export enum CleanerType {
   App = 'app',
   Gaming = 'gaming',
   RecycleBin = 'recycleBin',
+  UninstallLeftovers = 'uninstallLeftovers',
 }
 
 export enum ScanStatus {
