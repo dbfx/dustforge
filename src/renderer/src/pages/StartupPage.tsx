@@ -1,0 +1,422 @@
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Zap, Shield, RefreshCw, Clock, Activity, TrendingDown, ChevronDown, ChevronUp, BarChart3, Trash2 } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorAlert } from '@/components/shared/ErrorAlert'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { cn } from '@/lib/utils'
+import type { StartupItem, StartupBootTrace } from '@shared/types'
+
+const impactStyles: Record<StartupItem['impact'], { bg: string; text: string }> = {
+  high: { bg: 'rgba(239,68,68,0.08)', text: '#ef4444' },
+  medium: { bg: 'rgba(245,158,11,0.08)', text: '#f59e0b' },
+  low: { bg: 'rgba(34,197,94,0.08)', text: '#22c55e' },
+  none: { bg: 'rgba(255,255,255,0.04)', text: '#52525e' }
+}
+
+const impactBarColors: Record<string, string> = {
+  high: '#ef4444',
+  medium: '#f59e0b',
+  low: '#22c55e'
+}
+
+const sourceLabels: Record<StartupItem['source'], string> = {
+  'registry-hkcu': 'User Registry',
+  'registry-hklm': 'System Registry',
+  'startup-folder': 'Startup Folder',
+  'task-scheduler': 'Task Scheduler'
+}
+
+function formatMs(ms: number): string {
+  if (ms >= 60000) return `${(ms / 60000).toFixed(1)}m`
+  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`
+  return `${ms}ms`
+}
+
+function BootTracePanel({ trace, loading }: { trace: StartupBootTrace | null; loading: boolean }) {
+  const [expanded, setExpanded] = useState(true)
+
+  if (loading) {
+    return (
+      <div className="mb-5 rounded-2xl p-5" style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <div className="flex items-center gap-3">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-700 border-t-amber-500" />
+          <span className="text-[13px] text-zinc-500">Analyzing boot trace data...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (!trace || !trace.available) {
+    return (
+      <div className="mb-5 rounded-2xl p-5" style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <div className="flex items-center gap-3 text-zinc-500">
+          <BarChart3 className="h-4.5 w-4.5" strokeWidth={1.8} />
+          <span className="text-[13px]">
+            {trace?.needsAdmin
+              ? 'Boot trace data requires administrator privileges — restart the app as administrator to view startup impact analysis.'
+              : 'Boot trace data unavailable — Windows diagnostics log may be disabled or no boot events recorded yet.'}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  const barData = trace.entries.slice(0, 15).map((e) => {
+    const clean = e.displayName.replace(/\.exe$/i, '')
+    return {
+    name: clean.length > 18 ? clean.slice(0, 16) + '…' : clean,
+    fullName: clean,
+    delay: e.delayMs,
+    impact: e.impact
+  }})
+
+  const pieData = [
+    { name: 'Core Boot', value: Math.max(0, trace.mainPathMs - trace.startupAppsMs), fill: '#3b82f6' },
+    { name: 'Startup Apps', value: trace.startupAppsMs, fill: '#f59e0b' },
+    { name: 'Other', value: Math.max(0, trace.totalBootMs - trace.mainPathMs), fill: '#27272a' }
+  ].filter((d) => d.value > 0)
+
+  const highCount = trace.entries.filter((e) => e.impact === 'high').length
+  const potentialSavings = trace.entries.filter((e) => e.impact === 'high').reduce((s, e) => s + e.delayMs, 0)
+
+  return (
+    <div className="mb-5 rounded-2xl overflow-hidden" style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}>
+      {/* Header */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center justify-between p-5 text-left transition-colors hover:bg-white/2"
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: 'rgba(245,158,11,0.1)' }}>
+            <Activity className="h-4.5 w-4.5" style={{ color: '#f59e0b' }} strokeWidth={1.8} />
+          </div>
+          <div>
+            <h3 className="text-[14px] font-medium text-zinc-200">Startup Impact Analysis</h3>
+            <p className="text-[12px]" style={{ color: '#52525e' }}>
+              {trace.lastBootDate
+                ? `Last boot: ${new Date(trace.lastBootDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                : 'Based on last boot trace'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="hidden sm:flex items-center gap-4 text-[12px]">
+            <span className="text-zinc-500">Total boot: <span className="font-semibold text-zinc-300">{formatMs(trace.totalBootMs)}</span></span>
+            {highCount > 0 && (
+              <span className="text-red-400/80">{highCount} high-impact {highCount === 1 ? 'app' : 'apps'}</span>
+            )}
+          </div>
+          {expanded ? <ChevronUp className="h-4 w-4 text-zinc-600" /> : <ChevronDown className="h-4 w-4 text-zinc-600" />}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="px-5 pb-5">
+          {/* Stat cards row */}
+          <div className="grid grid-cols-2 gap-3 mb-5 sm:grid-cols-4">
+            <StatMini icon={Clock} label="Total Boot Time" value={formatMs(trace.totalBootMs)} color="#3b82f6" />
+            <StatMini icon={Zap} label="Startup Apps Delay" value={formatMs(trace.startupAppsMs)} color="#f59e0b" />
+            <StatMini icon={Activity} label="Apps Measured" value={String(trace.entries.length)} color="#8b5cf6" />
+            <StatMini icon={TrendingDown} label="Potential Savings" value={potentialSavings > 0 ? formatMs(potentialSavings) : '—'} color="#22c55e" />
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            {/* Bar chart — per-app delay */}
+            <div className="lg:col-span-2 rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+              <h4 className="mb-3 text-[12px] font-medium text-zinc-400">Boot Time Impact by Application</h4>
+              {barData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={Math.max(200, barData.length * 32 + 20)}>
+                  <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 16, top: 0, bottom: 0 }}>
+                    <XAxis
+                      type="number"
+                      tick={{ fill: '#52525e', fontSize: 11 }}
+                      tickFormatter={(v: number) => formatMs(v)}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      tick={{ fill: '#a1a1aa', fontSize: 11 }}
+                      width={130}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                      contentStyle={{
+                        background: '#1c1c21',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 12,
+                        fontSize: 12,
+                        color: '#e4e4e7',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+                      }}
+                      labelStyle={{ color: '#e4e4e7' }}
+                      itemStyle={{ color: '#a1a1aa' }}
+                      formatter={(value: number) => [formatMs(value), 'Delay']}
+                      labelFormatter={(label: string, payload: Array<{ payload?: { fullName?: string } }>) =>
+                        payload?.[0]?.payload?.fullName || label
+                      }
+                    />
+                    <Bar dataKey="delay" radius={[0, 6, 6, 0]} maxBarSize={22}>
+                      {barData.map((entry, i) => (
+                        <Cell key={i} fill={impactBarColors[entry.impact] || '#52525e'} fillOpacity={0.85} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-[200px] items-center justify-center text-[13px] text-zinc-600">
+                  No per-app boot data available
+                </div>
+              )}
+            </div>
+
+            {/* Pie chart — boot time breakdown */}
+            <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+              <h4 className="mb-3 text-[12px] font-medium text-zinc-400">Boot Time Breakdown</h4>
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={48}
+                    outerRadius={72}
+                    paddingAngle={3}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {pieData.map((entry, i) => (
+                      <Cell key={i} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      background: '#1c1c21',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: 12,
+                      fontSize: 12,
+                      color: '#e4e4e7',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+                    }}
+                    labelStyle={{ color: '#e4e4e7' }}
+                    itemStyle={{ color: '#a1a1aa' }}
+                    formatter={(value: number) => [formatMs(value), '']}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="mt-2 space-y-1.5">
+                {pieData.map((d, i) => (
+                  <div key={i} className="flex items-center justify-between text-[11px]">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2.5 w-2.5 rounded-sm" style={{ background: d.fill }} />
+                      <span className="text-zinc-400">{d.name}</span>
+                    </div>
+                    <span className="font-mono text-zinc-500">{formatMs(d.value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StatMini({ icon: Icon, label, value, color }: { icon: React.ElementType; label: string; value: string; color: string }) {
+  return (
+    <div className="rounded-xl p-3.5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+      <div className="flex items-center gap-2 mb-1.5">
+        <Icon className="h-3.5 w-3.5" style={{ color }} strokeWidth={1.8} />
+        <span className="text-[11px] text-zinc-500">{label}</span>
+      </div>
+      <span className="text-[18px] font-semibold text-zinc-200">{value}</span>
+    </div>
+  )
+}
+
+export function StartupPage() {
+  const [items, setItems] = useState<StartupItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [sortBy, setSortBy] = useState<'name' | 'impact'>('impact')
+  const [filterBy, setFilterBy] = useState<'all' | 'active' | 'disabled'>('all')
+  const [error, setError] = useState<string | null>(null)
+  const [bootTrace, setBootTrace] = useState<StartupBootTrace | null>(null)
+  const [traceLoading, setTraceLoading] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<StartupItem | null>(null)
+
+  const loadItems = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const list = await window.dustforge.startupList()
+      setItems(list)
+    } catch (err) {
+      console.error('Failed to load startup items:', err)
+      setError('Failed to load startup items. Make sure the app is running properly.')
+    }
+    setLoading(false)
+  }, [])
+
+  const loadBootTrace = useCallback(async () => {
+    setTraceLoading(true)
+    try {
+      const trace = await window.dustforge.startupBootTrace()
+      setBootTrace(trace)
+    } catch (err) {
+      console.error('Failed to load boot trace:', err)
+    }
+    setTraceLoading(false)
+  }, [])
+
+  useEffect(() => {
+    loadItems()
+    loadBootTrace()
+  }, [loadItems, loadBootTrace])
+
+  const handleToggle = async (item: StartupItem, enabled: boolean) => {
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, enabled } : i)))
+    try {
+      const success = await window.dustforge.startupToggle(item.name, item.location, item.command, item.source, enabled)
+      if (!success) {
+        setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, enabled: !enabled } : i)))
+        setError(`Failed to ${enabled ? 'enable' : 'disable'} ${item.displayName}. This may require administrator privileges.`)
+      }
+    } catch {
+      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, enabled: !enabled } : i)))
+      setError(`Failed to ${enabled ? 'enable' : 'disable'} ${item.displayName}. This may require administrator privileges.`)
+    }
+  }
+
+  const handleDelete = async (item: StartupItem) => {
+    try {
+      const success = await window.dustforge.startupDelete(item.name, item.source === 'startup-folder' ? item.command : item.location, item.source)
+      if (success) {
+        setItems((prev) => prev.filter((i) => i.id !== item.id))
+      } else {
+        setError(`Failed to remove ${item.displayName}. This may require administrator privileges.`)
+      }
+    } catch {
+      setError(`Failed to remove ${item.displayName}. This may require administrator privileges.`)
+    }
+    setDeleteTarget(null)
+  }
+
+  const impactOrder: Record<string, number> = { high: 0, medium: 1, low: 2, none: 3 }
+  const filtered = items.filter((i) => filterBy === 'all' ? true : filterBy === 'active' ? i.enabled : !i.enabled)
+  const sorted = [...filtered].sort((a, b) => sortBy === 'impact' ? impactOrder[a.impact] - impactOrder[b.impact] : a.displayName.localeCompare(b.displayName))
+
+  return (
+    <div className="animate-fade-in">
+      <PageHeader
+        title="Startup Manager"
+        description="Manage programs that run at startup"
+        action={
+          <div className="flex items-center gap-2.5">
+            <select value={filterBy} onChange={(e) => setFilterBy(e.target.value as any)}
+              className="rounded-xl px-4 py-2.5 text-[13px] text-zinc-400 outline-none"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <option value="all">All Items</option>
+              <option value="active">Active Only</option>
+              <option value="disabled">Disabled Only</option>
+            </select>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
+              className="rounded-xl px-4 py-2.5 text-[13px] text-zinc-400 outline-none"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <option value="impact">Sort by Impact</option>
+              <option value="name">Sort by Name</option>
+            </select>
+            <button onClick={() => { loadItems(); loadBootTrace() }} disabled={loading}
+              className="flex items-center justify-center rounded-xl p-2.5 text-zinc-500 transition-colors"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} strokeWidth={1.8} />
+            </button>
+          </div>
+        }
+      />
+
+      {/* Boot Trace Impact Analysis */}
+      <BootTracePanel trace={bootTrace} loading={traceLoading} />
+
+      {error && <ErrorAlert message={error} onDismiss={() => setError(null)} className="mb-5" />}
+
+      {items.length === 0 && !loading && !error && (
+        <EmptyState icon={Zap} title="No startup items found" description="Unable to detect startup programs." />
+      )}
+
+      <div className="space-y-2.5">
+        {sorted.map((item) => (
+          <div key={item.id}
+            className={cn('flex items-center gap-5 rounded-2xl p-5 transition-all', !item.enabled && 'opacity-50')}
+            style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}>
+            {/* Icon */}
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+              style={{ background: 'rgba(255,255,255,0.04)' }}>
+              <span className="text-[14px] font-bold" style={{ color: '#4e4e56' }}>{item.displayName.charAt(0)}</span>
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[14px] font-medium text-zinc-200">{item.displayName}</span>
+                {item.impact === 'none' && <Shield className="h-3.5 w-3.5" style={{ color: '#3a3a42' }} strokeWidth={1.8} />}
+              </div>
+              <div className="mt-0.5 flex items-center gap-2 text-[12px]" style={{ color: '#52525e' }}>
+                <span>{item.publisher}</span>
+                <span style={{ color: '#2a2a30' }}>·</span>
+                <span>{sourceLabels[item.source]}</span>
+              </div>
+              <div className="mt-1 truncate font-mono text-[11px]" style={{ color: '#3a3a42' }} title={item.command}>
+                {item.command}
+              </div>
+            </div>
+
+            {/* Impact */}
+            <span className="rounded-lg px-3 py-1.5 text-[11px] font-semibold capitalize"
+              style={{ background: impactStyles[item.impact].bg, color: impactStyles[item.impact].text }}>
+              {item.impact} impact
+            </span>
+
+            {/* Toggle + Delete */}
+            <div className="flex items-center gap-2">
+              <button onClick={() => handleToggle(item, !item.enabled)}
+                className="relative h-[26px] w-[46px] shrink-0 rounded-full transition-colors"
+                style={{ background: item.enabled ? '#f59e0b' : 'rgba(255,255,255,0.08)' }}>
+                <div className={cn(
+                  'absolute top-[3px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform',
+                  item.enabled ? 'translate-x-[22px]' : 'translate-x-[3px]'
+                )} />
+              </button>
+              <button
+                onClick={() => setDeleteTarget(item)}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-600 transition-colors hover:text-red-400"
+                style={{ background: 'rgba(255,255,255,0.02)' }}
+                title={`Remove ${item.displayName}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {deleteTarget && (
+        <ConfirmDialog
+          open
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => handleDelete(deleteTarget)}
+          title={`Remove ${deleteTarget.displayName}?`}
+          description="This will permanently remove this startup entry. The program will no longer start with Windows."
+          details={deleteTarget.command && deleteTarget.command !== 'undefined' ? deleteTarget.command : undefined}
+          confirmLabel="Remove"
+          variant="danger"
+        />
+      )}
+    </div>
+  )
+}

@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@theme {
+  --color-surface: #16161a;
+  --color-surface-hover: #1c1c21;
+  --color-elevated: #25252b;
+  --color-overlay: #3a3a42;
+  --color-subtle: #222228;
+
+  --color-accent: #f59e0b;
+  --color-accent-hover: #d97706;
+  --color-accent-muted: #451a03;
+
+  --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
+
+  --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;
+
+  --animate-fade-in: fade-in 200ms ease-out;
+  --animate-scale-in: scale-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-slide-up: slide-up 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-pulse-glow: pulse-glow 2.5s ease-in-out infinite;
+  --animate-scan-stripe: scan-stripe 1s linear infinite;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 24px 0 rgba(245, 158, 11, 0.10); }
+    50% { box-shadow: 0 0 36px 4px rgba(245, 158, 11, 0.20); }
+  }
+  @keyframes scan-stripe {
+    0% { background-position: 0 0; }
+    100% { background-position: 40px 0; }
+  }
+}
+
+/* ── scrollbar ───────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.14); }
+
+/* ── base ────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: #0c0c0e;
+  color: #dcdce0;
+  -webkit-font-smoothing: antialiased;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+::selection {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fff;
+}
+
+/* ── window chrome ───────────────────────────── */
+.drag-region { -webkit-app-region: drag; }
+.no-drag     { -webkit-app-region: no-drag; }

@@ -1,0 +1,488 @@
+import { useState, useCallback, useEffect, useRef } from 'react'
+import {
+  Database, Search, Wrench, Shield, CheckCircle2, ChevronDown,
+  ShieldAlert, Eye, Gauge, Wifi, Server, CalendarClock, Trash2, Loader2, Check
+} from 'lucide-react'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorAlert } from '@/components/shared/ErrorAlert'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { ScanProgress } from '@/components/shared/ScanProgress'
+import { useHistoryStore } from '@/stores/history-store'
+import { useStatsStore } from '@/stores/stats-store'
+import type { RegistryEntry } from '@shared/types'
+import type { LucideIcon } from 'lucide-react'
+
+type CardType = RegistryEntry['type']
+
+const typeColors: Record<CardType, { bg: string; text: string }> = {
+  obsolete: { bg: 'rgba(255,255,255,0.05)', text: '#8e8e96' },
+  invalid: { bg: 'rgba(245,158,11,0.1)', text: '#f59e0b' },
+  orphaned: { bg: 'rgba(59,130,246,0.1)', text: '#3b82f6' },
+  broken: { bg: 'rgba(239,68,68,0.1)', text: '#ef4444' },
+  vulnerability: { bg: 'rgba(168,85,247,0.1)', text: '#a855f7' },
+  privacy: { bg: 'rgba(236,72,153,0.1)', text: '#ec4899' },
+  performance: { bg: 'rgba(20,184,166,0.1)', text: '#14b8a6' },
+  network: { bg: 'rgba(99,102,241,0.1)', text: '#6366f1' },
+  service: { bg: 'rgba(251,146,60,0.1)', text: '#fb923c' },
+  task: { bg: 'rgba(163,230,53,0.1)', text: '#a3e635' }
+}
+
+const riskColors: Record<RegistryEntry['risk'], string> = {
+  low: '#22c55e', medium: '#f59e0b', high: '#ef4444'
+}
+
+interface CardDef {
+  types: CardType[]
+  icon: LucideIcon
+  title: string
+  description: string
+  color: { bg: string; text: string }
+  /** Total number of checks for this card (undefined = dynamic/variable) */
+  totalChecks?: number
+}
+
+const cards: CardDef[] = [
+  {
+    types: ['obsolete', 'invalid', 'orphaned', 'broken'],
+    icon: Trash2,
+    title: 'Registry Cleanup',
+    description: 'Broken app paths, orphaned uninstall entries, invalid file associations, and stale references',
+    color: { bg: 'rgba(245,158,11,0.1)', text: '#f59e0b' }
+  },
+  {
+    types: ['vulnerability'],
+    icon: ShieldAlert,
+    title: 'Security',
+    description: 'UAC, Defender, firewall, RDP, SMBv1, and other critical security settings',
+    color: typeColors.vulnerability,
+    totalChecks: 12
+  },
+  {
+    types: ['privacy'],
+    icon: Eye,
+    title: 'Privacy',
+    description: 'Telemetry, advertising ID, activity history, Bing search, and feedback prompts',
+    color: typeColors.privacy,
+    totalChecks: 8
+  },
+  {
+    types: ['performance'],
+    icon: Gauge,
+    title: 'Performance',
+    description: 'Cortana and SysMain (Superfetch) optimization',
+    color: typeColors.performance,
+    totalChecks: 2
+  },
+  {
+    types: ['network'],
+    icon: Wifi,
+    title: 'Network',
+    description: 'LLMNR and WPAD auto-proxy — common attack vectors',
+    color: typeColors.network,
+    totalChecks: 2
+  },
+  {
+    types: ['service'],
+    icon: Server,
+    title: 'Services',
+    description: 'DiagTrack telemetry, Print Spooler, Fax, and Maps services',
+    color: typeColors.service,
+    totalChecks: 5
+  },
+  {
+    types: ['task'],
+    icon: CalendarClock,
+    title: 'Scheduled Tasks',
+    description: 'Orphaned tasks, telemetry collectors, and third-party update tasks',
+    color: typeColors.task
+  }
+]
+
+function HealthRing({ percent, color, size = 36 }: { percent: number; color: string; size?: number }) {
+  const r = (size - 4) / 2
+  const circumference = 2 * Math.PI * r
+  const offset = circumference - (percent / 100) * circumference
+  const isComplete = percent === 100
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none"
+          stroke="rgba(255,255,255,0.06)" strokeWidth={3} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none"
+          stroke={isComplete ? '#22c55e' : color} strokeWidth={3}
+          strokeDasharray={circumference} strokeDashoffset={offset}
+          strokeLinecap="round" className="transition-all duration-500" />
+      </svg>
+      <span className="absolute text-[10px] font-bold" style={{ color: isComplete ? '#22c55e' : color }}>
+        {isComplete ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : `${percent}%`}
+      </span>
+    </div>
+  )
+}
+
+export function RegistryPage() {
+  const [entries, setEntries] = useState<RegistryEntry[]>([])
+  const [scanning, setScanning] = useState(false)
+  const [scanned, setScanned] = useState(false)
+  const [fixing, setFixing] = useState(false)
+  const [fixProgress, setFixProgress] = useState<{ current: number; total: number; currentEntry: string } | null>(null)
+  const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set())
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [fixResult, setFixResult] = useState<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] } | null>(null)
+  const [showFailures, setShowFailures] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const cleanupRef = useRef<(() => void) | null>(null)
+  const fixStartRef = useRef<number>(0)
+  const historyStore = useHistoryStore()
+  const recomputeStats = useStatsStore((s) => s.recompute)
+
+  useEffect(() => {
+    const cleanup = window.dustforge.onRegistryFixProgress((data) => {
+      setFixProgress(data)
+    })
+    cleanupRef.current = cleanup
+    return () => cleanup()
+  }, [])
+
+  const handleScan = useCallback(async () => {
+    setScanning(true)
+    setScanned(false)
+    setEntries([])
+    setFixResult(null)
+    setError(null)
+    try {
+      const results = await window.dustforge.registryScan()
+      setEntries(results)
+      setScanned(true)
+    } catch (err) {
+      console.error('Registry scan failed:', err)
+      setError('Failed to scan registry. Make sure the app is running with sufficient permissions.')
+    }
+    setScanning(false)
+  }, [])
+
+  const handleFix = useCallback(async () => {
+    setShowConfirm(false)
+    setFixing(true)
+    setFixResult(null)
+    setShowFailures(false)
+    fixStartRef.current = Date.now()
+    const selectedEntries = entries.filter((e) => e.selected)
+    const selectedIds = selectedEntries.map((e) => e.id)
+    setFixProgress({ current: 0, total: selectedIds.length, currentEntry: 'Creating backup...' })
+    try {
+      const result = await window.dustforge.registryFix(selectedIds)
+      setFixResult(result)
+      setEntries((prev) => prev.filter((e) => !selectedIds.includes(e.id)))
+
+      // Build category breakdown by entry type
+      const byType: Record<string, { found: number; fixed: number }> = {}
+      for (const e of selectedEntries) {
+        if (!byType[e.type]) byType[e.type] = { found: 0, fixed: 0 }
+        byType[e.type].found++
+      }
+      // Distribute fixed count proportionally
+      const totalSelected = selectedEntries.length
+      for (const t in byType) {
+        byType[t].fixed = Math.round((byType[t].found / totalSelected) * result.fixed)
+      }
+
+      await historyStore.addEntry({
+        id: Date.now().toString(),
+        type: 'registry',
+        timestamp: new Date().toISOString(),
+        duration: Date.now() - fixStartRef.current,
+        totalItemsFound: entries.length,
+        totalItemsCleaned: result.fixed,
+        totalItemsSkipped: result.failed,
+        totalSpaceSaved: 0,
+        categories: Object.entries(byType).map(([name, d]) => ({
+          name, itemsFound: d.found, itemsCleaned: d.fixed, spaceSaved: 0
+        })),
+        errorCount: result.failed
+      })
+      recomputeStats()
+    } catch (err) {
+      console.error('Registry fix failed:', err)
+      setError('Failed to fix registry entries. Some entries may require administrator privileges.')
+    }
+    setFixing(false)
+    setFixProgress(null)
+  }, [entries])
+
+  const toggleEntry = (id: string) =>
+    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, selected: !e.selected } : e)))
+
+  const toggleCardExpand = (cardIndex: number) =>
+    setExpandedCards((prev) => {
+      const next = new Set(prev)
+      next.has(cardIndex) ? next.delete(cardIndex) : next.add(cardIndex)
+      return next
+    })
+
+  const toggleCardAll = (types: CardType[]) => {
+    const cardEntries = entries.filter((e) => types.includes(e.type))
+    const allSelected = cardEntries.length > 0 && cardEntries.every((e) => e.selected)
+    setEntries((prev) => prev.map((e) => (types.includes(e.type) ? { ...e, selected: !allSelected } : e)))
+  }
+
+  const selectedCount = entries.filter((e) => e.selected).length
+  const busy = scanning || fixing
+
+  return (
+    <div className="animate-fade-in">
+      <PageHeader
+        title="Registry & System"
+        description="Clean broken entries and harden your system"
+        action={
+          <div className="flex items-center gap-2.5">
+            <button onClick={handleScan} disabled={busy}
+              className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-medium text-zinc-300 transition-all disabled:opacity-40"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <Search className="h-4 w-4" strokeWidth={1.8} /> Scan
+            </button>
+            <button onClick={() => setShowConfirm(true)} disabled={selectedCount === 0 || busy}
+              className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-30"
+              style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#1a0a00' }}>
+              <Wrench className="h-4 w-4" strokeWidth={2} /> Fix ({selectedCount})
+            </button>
+          </div>
+        }
+      />
+
+      {/* Warning */}
+      <div className="mb-5 flex items-center gap-3 rounded-2xl px-5 py-4"
+        style={{ background: 'rgba(245,158,11,0.04)', border: '1px solid rgba(245,158,11,0.08)' }}>
+        <Shield className="h-5 w-5 shrink-0 text-amber-500" strokeWidth={1.8} />
+        <p className="text-[12px]" style={{ color: '#8e8e96' }}>
+          <span className="font-semibold text-amber-500">Advanced Feature</span> — A registry backup (.reg) will be created before any modifications.
+        </p>
+      </div>
+
+      {error && <ErrorAlert message={error} onDismiss={() => setError(null)} className="mb-5" />}
+      {scanning && <ScanProgress status="scanning" progress={0} currentPath="Scanning registry..." className="mb-5" />}
+
+      {/* Fix progress */}
+      {fixing && fixProgress && (
+        <div className="mb-5 rounded-2xl p-5" style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+              <span className="text-[13px] font-medium text-zinc-200">Fixing entries...</span>
+            </div>
+            <span className="font-mono text-[12px]" style={{ color: '#6e6e76' }}>
+              {fixProgress.current} / {fixProgress.total}
+            </span>
+          </div>
+          <div className="mb-3 h-[6px] overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.04)' }}>
+            <div className="h-full rounded-full transition-all duration-200 ease-out"
+              style={{
+                width: `${fixProgress.total > 0 ? (fixProgress.current / fixProgress.total) * 100 : 0}%`,
+                background: 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)'
+              }} />
+          </div>
+          <p className="truncate font-mono text-[11px]" style={{ color: '#4e4e56' }}>
+            {fixProgress.currentEntry}
+          </p>
+        </div>
+      )}
+
+      {fixResult && (
+        <div className="mb-5 overflow-hidden rounded-2xl"
+          style={{ border: `1px solid ${fixResult.failed > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)'}` }}>
+          <div className="flex items-center gap-3 p-4"
+            style={{ background: fixResult.failed > 0 ? 'rgba(239,68,68,0.04)' : 'rgba(34,197,94,0.06)' }}>
+            <CheckCircle2 className="h-5 w-5 text-green-500" strokeWidth={1.8} />
+            <p className="flex-1 text-[13px] text-zinc-200">
+              Fixed {fixResult.fixed} entries
+              {fixResult.failed > 0 && (
+                <button onClick={() => setShowFailures(!showFailures)}
+                  className="ml-2 text-red-400 underline decoration-red-400/30 hover:decoration-red-400 transition-colors">
+                  {fixResult.failed} failed — {showFailures ? 'hide details' : 'show details'}
+                </button>
+              )}
+            </p>
+          </div>
+          {showFailures && fixResult.failures.length > 0 && (
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+              {fixResult.failures.map((f, i) => (
+                <div key={i} className="flex items-start gap-3 px-5 py-3"
+                  style={{ borderBottom: i < fixResult.failures.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none' }}>
+                  <div className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
+                  <div className="min-w-0">
+                    <p className="text-[12px] text-zinc-300">{f.issue}</p>
+                    <p className="mt-0.5 text-[11px] text-red-400/80">{f.reason}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!scanned && !scanning && (
+        <EmptyState icon={Database} title="No registry issues found" description='Click "Scan" to check for broken registry entries and system hardening opportunities.' />
+      )}
+
+      {/* ============ CARDS ============ */}
+      {scanned && !scanning && (
+        <div className="grid grid-cols-1 gap-3">
+          {cards.map((card, cardIndex) => {
+            const cardEntries = entries.filter((e) => card.types.includes(e.type))
+            const issueCount = cardEntries.length
+            const selectedInCard = cardEntries.filter((e) => e.selected).length
+            const allSelected = issueCount > 0 && selectedInCard === issueCount
+            const isExpanded = expandedCards.has(cardIndex)
+            const highRiskCount = cardEntries.filter((e) => e.risk === 'high').length
+            const mediumRiskCount = cardEntries.filter((e) => e.risk === 'medium').length
+            const Icon = card.icon
+            const color = card.color
+
+            // Health percentage for cards with known total checks
+            const hasPercentage = card.totalChecks !== undefined
+            const healthPercent = hasPercentage
+              ? Math.round(((card.totalChecks! - issueCount) / card.totalChecks!) * 100)
+              : issueCount === 0 ? 100 : undefined
+            const isClean = issueCount === 0
+
+            return (
+              <div key={cardIndex} className="overflow-hidden rounded-2xl"
+                style={{
+                  border: `1px solid ${isClean ? 'rgba(34,197,94,0.15)' : allSelected ? color.text + '20' : 'rgba(255,255,255,0.05)'}`,
+                  opacity: fixing ? 0.5 : 1,
+                  pointerEvents: fixing ? 'none' : 'auto'
+                }}>
+                {/* Card header */}
+                <div className="flex items-center gap-4 px-5 py-4"
+                  style={{ background: isClean ? 'rgba(34,197,94,0.03)' : allSelected ? color.bg : 'rgba(255,255,255,0.02)' }}>
+                  {/* Health ring or icon */}
+                  {hasPercentage || isClean ? (
+                    <HealthRing
+                      percent={healthPercent ?? 100}
+                      color={color.text}
+                      size={40}
+                    />
+                  ) : (
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                      style={{ background: color.bg }}>
+                      <Icon className="h-5 w-5" style={{ color: color.text }} strokeWidth={1.8} />
+                    </div>
+                  )}
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[14px] font-semibold text-zinc-200">{card.title}</span>
+                      {isClean ? (
+                        <span className="rounded-full px-2 py-0.5 text-[11px] font-medium"
+                          style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
+                          All clear
+                        </span>
+                      ) : (
+                        <>
+                          <span className="rounded-full px-2 py-0.5 text-[11px] font-medium"
+                            style={{ background: 'rgba(255,255,255,0.05)', color: '#6e6e76' }}>
+                            {issueCount} issue{issueCount !== 1 ? 's' : ''}
+                          </span>
+                          {highRiskCount > 0 && (
+                            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                              style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+                              {highRiskCount} high risk
+                            </span>
+                          )}
+                          {mediumRiskCount > 0 && highRiskCount === 0 && (
+                            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                              style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>
+                              {mediumRiskCount} medium risk
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-[12px]" style={{ color: '#5e5e66' }}>
+                      {card.description}
+                      {hasPercentage && !isClean && (
+                        <span style={{ color: healthPercent! >= 80 ? '#22c55e' : healthPercent! >= 50 ? '#f59e0b' : '#ef4444' }}>
+                          {' '}— {card.totalChecks! - issueCount}/{card.totalChecks!} checks passed
+                        </span>
+                      )}
+                    </p>
+                  </div>
+
+                  {/* Toggle + Expand (only show if there are issues) */}
+                  {!isClean && (
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button
+                        onClick={() => toggleCardAll(card.types)}
+                        className="relative h-6 w-11 rounded-full transition-colors"
+                        style={{ background: allSelected ? color.text : 'rgba(255,255,255,0.08)' }}>
+                        <div className="absolute top-0.5 h-5 w-5 rounded-full transition-all"
+                          style={{
+                            left: allSelected ? '22px' : '2px',
+                            background: allSelected ? '#fff' : '#6e6e76'
+                          }} />
+                      </button>
+
+                      <button onClick={() => toggleCardExpand(cardIndex)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+                        style={{ background: 'rgba(255,255,255,0.04)' }}>
+                        <ChevronDown
+                          className="h-4 w-4 transition-transform"
+                          style={{
+                            color: '#6e6e76',
+                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                          }}
+                          strokeWidth={2} />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Green check for clean cards */}
+                  {isClean && (
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                      style={{ background: 'rgba(34,197,94,0.1)' }}>
+                      <Check className="h-4 w-4 text-green-500" strokeWidth={2.5} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Expanded items */}
+                {isExpanded && !isClean && (
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                    {cardEntries.map((entry, i) => (
+                      <div key={entry.id}
+                        className="flex items-center gap-4 px-5 py-3 transition-colors"
+                        style={{
+                          background: entry.selected ? color.bg.replace('0.1', '0.03') : 'transparent',
+                          borderBottom: i < cardEntries.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none'
+                        }}>
+                        <div className="w-6 cursor-pointer" onClick={() => toggleEntry(entry.id)}>
+                          <input type="checkbox" checked={entry.selected} readOnly className="pointer-events-none accent-amber-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12px] text-zinc-300">{entry.issue}</p>
+                          <p className="mt-0.5 font-mono text-[10px]" style={{ color: '#4e4e56' }}>{entry.keyPath}</p>
+                        </div>
+                        <span className="shrink-0 rounded-md px-2 py-0.5 text-[11px] font-medium capitalize"
+                          style={{ background: typeColors[entry.type].bg, color: typeColors[entry.type].text }}>
+                          {entry.type}
+                        </span>
+                        <span className="shrink-0 text-[11px] font-medium capitalize" style={{ color: riskColors[entry.risk] }}>{entry.risk}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <ConfirmDialog open={showConfirm} onConfirm={handleFix} onCancel={() => setShowConfirm(false)}
+        title="Fix Registry Entries" description={`This will modify ${selectedCount} registry entries. A backup will be created first.`}
+        confirmLabel="Fix Selected" variant="warning" />
+    </div>
+  )
+}

@@ -1,0 +1,29 @@
+appId: com.dustforge.app
+productName: DustForge
+copyright: Copyright © 2024 DustForge Contributors
+
+directories:
+  buildResources: resources
+  output: dist
+
+files:
+  - out/**/*
+  - "!node_modules/**/*"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.png
+  requestedExecutionLevel: requireAdministrator
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  shortcutName: DustForge
+  artifactName: DustForge-Setup-${version}.${ext}
+
+publish:
+  provider: github
