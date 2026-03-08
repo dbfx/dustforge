@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
 import { HardDrive, ChevronRight, Folder, File, RefreshCw } from 'lucide-react'
-import { Treemap, ResponsiveContainer } from 'recharts'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -9,6 +8,82 @@ import { cn, formatBytes } from '@/lib/utils'
 import type { DiskNode, DriveInfo } from '@shared/types'
 
 const COLORS = ['#f59e0b', '#d97706', '#b45309', '#92400e', '#78350f', '#a16207', '#ca8a04', '#eab308', '#facc15', '#fbbf24']
+
+interface TreemapRect { name: string; size: number; x: number; y: number; w: number; h: number; color: string }
+
+function squarify(items: { name: string; size: number; fill: string }[], x: number, y: number, w: number, h: number, rects: TreemapRect[]) {
+  if (!items.length || w <= 0 || h <= 0) return
+  if (items.length === 1) {
+    rects.push({ name: items[0].name, size: items[0].size, x, y, w, h, color: items[0].fill })
+    return
+  }
+  const total = items.reduce((s, i) => s + i.size, 0)
+  const horizontal = w >= h
+  const side = horizontal ? h : w
+  // Find the best row: add items until aspect ratio worsens
+  let rowSum = 0
+  let bestIdx = 0
+  let bestWorst = Infinity
+  for (let i = 0; i < items.length; i++) {
+    rowSum += items[i].size
+    const rowFrac = rowSum / total
+    const rowLen = horizontal ? w * rowFrac : h * rowFrac
+    // Compute worst aspect ratio in this row
+    let worst = 0
+    let sub = 0
+    for (let j = 0; j <= i; j++) {
+      sub += items[j].size
+      const frac = items[j].size / rowSum
+      const itemLen = side * frac
+      const aspect = rowLen > itemLen ? rowLen / itemLen : itemLen / rowLen
+      if (aspect > worst) worst = aspect
+    }
+    if (worst <= bestWorst) { bestWorst = worst; bestIdx = i }
+    else break
+  }
+  const rowItems = items.slice(0, bestIdx + 1)
+  const restItems = items.slice(bestIdx + 1)
+  const rowTotal = rowItems.reduce((s, i) => s + i.size, 0)
+  const rowFrac = rowTotal / total
+  if (horizontal) {
+    const rowW = w * rowFrac
+    let cy = y
+    for (const item of rowItems) {
+      const itemH = h * (item.size / rowTotal)
+      rects.push({ name: item.name, size: item.size, x, y: cy, w: rowW, h: itemH, color: item.fill })
+      cy += itemH
+    }
+    squarify(restItems, x + rowW, y, w - rowW, h, rects)
+  } else {
+    const rowH = h * rowFrac
+    let cx = x
+    for (const item of rowItems) {
+      const itemW = w * (item.size / rowTotal)
+      rects.push({ name: item.name, size: item.size, x: cx, y, w: itemW, h: rowH, color: item.fill })
+      cx += itemW
+    }
+    squarify(restItems, x, y + rowH, w, h - rowH, rects)
+  }
+}
+
+function layoutTreemap(items: { name: string; size: number; fill: string }[], width: number, height: number): TreemapRect[] {
+  if (!items.length || width <= 0 || height <= 0) return []
+  const total = items.reduce((s, i) => s + i.size, 0)
+  if (total <= 0) return []
+  // Group tiny items (<1.5% each) into "Other"
+  const threshold = total * 0.015
+  const big = items.filter((i) => i.size >= threshold)
+  const small = items.filter((i) => i.size < threshold)
+  const grouped = [...big]
+  if (small.length > 0) {
+    const otherSize = small.reduce((s, i) => s + i.size, 0)
+    grouped.push({ name: `${small.length} other items`, size: otherSize, fill: '#52525b' })
+  }
+  const sorted = grouped.sort((a, b) => b.size - a.size)
+  const rects: TreemapRect[] = []
+  squarify(sorted, 0, 0, width, height, rects)
+  return rects
+}
 
 export function DiskAnalyzerPage() {
   const [drives, setDrives] = useState<DriveInfo[]>([])
@@ -90,29 +165,25 @@ export function DiskAnalyzerPage() {
           {/* Treemap */}
           {treemapData.length > 0 && (
             <div className="mb-6 overflow-hidden rounded-2xl p-1.5" style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <ResponsiveContainer width="100%" height={280}>
-                <svg style={{ position: 'absolute', width: 0, height: 0 }}>
-                  <defs>
-                    <linearGradient id="textGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="rgba(0,0,0,0.5)" />
-                      <stop offset="100%" stopColor="rgba(0,0,0,0)" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <Treemap data={treemapData} dataKey="size" nameKey="name" stroke="#0c0c0e" strokeWidth={3}
-                  content={({ x, y, width, height, name, fill }: any) => {
-                    if (width < 20 || height < 16) return null
-                    return (
-                      <g>
-                        <rect x={x} y={y} width={width} height={height} fill={fill} rx={6} className="cursor-pointer opacity-75 hover:opacity-100 transition-opacity" />
-                        <rect x={x} y={y} width={width} height={Math.min(height, 48)} fill="url(#textGradient)" rx={6} />
-                        {width > 55 && height > 28 && <text x={x + 10} y={y + 20} fill="#fff" fontSize={12} fontWeight={600} style={{ textShadow: '0 1px 3px rgba(0,0,0,0.7)' }}>{name}</text>}
-                        {width > 75 && height > 42 && <text x={x + 10} y={y + 36} fill="rgba(255,255,255,0.8)" fontSize={10} style={{ textShadow: '0 1px 3px rgba(0,0,0,0.7)' }}>{formatBytes(treemapData.find((d: any) => d.name === name)?.size ?? 0)}</text>}
-                      </g>
-                    )
-                  }}
-                />
-              </ResponsiveContainer>
+              <div className="relative h-[280px] w-full">
+                {layoutTreemap(treemapData, 100, 100).map((rect) => (
+                  <div key={rect.name}
+                    className="absolute overflow-hidden rounded-md p-2 opacity-75 transition-opacity hover:opacity-100 cursor-pointer"
+                    style={{
+                      left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.w}%`, height: `${rect.h}%`,
+                      background: rect.color,
+                      boxSizing: 'border-box',
+                      border: '2px solid #0c0c0e',
+                    }}>
+                    {rect.w > 8 && rect.h > 12 && (
+                      <span className="block truncate text-[12px] font-semibold text-white">{rect.name}</span>
+                    )}
+                    {rect.w > 12 && rect.h > 20 && (
+                      <span className="block truncate text-[10px] text-white/80">{formatBytes(rect.size)}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
