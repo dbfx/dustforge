@@ -178,15 +178,33 @@
 
     /* ── Feature Showcase (tabbed screenshots) ── */
     .showcase { background: var(--bg-surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-    .showcase-tabs {
-      display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;
+    .showcase-nav {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
       margin-bottom: 48px;
+    }
+    .showcase-nav-btn {
+      width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border);
+      background: var(--bg-card); color: var(--text-muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s; flex-shrink: 0;
+    }
+    .showcase-nav-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.12); background: var(--bg-elevated); }
+    .showcase-nav-btn svg { width: 18px; height: 18px; }
+    .showcase-tabs-track {
+      display: flex; gap: 6px; overflow: hidden; max-width: 800px;
+      mask-image: linear-gradient(90deg, transparent, black 16px, black calc(100% - 16px), transparent);
+      -webkit-mask-image: linear-gradient(90deg, transparent, black 16px, black calc(100% - 16px), transparent);
+      padding: 0 16px;
+    }
+    .showcase-tabs {
+      display: flex; gap: 6px;
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .showcase-tab {
       padding: 10px 20px; border-radius: 10px; font-size: 14px;
       font-weight: 600; cursor: pointer; transition: all 0.2s;
       background: transparent; border: 1px solid transparent;
-      color: var(--text-muted); white-space: nowrap;
+      color: var(--text-muted); white-space: nowrap; flex-shrink: 0;
     }
     .showcase-tab:hover { color: var(--text); background: var(--bg-card); }
     .showcase-tab.active {
@@ -194,6 +212,10 @@
       border-color: rgba(245,158,11,0.2);
       box-shadow: 0 0 20px rgba(245,158,11,0.06);
     }
+    .showcase-counter {
+      font-size: 13px; color: var(--text-dim); text-align: center; margin-top: -36px; margin-bottom: 36px;
+    }
+    .showcase-counter span { color: var(--amber); font-weight: 600; }
     .showcase-display {
       position: relative; max-width: 1060px; margin: 0 auto;
     }
@@ -254,21 +276,6 @@
     }
     .stats-grid .stat-label { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
 
-    /* ── Tech Stack ──────────────────────── */
-    .tech-grid {
-      display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;
-    }
-    .tech-item {
-      display: flex; flex-direction: column; align-items: center; gap: 8px;
-      font-size: 13px; color: var(--text-muted);
-    }
-    .tech-item .tech-logo {
-      width: 48px; height: 48px; border-radius: 12px;
-      background: var(--bg-card); border: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 22px; font-weight: 700; color: var(--text);
-    }
-
     /* ── CTA ──────────────────────────────── */
     .cta-section { text-align: center; position: relative; overflow: hidden; }
     .cta-section::before {
@@ -306,8 +313,8 @@
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
       .nav-links { display: none; }
       .nav-mobile-toggle { display: block; }
-      .showcase-tabs { gap: 2px; }
-      .showcase-tab { padding: 8px 12px; font-size: 12px; }
+      .showcase-tab { padding: 8px 14px; font-size: 13px; }
+      .showcase-tabs-track { max-width: calc(100vw - 120px); }
       section { padding: 64px 0; }
       .hero { padding: 120px 0 60px; }
     }
@@ -325,7 +332,6 @@
       <div class="nav-links">
         <a href="#features">Features</a>
         <a href="#showcase">Screenshots</a>
-        <a href="#tech">Tech Stack</a>
         <a href="https://github.com/dbfx/dustforge" target="_blank">GitHub</a>
         <a href="https://github.com/dbfx/dustforge/releases/latest" class="nav-cta">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -397,17 +403,28 @@
         <p class="section-subtitle">Every tool is designed with clarity and purpose. Tab through the features below.</p>
       </div>
 
-      <div class="showcase-tabs" role="tablist">
-        <button class="showcase-tab active" onclick="showTab(0)" role="tab">Dashboard</button>
-        <button class="showcase-tab" onclick="showTab(1)" role="tab">System Cleaner</button>
-        <button class="showcase-tab" onclick="showTab(2)" role="tab">Malware Scanner</button>
-        <button class="showcase-tab" onclick="showTab(3)" role="tab">Privacy Shield</button>
-        <button class="showcase-tab" onclick="showTab(4)" role="tab">Registry</button>
-        <button class="showcase-tab" onclick="showTab(5)" role="tab">Startup Manager</button>
-        <button class="showcase-tab" onclick="showTab(6)" role="tab">Disk Analyzer</button>
-        <button class="showcase-tab" onclick="showTab(7)" role="tab">Debloater</button>
-        <button class="showcase-tab" onclick="showTab(8)" role="tab">Network</button>
+      <div class="showcase-nav">
+        <button class="showcase-nav-btn" onclick="navTab(-1)" aria-label="Previous">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div class="showcase-tabs-track">
+          <div class="showcase-tabs" role="tablist" id="tabStrip">
+            <button class="showcase-tab active" onclick="showTab(0)" role="tab">Dashboard</button>
+            <button class="showcase-tab" onclick="showTab(1)" role="tab">System Cleaner</button>
+            <button class="showcase-tab" onclick="showTab(2)" role="tab">Malware Scanner</button>
+            <button class="showcase-tab" onclick="showTab(3)" role="tab">Privacy Shield</button>
+            <button class="showcase-tab" onclick="showTab(4)" role="tab">Registry</button>
+            <button class="showcase-tab" onclick="showTab(5)" role="tab">Startup Manager</button>
+            <button class="showcase-tab" onclick="showTab(6)" role="tab">Disk Analyzer</button>
+            <button class="showcase-tab" onclick="showTab(7)" role="tab">Debloater</button>
+            <button class="showcase-tab" onclick="showTab(8)" role="tab">Network</button>
+          </div>
+        </div>
+        <button class="showcase-nav-btn" onclick="navTab(1)" aria-label="Next">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
       </div>
+      <div class="showcase-counter"><span id="tabCurrent">1</span> / 9</div>
 
       <div class="showcase-display">
         <div class="showcase-panel active" data-tab="0">
@@ -554,43 +571,6 @@
     </div>
   </section>
 
-  <!-- Tech Stack -->
-  <section class="stats" id="tech">
-    <div class="container">
-      <div class="section-header">
-        <div class="section-label">Built With</div>
-        <h2 class="section-title">Modern tech stack</h2>
-        <p class="section-subtitle">Built with tools developers trust.</p>
-      </div>
-      <div class="tech-grid">
-        <div class="tech-item">
-          <div class="tech-logo">E</div>
-          Electron
-        </div>
-        <div class="tech-item">
-          <div class="tech-logo" style="color: #61dafb;">R</div>
-          React
-        </div>
-        <div class="tech-item">
-          <div class="tech-logo" style="color: #3178c6;">TS</div>
-          TypeScript
-        </div>
-        <div class="tech-item">
-          <div class="tech-logo" style="color: #38bdf8;">T</div>
-          Tailwind CSS
-        </div>
-        <div class="tech-item">
-          <div class="tech-logo" style="color: #f59e0b;">Z</div>
-          Zustand
-        </div>
-        <div class="tech-item">
-          <div class="tech-logo" style="color: #bd34fe;">V</div>
-          Vite
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- CTA -->
   <section class="cta-section">
     <div class="container">
@@ -624,26 +604,40 @@
   </footer>
 
   <script>
+    let currentTab = 0;
+    const totalTabs = 9;
+
     function showTab(index) {
+      currentTab = index;
       document.querySelectorAll('.showcase-tab').forEach((tab, i) => {
         tab.classList.toggle('active', i === index);
       });
       document.querySelectorAll('.showcase-panel').forEach((panel, i) => {
         panel.classList.toggle('active', i === index);
       });
+      document.getElementById('tabCurrent').textContent = index + 1;
+      // Scroll active tab into view within the strip
+      const strip = document.getElementById('tabStrip');
+      const activeTab = strip.children[index];
+      if (activeTab && strip.parentElement) {
+        const track = strip.parentElement;
+        const tabLeft = activeTab.offsetLeft;
+        const tabWidth = activeTab.offsetWidth;
+        const trackWidth = track.offsetWidth;
+        const offset = tabLeft - (trackWidth / 2) + (tabWidth / 2);
+        strip.style.transform = 'translateX(' + (-Math.max(0, Math.min(offset, strip.scrollWidth - trackWidth))) + 'px)';
+      }
     }
 
-    // Keyboard navigation for tabs
+    function navTab(dir) {
+      const next = (currentTab + dir + totalTabs) % totalTabs;
+      showTab(next);
+    }
+
+    // Keyboard navigation
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-        const tabs = document.querySelectorAll('.showcase-tab');
-        const current = [...tabs].findIndex(t => t.classList.contains('active'));
-        if (current === -1) return;
-        const next = e.key === 'ArrowRight'
-          ? (current + 1) % tabs.length
-          : (current - 1 + tabs.length) % tabs.length;
-        showTab(next);
-      }
+      if (e.key === 'ArrowRight') navTab(1);
+      else if (e.key === 'ArrowLeft') navTab(-1);
     });
   </script>
 
