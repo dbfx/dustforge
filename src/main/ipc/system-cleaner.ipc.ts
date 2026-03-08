@@ -1,12 +1,13 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 import { IPC } from '../../shared/channels'
 import { SYSTEM_PATHS } from '../constants/paths'
 import { scanDirectory, scanFile, cleanItems } from '../services/file-utils'
 import { cacheItems } from '../services/scan-cache'
 import type { ScanResult, CleanResult } from '../../shared/types'
 import { CleanerType } from '../../shared/enums'
+import type { WindowGetter } from './index'
 
-export function registerSystemCleanerIpc(mainWindow: BrowserWindow): void {
+export function registerSystemCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.SYSTEM_SCAN, async (): Promise<ScanResult[]> => {
     const results: ScanResult[] = []
     const category = CleanerType.System
@@ -79,7 +80,8 @@ export function registerSystemCleanerIpc(mainWindow: BrowserWindow): void {
           results.push(result)
         }
 
-        mainWindow.webContents.send(IPC.SCAN_PROGRESS, {
+        const win = getWindow()
+        if (win && !win.isDestroyed()) win.webContents.send(IPC.SCAN_PROGRESS, {
           phase: 'scanning',
           category,
           currentPath: target.path,

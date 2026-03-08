@@ -13,25 +13,32 @@ import { registerNetworkCleanupIpc } from './network-cleanup.ipc'
 import { registerMalwareScannerIpc } from './malware-scanner.ipc'
 import { registerPrivacyShieldIpc } from './privacy-shield.ipc'
 import { registerUninstallLeftoversIpc } from './uninstall-leftovers.ipc'
+import { registerDriverManagerIpc } from './driver-manager.ipc'
+import { registerPerfMonitorIpc } from './perf-monitor.ipc'
 import { getSettings, setSettings, getOnboardingComplete, setOnboardingComplete } from '../services/settings-store'
 import { isAdmin } from '../services/elevation'
 import { getHistory, addHistoryEntry, clearHistory } from '../services/history-store'
-import { validateSettingsPartial } from '../services/ipc-validation'
+import { validateSettingsPartial, validateHistoryEntry } from '../services/ipc-validation'
+import { createRestorePoint } from '../services/restore-point'
 
-export function registerCleanerIpc(mainWindow: BrowserWindow): void {
-  registerSystemCleanerIpc(mainWindow)
-  registerBrowserCleanerIpc(mainWindow)
-  registerAppCleanerIpc(mainWindow)
-  registerGamingCleanerIpc(mainWindow)
-  registerRecycleBinIpc(mainWindow)
-  registerRegistryCleanerIpc(mainWindow)
-  registerStartupManagerIpc(mainWindow)
-  registerDebloaterIpc(mainWindow)
-  registerDiskAnalyzerIpc(mainWindow)
-  registerNetworkCleanupIpc(mainWindow)
-  registerMalwareScannerIpc(mainWindow)
-  registerUninstallLeftoversIpc(mainWindow)
-  registerPrivacyShieldIpc(mainWindow)
+export type WindowGetter = () => BrowserWindow | null
+
+export function registerCleanerIpc(getWindow: WindowGetter): void {
+  registerSystemCleanerIpc(getWindow)
+  registerBrowserCleanerIpc(getWindow)
+  registerAppCleanerIpc(getWindow)
+  registerGamingCleanerIpc(getWindow)
+  registerRecycleBinIpc()
+  registerRegistryCleanerIpc(getWindow)
+  registerStartupManagerIpc()
+  registerDebloaterIpc(getWindow)
+  registerDiskAnalyzerIpc(getWindow)
+  registerNetworkCleanupIpc()
+  registerMalwareScannerIpc(getWindow)
+  registerUninstallLeftoversIpc(getWindow)
+  registerPrivacyShieldIpc(getWindow)
+  registerDriverManagerIpc(getWindow)
+  registerPerfMonitorIpc()
 
   // Settings — validate shape before persisting
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettings())
@@ -42,13 +49,25 @@ export function registerCleanerIpc(mainWindow: BrowserWindow): void {
 
   // Onboarding
   ipcMain.handle(IPC.ONBOARDING_GET, () => getOnboardingComplete())
-  ipcMain.handle(IPC.ONBOARDING_SET, (_event, value: boolean) => setOnboardingComplete(value))
+  ipcMain.handle(IPC.ONBOARDING_SET, (_event, value: boolean) => {
+    if (typeof value !== 'boolean') return
+    setOnboardingComplete(value)
+  })
 
   // Elevation
   ipcMain.handle(IPC.ELEVATION_CHECK, () => isAdmin())
 
-  // Scan history
+  // System Restore Point
+  ipcMain.handle(IPC.RESTORE_POINT_CREATE, (_event, description: string) => {
+    if (typeof description !== 'string') description = ''
+    return createRestorePoint(description || 'DustForge pre-clean restore point')
+  })
+
+  // Scan history — validate entry shape before persisting
   ipcMain.handle(IPC.HISTORY_GET, () => getHistory())
-  ipcMain.handle(IPC.HISTORY_ADD, (_event, entry) => addHistoryEntry(entry))
+  ipcMain.handle(IPC.HISTORY_ADD, (_event, entry) => {
+    const validated = validateHistoryEntry(entry)
+    if (validated) addHistoryEntry(validated)
+  })
   ipcMain.handle(IPC.HISTORY_CLEAR, () => clearHistory())
 }

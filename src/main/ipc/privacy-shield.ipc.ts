@@ -7,6 +7,7 @@ import type {
   PrivacyShieldState,
   PrivacyApplyResult
 } from '../../shared/types'
+import type { WindowGetter } from './index'
 
 const execFileAsync = promisify(execFile)
 
@@ -74,10 +75,10 @@ async function isServiceEnabled(serviceName: string): Promise<boolean> {
   return val !== null && val !== 4 // 4 = disabled
 }
 
-function sendProgress(mainWindow: BrowserWindow, data: object): void {
+function sendProgress(win: BrowserWindow | null, data: object): void {
   try {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(IPC.PRIVACY_PROGRESS, data)
+    if (win && !win.isDestroyed()) {
+      win.webContents.send(IPC.PRIVACY_PROGRESS, data)
     }
   } catch {
     // Window may have been closed during scan
@@ -486,7 +487,7 @@ const SETTINGS: SettingDef[] = [
 
 // ─── IPC handlers ────────────────────────────────────────────
 
-export function registerPrivacyShieldIpc(mainWindow: BrowserWindow): void {
+export function registerPrivacyShieldIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.PRIVACY_SCAN, async (): Promise<PrivacyShieldState> => {
     const settings: PrivacySetting[] = []
     const total = SETTINGS.length
@@ -495,7 +496,7 @@ export function registerPrivacyShieldIpc(mainWindow: BrowserWindow): void {
       const def = SETTINGS[i]
 
       // Send progress to renderer (safe — won't throw if window closed)
-      sendProgress(mainWindow, {
+      sendProgress(getWindow(), {
         current: i + 1,
         total,
         currentLabel: def.label,

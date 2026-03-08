@@ -3,8 +3,8 @@ import { join, basename } from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { randomUUID } from 'crypto'
-import { BrowserWindow } from 'electron'
 import { IPC } from '../../shared/channels'
+import type { WindowGetter } from '../ipc/index'
 import { CleanerType } from '../../shared/enums'
 import { UNINSTALL_LEFTOVER_DIRS } from '../constants/paths'
 import { SAFE_FOLDER_NAMES, SAFE_PREFIXES } from '../constants/uninstall-safelist'
@@ -243,12 +243,17 @@ function isSafeFolder(folderName: string): boolean {
  *   4. Running process check
  *   5. Minimum size threshold
  */
-export async function scanForLeftovers(mainWindow: BrowserWindow): Promise<ScanResult[]> {
+export async function scanForLeftovers(getWindow: WindowGetter): Promise<ScanResult[]> {
   const results: ScanResult[] = []
   const category = CleanerType.UninstallLeftovers
 
+  const safeSend = (channel: string, data: object) => {
+    const win = getWindow()
+    if (win && !win.isDestroyed()) win.webContents.send(channel, data)
+  }
+
   // Step 1: Get installed programs from registry
-  mainWindow.webContents.send(IPC.SCAN_PROGRESS, {
+  safeSend(IPC.SCAN_PROGRESS, {
     phase: 'scanning',
     category,
     currentPath: 'Querying installed programs...',
@@ -269,7 +274,7 @@ export async function scanForLeftovers(mainWindow: BrowserWindow): Promise<ScanR
     const target = UNINSTALL_LEFTOVER_DIRS[dirIdx]
     const items: ScanItem[] = []
 
-    mainWindow.webContents.send(IPC.SCAN_PROGRESS, {
+    safeSend(IPC.SCAN_PROGRESS, {
       phase: 'scanning',
       category,
       currentPath: `Scanning ${target.name}...`,
@@ -360,7 +365,7 @@ export async function scanForLeftovers(mainWindow: BrowserWindow): Promise<ScanR
     }
   }
 
-  mainWindow.webContents.send(IPC.SCAN_PROGRESS, {
+  safeSend(IPC.SCAN_PROGRESS, {
     phase: 'scanning',
     category,
     currentPath: 'Leftover scan complete',

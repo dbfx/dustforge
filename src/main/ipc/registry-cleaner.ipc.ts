@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 import { existsSync } from 'fs'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -7,12 +7,57 @@ import { homedir } from 'os'
 import { IPC } from '../../shared/channels'
 import type { RegistryEntry } from '../../shared/types'
 import { randomUUID } from 'crypto'
+import type { WindowGetter } from './index'
 
 const execFileAsync = promisify(execFile)
 
+/** Parse a CSV line handling escaped quotes ("") inside quoted fields */
+function parseCSVLine(line: string): string[] {
+  const fields: string[] = []
+  let i = 0
+  while (i < line.length) {
+    if (line[i] === '"') {
+      i++ // skip opening quote
+      let field = ''
+      while (i < line.length) {
+        if (line[i] === '"') {
+          if (i + 1 < line.length && line[i + 1] === '"') {
+            field += '"'
+            i += 2
+          } else {
+            i++ // skip closing quote
+            break
+          }
+        } else {
+          field += line[i]
+          i++
+        }
+      }
+      fields.push(field)
+      if (i < line.length && line[i] === ',') i++ // skip comma
+    } else if (line[i] === ',') {
+      fields.push('')
+      i++
+    } else {
+      const next = line.indexOf(',', i)
+      if (next === -1) {
+        fields.push(line.substring(i))
+        break
+      }
+      fields.push(line.substring(i, next))
+      i = next + 1
+    }
+  }
+  return fields
+}
+
+/** Validate that a task path contains only safe characters */
+const SAFE_TASK_PATH_RE = /^[\\A-Za-z0-9\s\-._()]+$/
+
 /** Split a full task path like "\\Folder\\Sub\\TaskName" into { path, name } for PowerShell */
-function splitTaskPath(fullPath: string): { path: string; name: string } {
+function splitTaskPath(fullPath: string): { path: string; name: string } | null {
   const normalized = fullPath.replace(/\//g, '\\')
+  if (!SAFE_TASK_PATH_RE.test(normalized)) return null
   const lastSlash = normalized.lastIndexOf('\\')
   if (lastSlash >= 0) {
     return {
@@ -23,10 +68,11 @@ function splitTaskPath(fullPath: string): { path: string; name: string } {
   return { path: '\\', name: normalized }
 }
 
-// Store last scan results so fix handler can access full entry data
-const lastScanEntries = new Map<string, RegistryEntry>()
+// Session-scoped scan results keyed by scan ID to prevent race conditions
+const scanSessions = new Map<string, Map<string, RegistryEntry>>()
+let activeScanId = ''
 
-export function registerRegistryCleanerIpc(mainWindow: BrowserWindow): void {
+export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.REGISTRY_SCAN, async (): Promise<RegistryEntry[]> => {
     const entries: RegistryEntry[] = []
 
@@ -949,11 +995,12 @@ export function registerRegistryCleanerIpc(mainWindow: BrowserWindow): void {
       const lines = stdout.split(/\r?\n/)
       const seen = new Set<string>()
       for (const line of lines) {
-        const cols = line.match(/"([^"]*)"/g)
+        // Parse CSV fields properly: handle escaped quotes ("") inside quoted fields
+        const cols = parseCSVLine(line)
         // Verbose CSV: HostName(0), TaskName(1), ..., Task To Run(8), ...
         if (!cols || cols.length < 9) continue
-        const taskName = cols[1].replace(/"/g, '')
-        const taskToRun = cols[8].replace(/"/g, '').trim()
+        const taskName = cols[1]
+        const taskToRun = cols[8].trim()
 
         if (!taskToRun || taskToRun === 'N/A' || taskToRun.startsWith('COM handler') || seen.has(taskName)) continue
         seen.add(taskName)
@@ -993,9 +1040,9 @@ export function registerRegistryCleanerIpc(mainWindow: BrowserWindow): void {
       for (const task of thirdPartyTasks) {
         const matchingLines = stdout.split(/\r?\n/).filter(l => l.includes(task.pattern))
         for (const line of matchingLines) {
-          const cols = line.match(/"([^"]*)"/g)
+          const cols = parseCSVLine(line)
           if (cols && cols.length >= 1) {
-            const taskName = cols[0].replace(/"/g, '')
+            const taskName = cols[0]
             entries.push({
               id: randomUUID(),
               type: 'task',
@@ -1011,10 +1058,19 @@ export function registerRegistryCleanerIpc(mainWindow: BrowserWindow): void {
       }
     } catch { /* Skip */ }
 
-    // Store entries for fix handler
-    lastScanEntries.clear()
+    // Store entries in a new scan session
+    const sessionMap = new Map<string, RegistryEntry>()
     for (const entry of entries) {
-      lastScanEntries.set(entry.id, entry)
+      sessionMap.set(entry.id, entry)
+    }
+    const scanId = randomUUID()
+    scanSessions.set(scanId, sessionMap)
+    activeScanId = scanId
+
+    // Clean up old sessions (keep only last 3)
+    const sessionKeys = [...scanSessions.keys()]
+    while (sessionKeys.length > 3) {
+      scanSessions.delete(sessionKeys.shift()!)
     }
 
     return entries
@@ -1023,7 +1079,8 @@ export function registerRegistryCleanerIpc(mainWindow: BrowserWindow): void {
   ipcMain.handle(IPC.REGISTRY_FIX, async (_event, entryIds: string[]): Promise<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] }> => {
     const total = entryIds.length
     const sendProgress = (current: number, currentEntry: string) => {
-      mainWindow.webContents.send(IPC.REGISTRY_FIX_PROGRESS, { current, total, currentEntry })
+      const win = getWindow()
+      if (win && !win.isDestroyed()) win.webContents.send(IPC.REGISTRY_FIX_PROGRESS, { current, total, currentEntry })
     }
 
     // Create backup first
@@ -1042,9 +1099,10 @@ export function registerRegistryCleanerIpc(mainWindow: BrowserWindow): void {
     let fixed = 0
     let failed = 0
     const failures: { issue: string; reason: string }[] = []
+    const session = scanSessions.get(activeScanId)
 
     for (let i = 0; i < entryIds.length; i++) {
-      const entry = lastScanEntries.get(entryIds[i])
+      const entry = session?.get(entryIds[i])
       if (!entry || !entry.fix) {
         failed++
         failures.push({ issue: 'Unknown entry', reason: 'Entry data not found — try scanning again before fixing' })
@@ -1079,6 +1137,7 @@ export function registerRegistryCleanerIpc(mainWindow: BrowserWindow): void {
             // Use PowerShell — schtasks /change fails for system-owned tasks
             // Split full path into TaskPath + TaskName for PowerShell
             const disableParts = splitTaskPath(entry.keyPath)
+            if (!disableParts) throw new Error('Invalid task path')
             const safeDisablePath = disableParts.path.replace(/'/g, "''")
             const safeDisableName = disableParts.name.replace(/'/g, "''")
             await execFileAsync('powershell', [
@@ -1090,6 +1149,7 @@ export function registerRegistryCleanerIpc(mainWindow: BrowserWindow): void {
 
           case 'delete-task': {
             const deleteParts = splitTaskPath(entry.keyPath)
+            if (!deleteParts) throw new Error('Invalid task path')
             const safeDeletePath = deleteParts.path.replace(/'/g, "''")
             const safeDeleteName = deleteParts.name.replace(/'/g, "''")
             await execFileAsync('powershell', [

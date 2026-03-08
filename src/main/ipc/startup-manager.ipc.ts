@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'fs'
@@ -36,6 +36,15 @@ function readDisabledEntries(): DisabledEntry[] {
 
 function writeDisabledEntries(entries: DisabledEntry[]): void {
   writeFileSync(getDisabledFilePath(), JSON.stringify(entries, null, 2), 'utf-8')
+}
+
+// Mutex to serialize disabled-startups.json read/mutate/write operations
+let disabledFileLock: Promise<void> = Promise.resolve()
+function withDisabledFileLock<T>(fn: () => T): Promise<T> {
+  const prev = disabledFileLock
+  let resolve: () => void
+  disabledFileLock = new Promise<void>((r) => { resolve = r })
+  return prev.then(fn).finally(() => resolve!())
 }
 
 function makeStableId(name: string, source: string): string {
@@ -257,7 +266,14 @@ function isSafeTaskName(name: string): boolean {
   return typeof name === 'string' && name.length > 0 && name.length <= 260 && /^[A-Za-z0-9 \-._()]+$/.test(name)
 }
 
-export function registerStartupManagerIpc(_mainWindow: BrowserWindow): void {
+// Whitelist of allowed registry locations for startup items
+const ALLOWED_STARTUP_LOCATIONS = new Set([
+  'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run',
+  'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run',
+  'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run',
+])
+
+export function registerStartupManagerIpc(): void {
   ipcMain.handle(IPC.STARTUP_LIST, async (): Promise<StartupItem[]> => {
     const items: StartupItem[] = []
 
@@ -356,6 +372,9 @@ export function registerStartupManagerIpc(_mainWindow: BrowserWindow): void {
         return true
       }
 
+      // Validate registry location against whitelist
+      if (!ALLOWED_STARTUP_LOCATIONS.has(location)) return false
+
       if (!enabled) {
         try {
           await execFileAsync('reg', [
@@ -365,11 +384,13 @@ export function registerStartupManagerIpc(_mainWindow: BrowserWindow): void {
           // Registry op may fail for permissions — still persist state
         }
 
-        const disabled = readDisabledEntries()
-        if (!disabled.some((e) => e.name === name && e.source === source)) {
-          disabled.push({ name, command, location, source })
-        }
-        writeDisabledEntries(disabled)
+        await withDisabledFileLock(() => {
+          const disabled = readDisabledEntries()
+          if (!disabled.some((e) => e.name === name && e.source === source)) {
+            disabled.push({ name, command, location, source })
+          }
+          writeDisabledEntries(disabled)
+        })
       } else {
         try {
           await execFileAsync('reg', [
@@ -379,8 +400,10 @@ export function registerStartupManagerIpc(_mainWindow: BrowserWindow): void {
           // Registry op may fail for permissions — still persist state
         }
 
-        const disabled = readDisabledEntries()
-        writeDisabledEntries(disabled.filter((e) => !(e.name === name && e.source === source)))
+        await withDisabledFileLock(() => {
+          const disabled = readDisabledEntries()
+          writeDisabledEntries(disabled.filter((e) => !(e.name === name && e.source === source)))
+        })
       }
       return true
     }
@@ -408,7 +431,9 @@ export function registerStartupManagerIpc(_mainWindow: BrowserWindow): void {
             if (err.code === 'ENOENT') deletedSource = true
           }
         } else {
-          // Registry-based items: delete from Run key and StartupApproved
+          // Registry-based items: validate location against whitelist
+          if (!ALLOWED_STARTUP_LOCATIONS.has(location)) return false
+          // Delete from Run key and StartupApproved
           try {
             await execFileAsync('reg', ['delete', location, '/v', name, '/f'], { timeout: 10000 })
             deletedSource = true
@@ -431,8 +456,10 @@ export function registerStartupManagerIpc(_mainWindow: BrowserWindow): void {
 
       // Always clean up disabled entries file
       try {
-        const disabled = readDisabledEntries()
-        writeDisabledEntries(disabled.filter((e) => !(e.name === name && e.source === source)))
+        await withDisabledFileLock(() => {
+          const disabled = readDisabledEntries()
+          writeDisabledEntries(disabled.filter((e) => !(e.name === name && e.source === source)))
+        })
       } catch { /* ignore */ }
 
       return deletedSource

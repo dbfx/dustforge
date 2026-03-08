@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { randomUUID } from 'crypto'
@@ -7,7 +7,9 @@ import type { NetworkItem, NetworkCleanResult } from '../../shared/types'
 
 const execFileAsync = promisify(execFile)
 
-let lastScanItems = new Map<string, NetworkItem>()
+// Session-scoped scan results keyed by scan ID to prevent race conditions
+const scanSessions = new Map<string, Map<string, NetworkItem>>()
+let activeScanId = ''
 
 async function getDnsCacheCount(): Promise<number> {
   try {
@@ -33,7 +35,7 @@ async function getWifiProfiles(): Promise<{ name: string; auth: string }[]> {
         // Get auth type for detail
         let auth = 'Unknown'
         try {
-          const { stdout: detail } = await execFileAsync('netsh', ['wlan', 'show', 'profile', `name=${name}`], { timeout: 5000 })
+          const { stdout: detail } = await execFileAsync('netsh', ['wlan', 'show', 'profile', `name="${name}"`], { timeout: 5000 })
           const authMatch = detail.match(/Authentication\s*:\s*(.+)/i)
           if (authMatch) auth = authMatch[1].trim()
         } catch { /* skip */ }
@@ -81,10 +83,11 @@ async function getNetworkHistory(): Promise<{ name: string; guid: string }[]> {
   }
 }
 
-export function registerNetworkCleanupIpc(mainWindow: BrowserWindow): void {
+export function registerNetworkCleanupIpc(): void {
   ipcMain.handle(IPC.NETWORK_SCAN, async (): Promise<NetworkItem[]> => {
     const items: NetworkItem[] = []
-    lastScanItems.clear()
+    const scanId = randomUUID()
+    const sessionMap = new Map<string, NetworkItem>()
 
     // DNS cache
     const dnsCount = await getDnsCacheCount()
@@ -135,7 +138,17 @@ export function registerNetworkCleanupIpc(mainWindow: BrowserWindow): void {
     }
 
     for (const item of items) {
-      lastScanItems.set(item.id, item)
+      sessionMap.set(item.id, item)
+    }
+
+    // Store session and update active scan ID
+    scanSessions.set(scanId, sessionMap)
+    activeScanId = scanId
+
+    // Clean up old sessions (keep only last 3)
+    const sessionKeys = [...scanSessions.keys()]
+    while (sessionKeys.length > 3) {
+      scanSessions.delete(sessionKeys.shift()!)
     }
 
     return items
@@ -146,8 +159,11 @@ export function registerNetworkCleanupIpc(mainWindow: BrowserWindow): void {
     let failed = 0
     const details: string[] = []
 
+    // Look up items from the active scan session
+    const session = scanSessions.get(activeScanId)
+
     for (const id of itemIds) {
-      const item = lastScanItems.get(id)
+      const item = session?.get(id)
       if (!item) continue
 
       try {

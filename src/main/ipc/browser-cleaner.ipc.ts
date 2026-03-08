@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 import { existsSync } from 'fs'
 import { readdir } from 'fs/promises'
 import { execFile } from 'child_process'
@@ -11,6 +11,7 @@ import { cacheItems } from '../services/scan-cache'
 import { getSettings } from '../services/settings-store'
 import { CleanerType } from '../../shared/enums'
 import type { ScanResult, CleanResult } from '../../shared/types'
+import type { WindowGetter } from './index'
 
 const execFileAsync = promisify(execFile)
 
@@ -50,7 +51,7 @@ const chromiumBrowsers: ChromiumBrowserDef[] = [
   { key: 'operaGX', label: 'Opera GX', ...BROWSER_PATHS.operaGX, hasProfiles: false },
 ]
 
-export function registerBrowserCleanerIpc(mainWindow: BrowserWindow): void {
+export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.BROWSER_SCAN, async (): Promise<ScanResult[]> => {
     const results: ScanResult[] = []
     const category = CleanerType.Browser
@@ -112,7 +113,8 @@ export function registerBrowserCleanerIpc(mainWindow: BrowserWindow): void {
       }
     }
 
-    mainWindow.webContents.send(IPC.SCAN_PROGRESS, {
+    const win = getWindow()
+    if (win && !win.isDestroyed()) win.webContents.send(IPC.SCAN_PROGRESS, {
       phase: 'scanning',
       category,
       currentPath: 'Browser scan complete',

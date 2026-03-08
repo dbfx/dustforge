@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 import { existsSync } from 'fs'
 import { readdir, readFile, stat } from 'fs/promises'
 import { join } from 'path'
@@ -14,8 +14,9 @@ import { scanDirectoriesAsItems, cleanItems, getDirectorySize } from '../service
 import { cacheItems } from '../services/scan-cache'
 import { CleanerType } from '../../shared/enums'
 import type { ScanItem, ScanResult, CleanResult } from '../../shared/types'
+import type { WindowGetter } from './index'
 
-export function registerGamingCleanerIpc(mainWindow: BrowserWindow): void {
+export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.GAMING_SCAN, async (): Promise<ScanResult[]> => {
     const results: ScanResult[] = []
     const category = CleanerType.Gaming
@@ -68,7 +69,8 @@ export function registerGamingCleanerIpc(mainWindow: BrowserWindow): void {
       // Skip
     }
 
-    mainWindow.webContents.send(IPC.SCAN_PROGRESS, {
+    const win = getWindow()
+    if (win && !win.isDestroyed()) win.webContents.send(IPC.SCAN_PROGRESS, {
       phase: 'scanning',
       category,
       currentPath: 'Gaming scan complete',

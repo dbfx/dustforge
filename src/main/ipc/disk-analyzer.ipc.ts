@@ -5,12 +5,13 @@ import { promisify } from 'util'
 import { join } from 'path'
 import { IPC } from '../../shared/channels'
 import type { DiskNode, DriveInfo } from '../../shared/types'
+import type { WindowGetter } from './index'
 
 const execFileAsync = promisify(execFile)
 
 const MAX_DEPTH = 3
 
-export function registerDiskAnalyzerIpc(mainWindow: BrowserWindow): void {
+export function registerDiskAnalyzerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.DISK_DRIVES, async (): Promise<DriveInfo[]> => {
     try {
       const { stdout } = await execFileAsync('powershell.exe', [
@@ -46,7 +47,7 @@ export function registerDiskAnalyzerIpc(mainWindow: BrowserWindow): void {
       return { name: '', path: '', size: 0, children: [] }
     }
     const rootPath = `${driveLetter.toUpperCase()}:\\`
-    const root = await analyzeDirectory(rootPath, 0, mainWindow)
+    const root = await analyzeDirectory(rootPath, 0, getWindow())
     return root
   })
 }
@@ -54,7 +55,7 @@ export function registerDiskAnalyzerIpc(mainWindow: BrowserWindow): void {
 async function analyzeDirectory(
   dirPath: string,
   depth: number,
-  mainWindow: BrowserWindow
+  mainWindow: BrowserWindow | null
 ): Promise<DiskNode> {
   const node: DiskNode = {
     name: dirPath.split('\\').pop() || dirPath,
@@ -88,7 +89,7 @@ async function analyzeDirectory(
     }
 
     // Send progress for top-level directories
-    if (depth === 0) {
+    if (depth === 0 && mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(IPC.SCAN_PROGRESS, {
         phase: 'scanning',
         category: 'disk',

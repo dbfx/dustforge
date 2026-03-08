@@ -1,6 +1,6 @@
-import { rm, stat, readdir } from 'fs/promises'
+import { rm, stat, readdir, open, writeFile } from 'fs/promises'
 import { join } from 'path'
-import { randomUUID } from 'crypto'
+import { randomUUID, randomBytes } from 'crypto'
 import type { ScanItem, ScanResult, CleanResult } from '../../shared/types'
 import { getCachedItems } from './scan-cache'
 import { getSettings } from './settings-store'
@@ -31,8 +31,60 @@ function isExcluded(filePath: string, exclusions: string[]): boolean {
   return false
 }
 
+/**
+ * Overwrite a single file's contents with random data, then zeros, before deletion.
+ * For directories, recursively overwrite all files within.
+ */
+async function secureOverwrite(filePath: string): Promise<void> {
+  const stats = await stat(filePath)
+
+  if (stats.isDirectory()) {
+    const entries = await readdir(filePath, { withFileTypes: true })
+    for (const entry of entries) {
+      await secureOverwrite(join(filePath, entry.name))
+    }
+    return
+  }
+
+  if (!stats.isFile() || stats.size === 0) return
+
+  const size = stats.size
+  const CHUNK = 1024 * 1024 // 1 MB chunks
+  const fh = await open(filePath, 'r+')
+  try {
+    // Pass 1: random data
+    let offset = 0
+    while (offset < size) {
+      const len = Math.min(CHUNK, size - offset)
+      await fh.write(randomBytes(len), 0, len, offset)
+      offset += len
+    }
+    await fh.datasync()
+
+    // Pass 2: zeros
+    const zeroBuf = Buffer.alloc(Math.min(CHUNK, size))
+    offset = 0
+    while (offset < size) {
+      const len = Math.min(CHUNK, size - offset)
+      await fh.write(zeroBuf, 0, len, offset)
+      offset += len
+    }
+    await fh.datasync()
+  } finally {
+    await fh.close()
+  }
+}
+
 export async function safeDelete(filePath: string): Promise<DeleteResult> {
   try {
+    const settings = getSettings()
+    if (settings.cleaner.secureDelete) {
+      try {
+        await secureOverwrite(filePath)
+      } catch {
+        // If overwrite fails (e.g. permission), still attempt normal deletion
+      }
+    }
     await rm(filePath, { force: true, recursive: true })
     return { path: filePath, success: true }
   } catch (err: any) {

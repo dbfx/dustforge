@@ -4,6 +4,18 @@ import { IPC } from '../shared/channels'
 import { registerCleanerIpc } from './ipc'
 import { getSettings } from './services/settings-store'
 import { startScheduler, stopScheduler, getNextScanTime, notifyScheduledScanComplete } from './services/scheduler'
+import { runCli } from './cli'
+
+// ─── CLI mode ────────────────────────────────────────────────
+// If --cli is passed, run headless and exit — no GUI, no tray.
+if (process.argv.includes('--cli')) {
+  app.whenReady().then(() => runCli())
+  // Skip all GUI setup below
+} else {
+  initGui()
+}
+
+function initGui(): void {
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -141,8 +153,8 @@ function createWindow(): void {
     })
     ipcMain.on(IPC.WINDOW_CLOSE, () => mainWindow?.close())
 
-    // Register all IPC handlers
-    registerCleanerIpc(mainWindow)
+    // Register all IPC handlers (pass getter so handlers always use current window)
+    registerCleanerIpc(() => mainWindow)
 
     ipcRegistered = true
   }
@@ -218,3 +230,5 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   stopScheduler()
 })
+
+} // end initGui

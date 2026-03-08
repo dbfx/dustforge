@@ -1,12 +1,13 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 import { IPC } from '../../shared/channels'
 import { APP_PATHS } from '../constants/paths'
 import { scanMultipleDirectories, cleanItems } from '../services/file-utils'
 import { cacheItems } from '../services/scan-cache'
 import { CleanerType } from '../../shared/enums'
 import type { ScanResult, CleanResult } from '../../shared/types'
+import type { WindowGetter } from './index'
 
-export function registerAppCleanerIpc(mainWindow: BrowserWindow): void {
+export function registerAppCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.APP_SCAN, async (): Promise<ScanResult[]> => {
     const results: ScanResult[] = []
     const category = CleanerType.App
@@ -23,7 +24,8 @@ export function registerAppCleanerIpc(mainWindow: BrowserWindow): void {
       }
     }
 
-    mainWindow.webContents.send(IPC.SCAN_PROGRESS, {
+    const win = getWindow()
+    if (win && !win.isDestroyed()) win.webContents.send(IPC.SCAN_PROGRESS, {
       phase: 'scanning',
       category,
       currentPath: 'App scan complete',

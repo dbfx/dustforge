@@ -1,9 +1,10 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { IPC } from '../../shared/channels'
 import type { BloatwareApp } from '../../shared/types'
 import { randomUUID } from 'crypto'
+import type { WindowGetter } from './index'
 
 const execFileAsync = promisify(execFile)
 
@@ -72,7 +73,7 @@ const KNOWN_BLOATWARE: Omit<BloatwareApp, 'id' | 'size' | 'selected'>[] = [
   { name: 'March of Empires', packageName: 'Gameloft.MarchofEmpires', publisher: 'Gameloft', category: 'gaming', description: 'Pre-installed game with microtransactions' },
 ]
 
-export function registerDebloaterIpc(_mainWindow: BrowserWindow): void {
+export function registerDebloaterIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.DEBLOATER_SCAN, async (): Promise<BloatwareApp[]> => {
     const apps: BloatwareApp[] = []
 
@@ -101,11 +102,10 @@ export function registerDebloaterIpc(_mainWindow: BrowserWindow): void {
 
       for (const bloatware of KNOWN_BLOATWARE) {
         // Check if the package name matches any installed package
-        // Some packages use partial matching (e.g., "McAfee" matches "McAfee.WPS")
+        // Use exact match or startsWith only to avoid false positives
         const matchedPkg = installedPackages.find(p =>
           p.Name === bloatware.packageName ||
-          p.Name.startsWith(bloatware.packageName) ||
-          (bloatware.packageName.length > 5 && p.Name.toLowerCase().includes(bloatware.packageName.toLowerCase()))
+          p.Name.startsWith(bloatware.packageName + '.')
         )
 
         if (matchedPkg) {
@@ -149,7 +149,8 @@ export function registerDebloaterIpc(_mainWindow: BrowserWindow): void {
     const total = validNames.length
 
     const sendProgress = (current: number, currentApp: string, status: 'removing' | 'done' | 'failed') => {
-      _mainWindow.webContents.send(IPC.DEBLOATER_REMOVE_PROGRESS, { current, total, currentApp, status })
+      const win = getWindow()
+      if (win && !win.isDestroyed()) win.webContents.send(IPC.DEBLOATER_REMOVE_PROGRESS, { current, total, currentApp, status })
     }
 
     for (let i = 0; i < validNames.length; i++) {

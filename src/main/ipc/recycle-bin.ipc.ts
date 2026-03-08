@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { IPC } from '../../shared/channels'
@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile)
 // Track last scanned size so we can report it after cleaning
 let lastScannedSize = 0
 
-export function registerRecycleBinIpc(_mainWindow: BrowserWindow): void {
+export function registerRecycleBinIpc(): void {
   ipcMain.handle(IPC.RECYCLE_BIN_SCAN, async (): Promise<ScanResult[]> => {
     try {
       const { stdout } = await execFileAsync('powershell.exe', [
