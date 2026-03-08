@@ -24,7 +24,6 @@ export function registerSystemCleanerIpc(mainWindow: BrowserWindow): void {
       { path: SYSTEM_PATHS.fontCache, subcategory: 'Font Cache' },
       { path: SYSTEM_PATHS.dxShaderCache, subcategory: 'DirectX Shader Cache' },
       { path: SYSTEM_PATHS.inetCache, subcategory: 'Internet Cache' },
-      { path: SYSTEM_PATHS.recentFiles, subcategory: 'Recent Files Cache' },
       { path: SYSTEM_PATHS.searchIndex, subcategory: 'Windows Search Index Data' },
 
       // Windows Update & Delivery
