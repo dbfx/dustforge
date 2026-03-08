@@ -36,20 +36,11 @@
 - **Scheduled Scans** — Set up automatic scans on a schedule
 - **One-Click Clean** — Scan and clean everything with a single click from the dashboard
 
-## Tech Stack
-
-- [Electron](https://www.electronjs.org/) — Desktop framework
-- [React](https://react.dev/) — UI library
-- [Tailwind CSS](https://tailwindcss.com/) — Styling
-- [Zustand](https://zustand.docs.pmnd.rs/) — State management
-- [electron-vite](https://electron-vite.org/) — Build tooling
-- [TypeScript](https://www.typescriptlang.org/) — Type safety
-
 ## Download
 
 Get the latest installer from the [Releases](https://github.com/dbfx/dustforge/releases) page.
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 DustForge is intended for **advanced users** who understand system maintenance and the implications of removing files, registry entries, and other system data. By using this software, you acknowledge that:
 
