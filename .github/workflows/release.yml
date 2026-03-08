@@ -29,3 +29,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: npx electron-vite build && npx electron-builder --publish always
+
+      - name: Update release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          NOTES=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+            -f tag_name=${{ github.ref_name }} --jq '.body')
+          gh release edit ${{ github.ref_name }} --notes "$NOTES"
