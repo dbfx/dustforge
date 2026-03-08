@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import {
   History, Sparkles, Database, PackageMinus, Trash2, ChevronDown,
-  TrendingUp, Calendar, HardDrive, BarChart3, Clock, AlertCircle, Wifi
+  TrendingUp, Calendar, HardDrive, BarChart3, Clock, AlertCircle, Wifi, Cpu
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -18,7 +18,8 @@ const typeConfig = {
   cleaner: { label: 'System Clean', icon: Sparkles, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
   registry: { label: 'Registry Fix', icon: Database, color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
   debloater: { label: 'Debloater', icon: PackageMinus, color: '#a855f7', bg: 'rgba(168,85,247,0.1)' },
-  network: { label: 'Network Cleanup', icon: Wifi, color: '#22c55e', bg: 'rgba(34,197,94,0.1)' }
+  network: { label: 'Network Cleanup', icon: Wifi, color: '#22c55e', bg: 'rgba(34,197,94,0.1)' },
+  drivers: { label: 'Driver Cleanup', icon: Cpu, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' }
 } as const
 
 const PIE_COLORS = ['#f59e0b', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#14b8a6', '#ef4444', '#6366f1']
@@ -403,7 +404,8 @@ function TimelineView({
     { label: 'Cleaner', value: 'cleaner' },
     { label: 'Registry', value: 'registry' },
     { label: 'Debloater', value: 'debloater' },
-    { label: 'Network', value: 'network' }
+    { label: 'Network', value: 'network' },
+    { label: 'Drivers', value: 'drivers' }
   ]
 
   return (
