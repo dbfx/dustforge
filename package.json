@@ -8,7 +8,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "package": "electron-vite build && electron-builder",
-    "release": "electron-vite build && electron-builder --publish always"
+    "release": "node -e \"const v='v'+require('./package.json').version;const{execSync:r}=require('child_process');r('git tag '+v,{stdio:'inherit'});r('git push origin '+v,{stdio:'inherit'});console.log('\\nTag '+v+' pushed. GitHub CI will build and publish the release.\\nTrack progress: https://github.com/dbfx/dustforge/actions/workflows/release.yml')\""
   },
   "keywords": [
     "system-cleaner",
