@@ -10,7 +10,10 @@ import { registerStartupManagerIpc } from './startup-manager.ipc'
 import { registerDebloaterIpc } from './debloater.ipc'
 import { registerDiskAnalyzerIpc } from './disk-analyzer.ipc'
 import { registerNetworkCleanupIpc } from './network-cleanup.ipc'
-import { getSettings, setSettings } from '../services/settings-store'
+import { registerMalwareScannerIpc } from './malware-scanner.ipc'
+import { registerPrivacyShieldIpc } from './privacy-shield.ipc'
+import { registerUninstallLeftoversIpc } from './uninstall-leftovers.ipc'
+import { getSettings, setSettings, getOnboardingComplete, setOnboardingComplete } from '../services/settings-store'
 import { isAdmin } from '../services/elevation'
 import { getHistory, addHistoryEntry, clearHistory } from '../services/history-store'
 import { validateSettingsPartial } from '../services/ipc-validation'
@@ -26,6 +29,9 @@ export function registerCleanerIpc(mainWindow: BrowserWindow): void {
   registerDebloaterIpc(mainWindow)
   registerDiskAnalyzerIpc(mainWindow)
   registerNetworkCleanupIpc(mainWindow)
+  registerMalwareScannerIpc(mainWindow)
+  registerUninstallLeftoversIpc(mainWindow)
+  registerPrivacyShieldIpc(mainWindow)
 
   // Settings — validate shape before persisting
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettings())
@@ -33,6 +39,10 @@ export function registerCleanerIpc(mainWindow: BrowserWindow): void {
     const validated = validateSettingsPartial(settings)
     if (validated) setSettings(validated)
   })
+
+  // Onboarding
+  ipcMain.handle(IPC.ONBOARDING_GET, () => getOnboardingComplete())
+  ipcMain.handle(IPC.ONBOARDING_SET, (_event, value: boolean) => setOnboardingComplete(value))
 
   // Elevation
   ipcMain.handle(IPC.ELEVATION_CHECK, () => isAdmin())

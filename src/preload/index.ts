@@ -13,7 +13,13 @@ import type {
   BloatwareApp,
   ScanHistoryEntry,
   NetworkItem,
-  NetworkCleanResult
+  NetworkCleanResult,
+  MalwareScanResult,
+  MalwareScanProgress,
+  MalwareActionResult,
+  PrivacyShieldState,
+  PrivacyApplyResult,
+  PrivacyScanProgress
 } from '../shared/types'
 
 const api = {
@@ -41,6 +47,11 @@ const api = {
   gamingScan: (): Promise<ScanResult[]> => ipcRenderer.invoke(IPC.GAMING_SCAN),
   gamingClean: (itemIds: string[]): Promise<CleanResult> =>
     ipcRenderer.invoke(IPC.GAMING_CLEAN, itemIds),
+
+  // Uninstall leftovers
+  uninstallLeftoversScan: (): Promise<ScanResult[]> => ipcRenderer.invoke(IPC.UNINSTALL_LEFTOVERS_SCAN),
+  uninstallLeftoversClean: (itemIds: string[]): Promise<CleanResult> =>
+    ipcRenderer.invoke(IPC.UNINSTALL_LEFTOVERS_CLEAN, itemIds),
 
   // Recycle bin
   recycleBinScan: (): Promise<ScanResult[]> => ipcRenderer.invoke(IPC.RECYCLE_BIN_SCAN),
@@ -79,6 +90,10 @@ const api = {
     ipcRenderer.invoke(IPC.DISK_ANALYZE, driveLetter),
   diskDrives: (): Promise<DriveInfo[]> => ipcRenderer.invoke(IPC.DISK_DRIVES),
 
+  // Onboarding
+  onboardingGet: (): Promise<boolean> => ipcRenderer.invoke(IPC.ONBOARDING_GET),
+  onboardingSet: (value: boolean): Promise<void> => ipcRenderer.invoke(IPC.ONBOARDING_SET, value),
+
   // Settings
   settingsGet: (): Promise<DustForgeSettings> => ipcRenderer.invoke(IPC.SETTINGS_GET),
   settingsSet: (settings: Partial<DustForgeSettings>): Promise<void> =>
@@ -103,6 +118,30 @@ const api = {
   historyGet: (): Promise<ScanHistoryEntry[]> => ipcRenderer.invoke(IPC.HISTORY_GET),
   historyAdd: (entry: ScanHistoryEntry): Promise<void> => ipcRenderer.invoke(IPC.HISTORY_ADD, entry),
   historyClear: (): Promise<void> => ipcRenderer.invoke(IPC.HISTORY_CLEAR),
+
+  // Privacy Shield
+  privacyScan: (): Promise<PrivacyShieldState> => ipcRenderer.invoke(IPC.PRIVACY_SCAN),
+  privacyApply: (ids: string[]): Promise<PrivacyApplyResult> =>
+    ipcRenderer.invoke(IPC.PRIVACY_APPLY, ids),
+  onPrivacyProgress: (callback: (data: PrivacyScanProgress) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: PrivacyScanProgress) => callback(data)
+    ipcRenderer.on(IPC.PRIVACY_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC.PRIVACY_PROGRESS, handler)
+  },
+
+  // Malware scanner
+  malwareScan: (): Promise<MalwareScanResult> => ipcRenderer.invoke(IPC.MALWARE_SCAN),
+  malwareQuarantine: (paths: string[]): Promise<MalwareActionResult> =>
+    ipcRenderer.invoke(IPC.MALWARE_QUARANTINE, paths),
+  malwareDelete: (paths: string[]): Promise<MalwareActionResult> =>
+    ipcRenderer.invoke(IPC.MALWARE_DELETE, paths),
+  malwareRestore: (quarantinedPath: string, originalPath: string): Promise<boolean> =>
+    ipcRenderer.invoke(IPC.MALWARE_RESTORE, quarantinedPath, originalPath),
+  onMalwareProgress: (callback: (data: MalwareScanProgress) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: MalwareScanProgress) => callback(data)
+    ipcRenderer.on(IPC.MALWARE_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC.MALWARE_PROGRESS, handler)
+  },
 
   // Progress events
   onScanProgress: (callback: (data: ProgressData) => void) => {

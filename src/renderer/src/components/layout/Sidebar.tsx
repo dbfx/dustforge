@@ -8,7 +8,9 @@ import {
   Settings,
   PackageMinus,
   Wifi,
-  History
+  History,
+  ShieldAlert,
+  Eye
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LucideIcon } from 'lucide-react'
@@ -28,6 +30,13 @@ interface NavGroup {
 const navGroups: NavGroup[] = [
   {
     items: [{ icon: LayoutDashboard, label: 'Dashboard', path: '/' }]
+  },
+  {
+    heading: 'SECURITY',
+    items: [
+      { icon: ShieldAlert, label: 'Malware Scanner', path: '/malware' },
+      { icon: Eye, label: 'Privacy Shield', path: '/privacy' }
+    ]
   },
   {
     heading: 'MAINTAIN',

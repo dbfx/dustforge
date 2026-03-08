@@ -164,6 +164,74 @@ export interface NetworkCleanResult {
   details: string[]
 }
 
+export interface MalwareThreat {
+  id: string
+  path: string
+  fileName: string
+  size: number
+  detectionName: string
+  severity: 'critical' | 'high' | 'medium' | 'low'
+  source: 'defender' | 'heuristic' | 'signature'
+  details: string
+  selected: boolean
+}
+
+export interface MalwareScanProgress {
+  phase: 'scanning' | 'quarantining' | 'deleting'
+  step: 'init' | 'discovering' | 'signatures' | 'heuristics' | 'defender' | 'complete'
+  stepLabel: string
+  currentPath: string
+  progress: number
+  threatsFound: number
+  filesScanned: number
+  totalFiles: number
+  engine: string
+  completedSteps: string[]
+}
+
+export interface MalwareScanResult {
+  threats: MalwareThreat[]
+  filesScanned: number
+  duration: number
+  engines: string[]
+}
+
+export interface MalwareActionResult {
+  succeeded: number
+  failed: number
+  errors: { path: string; reason: string }[]
+}
+
+// ─── Privacy Shield ──────────────────────────────────────────
+export interface PrivacySetting {
+  id: string
+  category: 'telemetry' | 'ads' | 'search' | 'services' | 'tasks' | 'sync'
+  label: string
+  description: string
+  enabled: boolean          // true = privacy-friendly (tracking disabled)
+  requiresAdmin: boolean
+}
+
+export interface PrivacyShieldState {
+  settings: PrivacySetting[]
+  score: number             // 0-100 privacy score
+  total: number             // total settings count
+  protected: number         // settings already privacy-friendly
+}
+
+export interface PrivacyScanProgress {
+  current: number
+  total: number
+  currentLabel: string
+  category: string
+}
+
+export interface PrivacyApplyResult {
+  succeeded: number
+  failed: number
+  errors: { id: string; label: string; reason: string }[]
+}
+
 export interface DustForgeSettings {
   minimizeToTray: boolean
   showNotificationOnComplete: boolean

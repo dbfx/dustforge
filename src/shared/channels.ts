@@ -19,6 +19,10 @@ export const IPC = {
   RECYCLE_BIN_SCAN: 'cleaner:recyclebin:scan',
   RECYCLE_BIN_CLEAN: 'cleaner:recyclebin:clean',
 
+  // Uninstall leftovers
+  UNINSTALL_LEFTOVERS_SCAN: 'cleaner:uninstall-leftovers:scan',
+  UNINSTALL_LEFTOVERS_CLEAN: 'cleaner:uninstall-leftovers:clean',
+
   // Registry
   REGISTRY_SCAN: 'cleaner:registry:scan',
   REGISTRY_FIX: 'cleaner:registry:fix',
@@ -66,6 +70,22 @@ export const IPC = {
   HISTORY_GET: 'history:get',
   HISTORY_ADD: 'history:add',
   HISTORY_CLEAR: 'history:clear',
+
+  // Malware scanner
+  MALWARE_SCAN: 'malware:scan',
+  MALWARE_QUARANTINE: 'malware:quarantine',
+  MALWARE_DELETE: 'malware:delete',
+  MALWARE_RESTORE: 'malware:restore',
+  MALWARE_PROGRESS: 'malware:progress',
+
+  // Privacy Shield
+  PRIVACY_SCAN: 'privacy:scan',
+  PRIVACY_APPLY: 'privacy:apply',
+  PRIVACY_PROGRESS: 'privacy:progress',
+
+  // Onboarding
+  ONBOARDING_GET: 'onboarding:get',
+  ONBOARDING_SET: 'onboarding:set',
 
   // Window controls
   WINDOW_MINIMIZE: 'window:minimize',
