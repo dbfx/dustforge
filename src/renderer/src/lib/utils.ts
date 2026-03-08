@@ -21,6 +21,14 @@ export function formatNumber(num: number): string {
   return num.toLocaleString()
 }
 
+export function formatSpeed(bytesPerSec: number): string {
+  if (bytesPerSec <= 0) return '0 B/s'
+  const k = 1024
+  const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+  const i = Math.min(sizes.length - 1, Math.floor(Math.log(bytesPerSec) / Math.log(k)))
+  return `${parseFloat((bytesPerSec / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+}
+
 export function formatDate(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date
   const now = new Date()

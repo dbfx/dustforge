@@ -14,6 +14,8 @@ import { NetworkCleanupPage } from './pages/NetworkCleanupPage'
 import { MalwareScannerPage } from './pages/MalwareScannerPage'
 import { PrivacyShieldPage } from './pages/PrivacyShieldPage'
 import { HistoryPage } from './pages/HistoryPage'
+import { DriverManagerPage } from './pages/DriverManagerPage'
+import { PerformanceMonitorPage } from './pages/PerformanceMonitorPage'
 import { Onboarding } from './components/Onboarding'
 import { useStatsStore } from './stores/stats-store'
 import { useHistoryStore } from './stores/history-store'
@@ -63,6 +65,8 @@ export function App() {
           <Route path="/network" element={<NetworkCleanupPage />} />
           <Route path="/malware" element={<MalwareScannerPage />} />
           <Route path="/privacy" element={<PrivacyShieldPage />} />
+          <Route path="/drivers" element={<DriverManagerPage />} />
+          <Route path="/performance" element={<PerformanceMonitorPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
