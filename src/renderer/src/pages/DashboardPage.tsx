@@ -12,7 +12,9 @@ import {
   Shield,
   CheckCircle2,
   Wifi,
-  Loader2
+  Loader2,
+  Cpu,
+  Check
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -32,6 +34,7 @@ interface OneClickResult {
   filesCleaned: number
   registryFixed: number
   networkCleaned: number
+  driversRemoved: number
 }
 
 const CLEANER_SCAN_FNS: { type: CleanerType; scan: () => Promise<ScanResult[]>; clean: (ids: string[]) => Promise<CleanResult> }[] = [
@@ -60,29 +63,54 @@ export function DashboardPage() {
       .catch((err) => console.error('Failed to load drives:', err))
   }, [])
 
+  // Determine which tools have been used recently (past 14 days)
+  const toolCoverage = (() => {
+    const entries = historyStore.entries
+    const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
+    const recentEntries = entries.filter((e) => new Date(e.timestamp).getTime() > twoWeeksAgo)
+    const recentTypes = new Set(recentEntries.map((e) => e.type))
+    const allTypes = new Set(entries.map((e) => e.type))
+
+    const tools = [
+      { key: 'cleaner', label: 'Cleaner', icon: Search, color: '#f59e0b' },
+      { key: 'registry', label: 'Registry', icon: Database, color: '#3b82f6' },
+      { key: 'network', label: 'Network', icon: Wifi, color: '#22c55e' },
+      { key: 'drivers', label: 'Drivers', icon: Cpu, color: '#a855f7' }
+    ] as const
+
+    return tools.map((t) => ({
+      ...t,
+      usedRecently: recentTypes.has(t.key),
+      usedEver: allTypes.has(t.key)
+    }))
+  })()
+
   const healthScore = (() => {
     let score = 100
 
     // Penalize if no scans have ever been run
     if (!stats.lastScanDate) return 50
 
-    // Recency penalty: lose up to 30 points as scan ages (stale after 7 days)
+    // Recency penalty: lose up to 25 points as scan ages (stale after 7 days)
     const daysSinceScan = (Date.now() - new Date(stats.lastScanDate).getTime()) / (1000 * 60 * 60 * 24)
-    score -= Math.min(30, Math.round(daysSinceScan * (30 / 7)))
+    score -= Math.min(25, Math.round(daysSinceScan * (25 / 7)))
 
-    // Drive space penalty: lose up to 30 points based on worst drive usage
+    // Drive space penalty: lose up to 25 points based on worst drive usage
     if (drives.length > 0) {
       const worstUsage = Math.max(...drives.map((d) => d.usedSpace / d.totalSize))
-      // Ramp up penalty past 70% usage
       if (worstUsage > 0.7) {
-        score -= Math.min(30, Math.round((worstUsage - 0.7) / 0.3 * 30))
+        score -= Math.min(25, Math.round((worstUsage - 0.7) / 0.3 * 25))
       }
     }
+
+    // Tool coverage bonus: up to 20 points for using all tools recently
+    const recentToolCount = toolCoverage.filter((t) => t.usedRecently).length
+    score += Math.min(20, recentToolCount * 5)
 
     // Activity bonus: up to 10 points for recent cleaning activity (past 7 days)
     const recentCleans = stats.recentActivity.filter((a) => {
       const age = Date.now() - new Date(a.timestamp).getTime()
-      return a.type === 'clean' && age < 7 * 24 * 60 * 60 * 1000
+      return age < 7 * 24 * 60 * 60 * 1000
     }).length
     score += Math.min(10, recentCleans * 3)
 
@@ -122,11 +150,12 @@ export function DashboardPage() {
     try {
       setPhaseLabel('Scanning registry...')
       const entries = await window.dustforge.registryScan()
-      const selectedIds = entries.filter((e) => e.selected).map((e) => e.id)
+      if (!Array.isArray(entries)) return 0
+      const selectedIds = entries.filter((e) => e?.selected).map((e) => e.id)
       if (selectedIds.length === 0) return 0
       setPhaseLabel('Fixing registry...')
       const res = await window.dustforge.registryFix(selectedIds)
-      return res.fixed
+      return res?.fixed ?? 0
     } catch {
       return 0
     }
@@ -137,13 +166,29 @@ export function DashboardPage() {
     try {
       setPhaseLabel('Scanning network...')
       const items = await window.dustforge.networkScan()
-      const selectedIds = items.filter((i) => i.selected).map((i) => i.id)
+      if (!Array.isArray(items)) return 0
+      const selectedIds = items.filter((i) => i?.selected).map((i) => i.id)
       if (selectedIds.length === 0) return 0
       setPhaseLabel('Cleaning network...')
       const res = await window.dustforge.networkClean(selectedIds)
-      return res.cleaned
+      return res?.cleaned ?? 0
     } catch {
       return 0
+    }
+  }, [])
+
+  // Scan+remove stale drivers (excludes driver updates)
+  const runDrivers = useCallback(async (): Promise<{ removed: number; space: number }> => {
+    try {
+      setPhaseLabel('Scanning drivers...')
+      const scanResult = await window.dustforge.driverScan()
+      const stalePackages = scanResult.packages.filter((p) => !p.isCurrent && p.selected)
+      if (stalePackages.length === 0) return { removed: 0, space: 0 }
+      setPhaseLabel('Removing stale drivers...')
+      const cleanResult = await window.dustforge.driverClean(stalePackages.map((p) => p.publishedName))
+      return { removed: cleanResult.removed, space: cleanResult.spaceRecovered }
+    } catch {
+      return { removed: 0, space: 0 }
     }
   }, [])
 
@@ -161,7 +206,8 @@ export function DashboardPage() {
       spaceRecovered: space,
       filesCleaned: files,
       registryFixed: regFixed,
-      networkCleaned: 0
+      networkCleaned: 0,
+      driversRemoved: 0
     }
 
     const totalItems = files + regFixed
@@ -203,15 +249,17 @@ export function DashboardPage() {
     const { space, files } = await runCleaners()
     const regFixed = await runRegistry()
     const netCleaned = await runNetwork()
+    const drivers = await runDrivers()
 
     const oneClickResult: OneClickResult = {
-      spaceRecovered: space,
+      spaceRecovered: space + drivers.space,
       filesCleaned: files,
       registryFixed: regFixed,
-      networkCleaned: netCleaned
+      networkCleaned: netCleaned,
+      driversRemoved: drivers.removed
     }
 
-    const totalItems = files + regFixed + netCleaned
+    const totalItems = files + regFixed + netCleaned + drivers.removed
     if (totalItems > 0) {
       await historyStore.addEntry({
         id: Date.now().toString(),
@@ -221,7 +269,7 @@ export function DashboardPage() {
         totalItemsFound: totalItems,
         totalItemsCleaned: totalItems,
         totalItemsSkipped: 0,
-        totalSpaceSaved: space,
+        totalSpaceSaved: space + drivers.space,
         categories: [
           ...(files > 0
             ? [{ name: 'Full Clean', itemsFound: files, itemsCleaned: files, spaceSaved: space }]
@@ -231,6 +279,9 @@ export function DashboardPage() {
             : []),
           ...(netCleaned > 0
             ? [{ name: 'Network', itemsFound: netCleaned, itemsCleaned: netCleaned, spaceSaved: 0 }]
+            : []),
+          ...(drivers.removed > 0
+            ? [{ name: 'Stale Drivers', itemsFound: drivers.removed, itemsCleaned: drivers.removed, spaceSaved: drivers.space }]
             : [])
         ],
         errorCount: 0
@@ -241,7 +292,7 @@ export function DashboardPage() {
     setResult(oneClickResult)
     setPhase('done')
     setPhaseLabel('')
-  }, [phase, runCleaners, runRegistry, runNetwork, historyStore, recomputeStats])
+  }, [phase, runCleaners, runRegistry, runNetwork, runDrivers, historyStore, recomputeStats])
 
   const isRunning = phase === 'scanning' || phase === 'cleaning'
   const activity = stats.recentActivity
@@ -254,10 +305,40 @@ export function DashboardPage() {
       <div className="mb-6 grid grid-cols-4 gap-4">
         {/* Health Score Card */}
         <div
-          className="flex flex-col items-center justify-center rounded-2xl px-6 py-8"
+          className="flex flex-col items-center justify-center rounded-2xl px-6 py-6"
           style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}
         >
           <HealthScore score={healthScore} size="md" />
+          <div className="mt-4 flex items-center gap-2">
+            {toolCoverage.map((tool) => {
+              const Icon = tool.icon
+              return (
+                <div
+                  key={tool.key}
+                  className="relative flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
+                  style={{
+                    background: tool.usedRecently ? tool.color + '18' : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${tool.usedRecently ? tool.color + '30' : 'rgba(255,255,255,0.04)'}`
+                  }}
+                  title={`${tool.label}: ${tool.usedRecently ? 'Used recently' : tool.usedEver ? 'Not used recently' : 'Never used'}`}
+                >
+                  <Icon
+                    className="h-3.5 w-3.5"
+                    style={{ color: tool.usedRecently ? tool.color : '#3a3a42' }}
+                    strokeWidth={1.8}
+                  />
+                  {tool.usedRecently && (
+                    <div
+                      className="absolute -top-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full"
+                      style={{ background: '#22c55e' }}
+                    >
+                      <Check className="h-2 w-2 text-white" strokeWidth={3} />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
 
         <StatCard
@@ -327,10 +408,10 @@ export function DashboardPage() {
           <div className="flex-1 min-w-0">
             <p className="text-[14px] font-semibold text-zinc-200">Full Clean, Optimize & Protect</p>
             <p className="text-[12px]" style={{ color: '#52525e' }}>
-              Junk files + registry + network cleanup
+              Junk files + registry + network + stale drivers
             </p>
             <p className="text-[11px] mt-0.5" style={{ color: '#3f3f46' }}>
-              Everything except Debloater and Startup
+              Everything except Debloater, Startup, and Driver Updates
             </p>
           </div>
         </button>
@@ -377,7 +458,12 @@ export function DashboardPage() {
                     {result.networkCleaned} network items cleaned
                   </p>
                 )}
-                {result.spaceRecovered === 0 && result.filesCleaned === 0 && result.registryFixed === 0 && result.networkCleaned === 0 && (
+                {result.driversRemoved > 0 && (
+                  <p className="text-[12px]" style={{ color: '#6e6e76' }}>
+                    {result.driversRemoved} stale drivers removed
+                  </p>
+                )}
+                {result.spaceRecovered === 0 && result.filesCleaned === 0 && result.registryFixed === 0 && result.networkCleaned === 0 && result.driversRemoved === 0 && (
                   <p className="text-[12px]" style={{ color: '#6e6e76' }}>
                     System is already clean — nothing to do
                   </p>
@@ -482,9 +568,9 @@ function QuickAction({
 }
 
 function ActivityItem({ entry }: { entry: ActivityEntry }) {
-  const iconMap = { clean: Trash2, registry: Database, startup: Zap, scan: Search }
-  const colorMap = { clean: '#f59e0b', registry: '#3b82f6', startup: '#22c55e', scan: '#6e6e76' }
-  const Icon = iconMap[entry.type]
+  const iconMap: Record<string, typeof Trash2> = { clean: Trash2, registry: Database, startup: Zap, scan: Search, drivers: Cpu, network: Wifi }
+  const colorMap: Record<string, string> = { clean: '#f59e0b', registry: '#3b82f6', startup: '#22c55e', scan: '#6e6e76', drivers: '#a855f7', network: '#22c55e' }
+  const Icon = iconMap[entry.type] || Search
 
   return (
     <div className="flex items-center gap-3 rounded-lg px-2 py-2">

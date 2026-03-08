@@ -21,9 +21,11 @@ import { cn, formatBytes, formatNumber } from '@/lib/utils'
 import { useScanStore } from '@/stores/scan-store'
 import { useStatsStore } from '@/stores/stats-store'
 import { useHistoryStore } from '@/stores/history-store'
+import { useSettingsStore } from '@/stores/settings-store'
 import { ScanStatus, CleanerType } from '@shared/enums'
 import type { ScanResult } from '@shared/types'
 import type { LucideIcon } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface CategoryDef {
   type: CleanerType
@@ -45,6 +47,7 @@ export function CleanerPage() {
   const store = useScanStore()
   const recomputeStats = useStatsStore((s) => s.recompute)
   const historyStore = useHistoryStore()
+  const createRestorePointEnabled = useSettingsStore((s) => s.settings.cleaner.createRestorePoint)
   const [activeCategory, setActiveCategory] = useState<CleanerType>(CleanerType.System)
   const [showConfirm, setShowConfirm] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
@@ -55,10 +58,14 @@ export function CleanerPage() {
     return window.dustforge.onScanProgress((data) => store.setProgress(data))
   }, [])
 
+  const [failedCategories, setFailedCategories] = useState<string[]>([])
+
   const handleScan = useCallback(async () => {
     store.setStatus(ScanStatus.Scanning)
     store.setResults([])
     setExpandedGroups(new Set())
+    setFailedCategories([])
+    const failed: string[] = []
     try {
       const scanFns: Record<CleanerType, () => Promise<ScanResult[]>> = {
         [CleanerType.System]: () => window.dustforge.systemScan(),
@@ -72,8 +79,11 @@ export function CleanerPage() {
         try {
           const results = await scanFns[cat.type]()
           store.addResults(results)
-        } catch { /* skip */ }
+        } catch {
+          failed.push(cat.label)
+        }
       }
+      if (failed.length > 0) setFailedCategories(failed)
       store.setStatus(ScanStatus.Complete)
     } catch {
       store.setStatus(ScanStatus.Error)
@@ -86,6 +96,22 @@ export function CleanerPage() {
     store.setStatus(ScanStatus.Cleaning)
     cleanStartRef.current = Date.now()
     try {
+      // Create a system restore point before cleaning if enabled
+      if (createRestorePointEnabled) {
+        try {
+          const rpResult = await window.dustforge.createRestorePoint(
+            `DustForge clean — ${new Date().toLocaleString()}`
+          )
+          if (rpResult.success) {
+            toast.success('Restore point created')
+          } else {
+            toast.warning('Restore point skipped', { description: rpResult.error })
+          }
+        } catch {
+          toast.warning('Restore point skipped', { description: 'Could not create restore point' })
+        }
+      }
+
       const selectedIds = store.getSelectedIds()
       const cleanFns: Record<CleanerType, (ids: string[]) => Promise<any>> = {
         [CleanerType.System]: (ids) => window.dustforge.systemClean(ids),
@@ -267,6 +293,18 @@ export function CleanerPage() {
             />
           )}
 
+          {failedCategories.length > 0 && store.status === ScanStatus.Complete && (
+            <div
+              className="mb-5 flex items-center gap-3 rounded-2xl px-4 py-3"
+              style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.12)' }}
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" strokeWidth={1.8} />
+              <p className="text-[12px]" style={{ color: '#8e8e96' }}>
+                Some scanners failed: <span className="text-amber-400 font-medium">{failedCategories.join(', ')}</span>
+              </p>
+            </div>
+          )}
+
           {store.cleanResult && store.status === ScanStatus.Complete && (
             <div
               className="mb-5 rounded-2xl p-4"
@@ -310,7 +348,18 @@ export function CleanerPage() {
             <EmptyState
               icon={Search}
               title="No scan results"
-              description='Click "Scan" to analyze your system for files that can be safely removed.'
+              description='Analyze your system for files that can be safely removed.'
+              action={
+                <button
+                  onClick={handleScan}
+                  disabled={isCleaning}
+                  className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-40"
+                  style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#1a0a00' }}
+                >
+                  <Search className="h-4 w-4" strokeWidth={1.8} />
+                  Start Scan
+                </button>
+              }
             />
           )}
 

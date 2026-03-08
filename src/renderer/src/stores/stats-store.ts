@@ -30,16 +30,27 @@ function computeStats(): AppStats {
     cleaner: 'System Clean',
     registry: 'Registry Fix',
     debloater: 'Debloater',
-    network: 'Network Cleanup'
+    network: 'Network Cleanup',
+    drivers: 'Driver Cleanup'
+  }
+
+  const activityTypeMap: Record<string, string> = {
+    cleaner: 'clean',
+    network: 'network',
+    registry: 'registry',
+    debloater: 'clean',
+    drivers: 'drivers'
   }
 
   const recentActivity = entries.slice(0, 20).map((e) => ({
     id: e.id,
-    type: (e.type === 'cleaner' || e.type === 'network' ? 'clean' : e.type) as
+    type: (activityTypeMap[e.type] || 'scan') as
       | 'clean'
       | 'registry'
       | 'startup'
-      | 'scan',
+      | 'scan'
+      | 'drivers'
+      | 'network',
     message:
       `${typeLabel[e.type] || e.type}: ${e.totalItemsCleaned} items` +
       (e.totalSpaceSaved > 0 ? ` (${formatBytes(e.totalSpaceSaved)})` : ''),

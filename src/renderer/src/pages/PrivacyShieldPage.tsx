@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import {
   ShieldCheck,
   ShieldAlert,
@@ -15,7 +15,8 @@ import {
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { cn } from '@/lib/utils'
-import type { PrivacySetting, PrivacyShieldState, PrivacyApplyResult, PrivacyScanProgress } from '@shared/types'
+import { usePrivacyStore } from '@/stores/privacy-store'
+import type { PrivacySetting } from '@shared/types'
 import type { LucideIcon } from 'lucide-react'
 
 interface CategoryDef {
@@ -110,108 +111,116 @@ function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
 }
 
 export function PrivacyShieldPage() {
-  const [state, setState] = useState<PrivacyShieldState | null>(null)
-  const [status, setStatus] = useState<'idle' | 'scanning' | 'applying' | 'done'>('idle')
-  const [applyResult, setApplyResult] = useState<PrivacyApplyResult | null>(null)
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
-  const [progress, setProgress] = useState<PrivacyScanProgress | null>(null)
+  const state = usePrivacyStore(s => s.state)
+  const status = usePrivacyStore(s => s.status)
+  const applyResult = usePrivacyStore(s => s.applyResult)
+  const expandedCategories = usePrivacyStore(s => s.expandedCategories)
+  const progress = usePrivacyStore(s => s.progress)
   const progressCleanupRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     return () => { progressCleanupRef.current?.() }
   }, [])
 
+  // Auto-scan on first visit (empty state)
+  useEffect(() => {
+    const store = usePrivacyStore.getState()
+    if (store.status === 'idle' && !store.state) {
+      handleScan()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleScan = useCallback(async () => {
-    setStatus('scanning')
-    setApplyResult(null)
-    setProgress(null)
+    const store = usePrivacyStore.getState()
+    store.setStatus('scanning')
+    store.setApplyResult(null)
+    store.setProgress(null)
 
     // Listen for progress
     progressCleanupRef.current?.()
     progressCleanupRef.current = window.dustforge.onPrivacyProgress?.((data) => {
-      setProgress(data)
+      usePrivacyStore.getState().setProgress(data)
     }) ?? null
 
     try {
       const result = await window.dustforge.privacyScan()
-      setState(result)
+      usePrivacyStore.getState().setState(result)
       // Auto-expand categories with unprotected settings
       const unprotected = new Set<string>()
       for (const s of result.settings) {
         if (!s.enabled) unprotected.add(s.category)
       }
-      setExpandedCategories(unprotected)
-      setStatus('done')
+      usePrivacyStore.getState().setExpandedCategories(unprotected)
+      usePrivacyStore.getState().setStatus('done')
     } catch (err) {
       console.error('Privacy scan failed:', err)
-      setStatus('idle')
+      usePrivacyStore.getState().setStatus('idle')
     } finally {
       progressCleanupRef.current?.()
       progressCleanupRef.current = null
-      setProgress(null)
+      usePrivacyStore.getState().setProgress(null)
     }
   }, [])
 
   const handleApplyAll = useCallback(async () => {
-    if (!state) return
-    const unprotectedIds = state.settings.filter(s => !s.enabled).map(s => s.id)
+    const store = usePrivacyStore.getState()
+    if (!store.state) return
+    const unprotectedIds = store.state.settings.filter(s => !s.enabled).map(s => s.id)
     if (unprotectedIds.length === 0) return
 
-    setStatus('applying')
-    setApplyResult(null)
+    store.setStatus('applying')
+    store.setApplyResult(null)
     try {
       const result = await window.dustforge.privacyApply(unprotectedIds)
-      setApplyResult(result)
+      usePrivacyStore.getState().setApplyResult(result)
       // Re-scan to get updated state
       const updated = await window.dustforge.privacyScan()
-      setState(updated)
-      setStatus('done')
-    } catch {
-      setStatus('done')
+      usePrivacyStore.getState().setState(updated)
+      usePrivacyStore.getState().setStatus('done')
+    } catch (err) {
+      console.error('Privacy apply failed:', err)
+      usePrivacyStore.getState().setApplyResult({ succeeded: 0, failed: unprotectedIds.length, errors: [{ id: '', label: 'All settings', reason: 'IPC call failed — try running as administrator' }] })
+      usePrivacyStore.getState().setStatus('done')
     }
-  }, [state])
+  }, [])
 
   const handleApplyCategory = useCallback(async (categoryId: string) => {
-    if (!state) return
-    const ids = state.settings.filter(s => s.category === categoryId && !s.enabled).map(s => s.id)
+    const store = usePrivacyStore.getState()
+    if (!store.state) return
+    const ids = store.state.settings.filter(s => s.category === categoryId && !s.enabled).map(s => s.id)
     if (ids.length === 0) return
 
-    setStatus('applying')
-    setApplyResult(null)
+    store.setStatus('applying')
+    store.setApplyResult(null)
     try {
       const result = await window.dustforge.privacyApply(ids)
-      setApplyResult(result)
+      usePrivacyStore.getState().setApplyResult(result)
       const updated = await window.dustforge.privacyScan()
-      setState(updated)
-      setStatus('done')
-    } catch {
-      setStatus('done')
+      usePrivacyStore.getState().setState(updated)
+      usePrivacyStore.getState().setStatus('done')
+    } catch (err) {
+      console.error('Privacy apply failed:', err)
+      usePrivacyStore.getState().setApplyResult({ succeeded: 0, failed: ids.length, errors: [{ id: '', label: categoryId, reason: 'IPC call failed — try running as administrator' }] })
+      usePrivacyStore.getState().setStatus('done')
     }
-  }, [state])
+  }, [])
 
   const handleToggleSingle = useCallback(async (settingId: string) => {
-    if (!state) return
-    const setting = state.settings.find(s => s.id === settingId)
+    const store = usePrivacyStore.getState()
+    if (!store.state) return
+    const setting = store.state.settings.find(s => s.id === settingId)
     if (!setting || setting.enabled) return // can only enable protection, not disable it from here
 
-    setStatus('applying')
+    store.setStatus('applying')
     try {
       await window.dustforge.privacyApply([settingId])
       const updated = await window.dustforge.privacyScan()
-      setState(updated)
-      setStatus('done')
+      usePrivacyStore.getState().setState(updated)
+      usePrivacyStore.getState().setStatus('done')
     } catch {
-      setStatus('done')
+      usePrivacyStore.getState().setStatus('done')
     }
-  }, [state])
-
-  const toggleCategory = (id: string) => {
-    setExpandedCategories(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
+  }, [])
 
   const isScanning = status === 'scanning'
   const isApplying = status === 'applying'
@@ -460,7 +469,7 @@ export function PrivacyShieldPage() {
                 }}>
                 {/* Category header */}
                 <button
-                  onClick={() => toggleCategory(cat.id)}
+                  onClick={() => usePrivacyStore.getState().toggleCategory(cat.id)}
                   className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors"
                   style={{ background: allProtected ? 'rgba(34,197,94,0.03)' : 'rgba(255,255,255,0.02)' }}
                 >

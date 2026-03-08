@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ScanProgress } from '@/components/shared/ScanProgress'
 import { useHistoryStore } from '@/stores/history-store'
 import { useStatsStore } from '@/stores/stats-store'
+import { useRegistryStore } from '@/stores/registry-store'
 import type { RegistryEntry } from '@shared/types'
 import type { LucideIcon } from 'lucide-react'
 
@@ -115,16 +116,17 @@ function HealthRing({ percent, color, size = 36 }: { percent: number; color: str
 }
 
 export function RegistryPage() {
-  const [entries, setEntries] = useState<RegistryEntry[]>([])
-  const [scanning, setScanning] = useState(false)
-  const [scanned, setScanned] = useState(false)
-  const [fixing, setFixing] = useState(false)
-  const [fixProgress, setFixProgress] = useState<{ current: number; total: number; currentEntry: string } | null>(null)
-  const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set())
+  const entries = useRegistryStore((s) => s.entries)
+  const scanning = useRegistryStore((s) => s.scanning)
+  const scanned = useRegistryStore((s) => s.scanned)
+  const fixing = useRegistryStore((s) => s.fixing)
+  const fixProgress = useRegistryStore((s) => s.fixProgress)
+  const expandedCards = useRegistryStore((s) => s.expandedCards)
+  const fixResult = useRegistryStore((s) => s.fixResult)
+  const showFailures = useRegistryStore((s) => s.showFailures)
+  const error = useRegistryStore((s) => s.error)
+
   const [showConfirm, setShowConfirm] = useState(false)
-  const [fixResult, setFixResult] = useState<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] } | null>(null)
-  const [showFailures, setShowFailures] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const cleanupRef = useRef<(() => void) | null>(null)
   const fixStartRef = useRef<number>(0)
   const historyStore = useHistoryStore()
@@ -132,42 +134,46 @@ export function RegistryPage() {
 
   useEffect(() => {
     const cleanup = window.dustforge.onRegistryFixProgress((data) => {
-      setFixProgress(data)
+      useRegistryStore.getState().setFixProgress(data)
     })
     cleanupRef.current = cleanup
     return () => cleanup()
   }, [])
 
   const handleScan = useCallback(async () => {
-    setScanning(true)
-    setScanned(false)
-    setEntries([])
-    setFixResult(null)
-    setError(null)
+    const store = useRegistryStore.getState()
+    store.setScanning(true)
+    store.setScanned(false)
+    store.setEntries([])
+    store.setFixResult(null)
+    store.setError(null)
     try {
       const results = await window.dustforge.registryScan()
-      setEntries(results)
-      setScanned(true)
+      useRegistryStore.getState().setEntries(Array.isArray(results) ? results : [])
+      useRegistryStore.getState().setScanned(true)
     } catch (err) {
       console.error('Registry scan failed:', err)
-      setError('Failed to scan registry. Make sure the app is running with sufficient permissions.')
+      useRegistryStore.getState().setError('Failed to scan registry. Make sure the app is running with sufficient permissions.')
     }
-    setScanning(false)
+    useRegistryStore.getState().setScanning(false)
   }, [])
 
   const handleFix = useCallback(async () => {
     setShowConfirm(false)
-    setFixing(true)
-    setFixResult(null)
-    setShowFailures(false)
+    const store = useRegistryStore.getState()
+    store.setFixing(true)
+    store.setFixResult(null)
+    store.setShowFailures(false)
     fixStartRef.current = Date.now()
-    const selectedEntries = entries.filter((e) => e.selected)
+    const currentEntries = useRegistryStore.getState().entries
+    const selectedEntries = currentEntries.filter((e) => e.selected)
     const selectedIds = selectedEntries.map((e) => e.id)
-    setFixProgress({ current: 0, total: selectedIds.length, currentEntry: 'Creating backup...' })
+    store.setFixProgress({ current: 0, total: selectedIds.length, currentEntry: 'Creating backup...' })
     try {
       const result = await window.dustforge.registryFix(selectedIds)
-      setFixResult(result)
-      setEntries((prev) => prev.filter((e) => !selectedIds.includes(e.id)))
+      const s = useRegistryStore.getState()
+      s.setFixResult(result)
+      s.setEntries(s.entries.filter((e) => !selectedIds.includes(e.id)))
 
       // Build category breakdown by entry type
       const byType: Record<string, { found: number; fixed: number }> = {}
@@ -186,7 +192,7 @@ export function RegistryPage() {
         type: 'registry',
         timestamp: new Date().toISOString(),
         duration: Date.now() - fixStartRef.current,
-        totalItemsFound: entries.length,
+        totalItemsFound: currentEntries.length,
         totalItemsCleaned: result.fixed,
         totalItemsSkipped: result.failed,
         totalSpaceSaved: 0,
@@ -198,27 +204,11 @@ export function RegistryPage() {
       recomputeStats()
     } catch (err) {
       console.error('Registry fix failed:', err)
-      setError('Failed to fix registry entries. Some entries may require administrator privileges.')
+      useRegistryStore.getState().setError('Failed to fix registry entries. Some entries may require administrator privileges.')
     }
-    setFixing(false)
-    setFixProgress(null)
-  }, [entries])
-
-  const toggleEntry = (id: string) =>
-    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, selected: !e.selected } : e)))
-
-  const toggleCardExpand = (cardIndex: number) =>
-    setExpandedCards((prev) => {
-      const next = new Set(prev)
-      next.has(cardIndex) ? next.delete(cardIndex) : next.add(cardIndex)
-      return next
-    })
-
-  const toggleCardAll = (types: CardType[]) => {
-    const cardEntries = entries.filter((e) => types.includes(e.type))
-    const allSelected = cardEntries.length > 0 && cardEntries.every((e) => e.selected)
-    setEntries((prev) => prev.map((e) => (types.includes(e.type) ? { ...e, selected: !allSelected } : e)))
-  }
+    useRegistryStore.getState().setFixing(false)
+    useRegistryStore.getState().setFixProgress(null)
+  }, [historyStore, recomputeStats])
 
   const selectedCount = entries.filter((e) => e.selected).length
   const busy = scanning || fixing
@@ -253,7 +243,7 @@ export function RegistryPage() {
         </p>
       </div>
 
-      {error && <ErrorAlert message={error} onDismiss={() => setError(null)} className="mb-5" />}
+      {error && <ErrorAlert message={error} onDismiss={() => useRegistryStore.getState().setError(null)} className="mb-5" />}
       {scanning && <ScanProgress status="scanning" progress={0} currentPath="Scanning registry..." className="mb-5" />}
 
       {/* Fix progress */}
@@ -290,7 +280,7 @@ export function RegistryPage() {
             <p className="flex-1 text-[13px] text-zinc-200">
               Fixed {fixResult.fixed} entries
               {fixResult.failed > 0 && (
-                <button onClick={() => setShowFailures(!showFailures)}
+                <button onClick={() => useRegistryStore.getState().setShowFailures(!showFailures)}
                   className="ml-2 text-red-400 underline decoration-red-400/30 hover:decoration-red-400 transition-colors">
                   {fixResult.failed} failed — {showFailures ? 'hide details' : 'show details'}
                 </button>
@@ -315,7 +305,22 @@ export function RegistryPage() {
       )}
 
       {!scanned && !scanning && (
-        <EmptyState icon={Database} title="No registry issues found" description='Click "Scan" to check for broken registry entries and system hardening opportunities.' />
+        <EmptyState
+          icon={Database}
+          title="No registry issues found"
+          description='Check for broken registry entries and system hardening opportunities.'
+          action={
+            <button
+              onClick={handleScan}
+              disabled={fixing}
+              className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-40"
+              style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#1a0a00' }}
+            >
+              <Search className="h-4 w-4" strokeWidth={1.8} />
+              Start Scan
+            </button>
+          }
+        />
       )}
 
       {/* ============ CARDS ============ */}
@@ -407,7 +412,7 @@ export function RegistryPage() {
                   {!isClean && (
                     <div className="flex items-center gap-3 shrink-0">
                       <button
-                        onClick={() => toggleCardAll(card.types)}
+                        onClick={() => useRegistryStore.getState().toggleCardAll(card.types)}
                         className="relative h-6 w-11 rounded-full transition-colors"
                         style={{ background: allSelected ? color.text : 'rgba(255,255,255,0.08)' }}>
                         <div className="absolute top-0.5 h-5 w-5 rounded-full transition-all"
@@ -417,7 +422,7 @@ export function RegistryPage() {
                           }} />
                       </button>
 
-                      <button onClick={() => toggleCardExpand(cardIndex)}
+                      <button onClick={() => useRegistryStore.getState().toggleCardExpand(cardIndex)}
                         className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
                         style={{ background: 'rgba(255,255,255,0.04)' }}>
                         <ChevronDown
@@ -450,7 +455,7 @@ export function RegistryPage() {
                           background: entry.selected ? color.bg.replace('0.1', '0.03') : 'transparent',
                           borderBottom: i < cardEntries.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none'
                         }}>
-                        <div className="w-6 cursor-pointer" onClick={() => toggleEntry(entry.id)}>
+                        <div className="w-6 cursor-pointer" onClick={() => useRegistryStore.getState().toggleEntry(entry.id)}>
                           <input type="checkbox" checked={entry.selected} readOnly className="pointer-events-none accent-amber-500" />
                         </div>
                         <div className="flex-1 min-w-0">

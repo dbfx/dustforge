@@ -12,10 +12,11 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { cn } from '@/lib/utils'
-import type { NetworkItem, NetworkCleanResult } from '@shared/types'
+import type { NetworkItem } from '@shared/types'
 import type { LucideIcon } from 'lucide-react'
 import { useHistoryStore } from '@/stores/history-store'
 import { useStatsStore } from '@/stores/stats-store'
+import { useNetworkStore } from '@/stores/network-store'
 
 type NetworkCategory = NetworkItem['type']
 
@@ -34,56 +35,62 @@ const categories: CategoryDef[] = [
 ]
 
 export function NetworkCleanupPage() {
-  const [items, setItems] = useState<NetworkItem[]>([])
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [status, setStatus] = useState<'idle' | 'scanning' | 'cleaning' | 'complete'>('idle')
-  const [cleanResult, setCleanResult] = useState<NetworkCleanResult | null>(null)
-  const [activeCategory, setActiveCategory] = useState<NetworkCategory>('dns-cache')
+  const items = useNetworkStore((s) => s.items)
+  const selectedIds = useNetworkStore((s) => s.selectedIds)
+  const status = useNetworkStore((s) => s.status)
+  const cleanResult = useNetworkStore((s) => s.cleanResult)
+  const activeCategory = useNetworkStore((s) => s.activeCategory)
+
   const [showConfirm, setShowConfirm] = useState(false)
   const historyStore = useHistoryStore()
   const recomputeStats = useStatsStore((s) => s.recompute)
   const scanStartRef = useRef<number>(0)
 
   const handleScan = useCallback(async () => {
-    setStatus('scanning')
-    setItems([])
-    setSelectedIds(new Set())
-    setCleanResult(null)
+    const store = useNetworkStore.getState()
+    store.setStatus('scanning')
+    store.setItems([])
+    store.setSelectedIds(new Set())
+    store.setCleanResult(null)
     scanStartRef.current = Date.now()
     try {
       const result = await window.dustforge.networkScan()
-      setItems(result)
+      const s = useNetworkStore.getState()
+      s.setItems(result)
       const preSelected = new Set(result.filter((i) => i.selected).map((i) => i.id))
-      setSelectedIds(preSelected)
-      setStatus('complete')
+      s.setSelectedIds(preSelected)
+      s.setStatus('complete')
     } catch {
-      setStatus('idle')
+      useNetworkStore.getState().setStatus('idle')
     }
   }, [])
 
   const handleClean = useCallback(async () => {
     setShowConfirm(false)
-    setStatus('cleaning')
+    const store = useNetworkStore.getState()
+    store.setStatus('cleaning')
     try {
-      const result = await window.dustforge.networkClean([...selectedIds])
-      setCleanResult(result)
+      const { selectedIds: currentSelectedIds, items: currentItems } = useNetworkStore.getState()
+      const result = await window.dustforge.networkClean([...currentSelectedIds])
+      const s = useNetworkStore.getState()
+      s.setCleanResult(result)
       // Remove cleaned items from list
-      setItems((prev) => prev.filter((i) => !selectedIds.has(i.id)))
-      setSelectedIds(new Set())
+      s.setItems(currentItems.filter((i) => !currentSelectedIds.has(i.id)))
+      s.setSelectedIds(new Set())
 
       // Log to scan history
       const byType: Record<string, { found: number; cleaned: number }> = {}
-      for (const item of items) {
+      for (const item of currentItems) {
         if (!byType[item.type]) byType[item.type] = { found: 0, cleaned: 0 }
         byType[item.type].found++
-        if (selectedIds.has(item.id)) byType[item.type].cleaned++
+        if (currentSelectedIds.has(item.id)) byType[item.type].cleaned++
       }
       await historyStore.addEntry({
         id: Date.now().toString(),
         type: 'network',
         timestamp: new Date().toISOString(),
         duration: Date.now() - scanStartRef.current,
-        totalItemsFound: items.length,
+        totalItemsFound: currentItems.length,
         totalItemsCleaned: result.cleaned,
         totalItemsSkipped: result.failed,
         totalSpaceSaved: 0,
@@ -97,33 +104,11 @@ export function NetworkCleanupPage() {
       })
       recomputeStats()
 
-      setStatus('complete')
+      useNetworkStore.getState().setStatus('complete')
     } catch {
-      setStatus('idle')
+      useNetworkStore.getState().setStatus('idle')
     }
-  }, [selectedIds, items, historyStore, recomputeStats])
-
-  const toggleItem = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const toggleCategory = (type: NetworkCategory) => {
-    const catItems = items.filter((i) => i.type === type)
-    const allSelected = catItems.every((i) => selectedIds.has(i.id))
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      for (const item of catItems) {
-        if (allSelected) next.delete(item.id)
-        else next.add(item.id)
-      }
-      return next
-    })
-  }
+  }, [historyStore, recomputeStats])
 
   const isScanning = status === 'scanning'
   const isCleaning = status === 'cleaning'
@@ -172,7 +157,7 @@ export function NetworkCleanupPage() {
             return (
               <button
                 key={cat.type}
-                onClick={() => setActiveCategory(cat.type)}
+                onClick={() => useNetworkStore.getState().setActiveCategory(cat.type)}
                 className="relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-all"
                 style={{
                   background: isActive ? 'rgba(245,158,11,0.06)' : 'transparent',
@@ -257,7 +242,18 @@ export function NetworkCleanupPage() {
             <EmptyState
               icon={Search}
               title="No scan results"
-              description='Click "Scan" to discover network items that can be cleaned.'
+              description='Discover network items that can be cleaned.'
+              action={
+                <button
+                  onClick={handleScan}
+                  disabled={isCleaning}
+                  className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-40"
+                  style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#1a0a00' }}
+                >
+                  <Search className="h-4 w-4" strokeWidth={1.8} />
+                  Start Scan
+                </button>
+              }
             />
           )}
 
@@ -269,7 +265,7 @@ export function NetworkCleanupPage() {
                 </span>
                 {categoryItems.length > 0 && (
                   <button
-                    onClick={() => toggleCategory(activeCategory)}
+                    onClick={() => useNetworkStore.getState().toggleCategory(activeCategory)}
                     className="text-[12px] font-medium text-amber-500 hover:text-amber-400"
                   >
                     Toggle All
@@ -308,7 +304,7 @@ export function NetworkCleanupPage() {
                       <input
                         type="checkbox"
                         checked={checked}
-                        onChange={() => toggleItem(item.id)}
+                        onChange={() => useNetworkStore.getState().toggleItem(item.id)}
                         className="sr-only"
                       />
                       <div

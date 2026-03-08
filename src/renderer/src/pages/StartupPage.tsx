@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { cn } from '@/lib/utils'
+import { useStartupStore } from '@/stores/startup-store'
 import type { StartupItem, StartupBootTrace } from '@shared/types'
 
 const impactStyles: Record<StartupItem['impact'], { bg: string; text: string }> = {
@@ -241,55 +242,61 @@ function StatMini({ icon: Icon, label, value, color }: { icon: React.ElementType
 }
 
 export function StartupPage() {
-  const [items, setItems] = useState<StartupItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [sortBy, setSortBy] = useState<'name' | 'impact'>('impact')
-  const [filterBy, setFilterBy] = useState<'all' | 'active' | 'disabled'>('all')
-  const [error, setError] = useState<string | null>(null)
-  const [bootTrace, setBootTrace] = useState<StartupBootTrace | null>(null)
-  const [traceLoading, setTraceLoading] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<StartupItem | null>(null)
+  const items = useStartupStore((s) => s.items)
+  const loading = useStartupStore((s) => s.loading)
+  const sortBy = useStartupStore((s) => s.sortBy)
+  const filterBy = useStartupStore((s) => s.filterBy)
+  const error = useStartupStore((s) => s.error)
+  const bootTrace = useStartupStore((s) => s.bootTrace)
+  const traceLoading = useStartupStore((s) => s.traceLoading)
+  const deleteTarget = useStartupStore((s) => s.deleteTarget)
+
+  const store = useStartupStore
 
   const loadItems = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+    store.getState().setLoading(true)
+    store.getState().setError(null)
     try {
       const list = await window.dustforge.startupList()
-      setItems(list)
+      store.getState().setItems(list)
     } catch (err) {
       console.error('Failed to load startup items:', err)
-      setError('Failed to load startup items. Make sure the app is running properly.')
+      store.getState().setError('Failed to load startup items. Make sure the app is running properly.')
     }
-    setLoading(false)
+    store.getState().setLoading(false)
   }, [])
 
   const loadBootTrace = useCallback(async () => {
-    setTraceLoading(true)
+    store.getState().setTraceLoading(true)
     try {
       const trace = await window.dustforge.startupBootTrace()
-      setBootTrace(trace)
+      store.getState().setBootTrace(trace)
     } catch (err) {
       console.error('Failed to load boot trace:', err)
     }
-    setTraceLoading(false)
+    store.getState().setTraceLoading(false)
   }, [])
 
   useEffect(() => {
-    loadItems()
-    loadBootTrace()
+    if (items.length === 0) {
+      loadItems()
+    }
+    if (!bootTrace) {
+      loadBootTrace()
+    }
   }, [loadItems, loadBootTrace])
 
   const handleToggle = async (item: StartupItem, enabled: boolean) => {
-    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, enabled } : i)))
+    store.getState().updateItem(item.id, { enabled })
     try {
       const success = await window.dustforge.startupToggle(item.name, item.location, item.command, item.source, enabled)
       if (!success) {
-        setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, enabled: !enabled } : i)))
-        setError(`Failed to ${enabled ? 'enable' : 'disable'} ${item.displayName}. This may require administrator privileges.`)
+        store.getState().updateItem(item.id, { enabled: !enabled })
+        store.getState().setError(`Failed to ${enabled ? 'enable' : 'disable'} ${item.displayName}. This may require administrator privileges.`)
       }
     } catch {
-      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, enabled: !enabled } : i)))
-      setError(`Failed to ${enabled ? 'enable' : 'disable'} ${item.displayName}. This may require administrator privileges.`)
+      store.getState().updateItem(item.id, { enabled: !enabled })
+      store.getState().setError(`Failed to ${enabled ? 'enable' : 'disable'} ${item.displayName}. This may require administrator privileges.`)
     }
   }
 
@@ -297,14 +304,14 @@ export function StartupPage() {
     try {
       const success = await window.dustforge.startupDelete(item.name, item.source === 'startup-folder' ? item.command : item.location, item.source)
       if (success) {
-        setItems((prev) => prev.filter((i) => i.id !== item.id))
+        store.getState().removeItem(item.id)
       } else {
-        setError(`Failed to remove ${item.displayName}. This may require administrator privileges.`)
+        store.getState().setError(`Failed to remove ${item.displayName}. This may require administrator privileges.`)
       }
     } catch {
-      setError(`Failed to remove ${item.displayName}. This may require administrator privileges.`)
+      store.getState().setError(`Failed to remove ${item.displayName}. This may require administrator privileges.`)
     }
-    setDeleteTarget(null)
+    store.getState().setDeleteTarget(null)
   }
 
   const impactOrder: Record<string, number> = { high: 0, medium: 1, low: 2, none: 3 }
@@ -318,14 +325,14 @@ export function StartupPage() {
         description="Manage programs that run at startup"
         action={
           <div className="flex items-center gap-2.5">
-            <select value={filterBy} onChange={(e) => setFilterBy(e.target.value as any)}
+            <select value={filterBy} onChange={(e) => store.getState().setFilterBy(e.target.value as any)}
               className="rounded-xl px-4 py-2.5 text-[13px] text-zinc-400 outline-none"
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
               <option value="all">All Items</option>
               <option value="active">Active Only</option>
               <option value="disabled">Disabled Only</option>
             </select>
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
+            <select value={sortBy} onChange={(e) => store.getState().setSortBy(e.target.value as any)}
               className="rounded-xl px-4 py-2.5 text-[13px] text-zinc-400 outline-none"
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
               <option value="impact">Sort by Impact</option>
@@ -343,7 +350,7 @@ export function StartupPage() {
       {/* Boot Trace Impact Analysis */}
       <BootTracePanel trace={bootTrace} loading={traceLoading} />
 
-      {error && <ErrorAlert message={error} onDismiss={() => setError(null)} className="mb-5" />}
+      {error && <ErrorAlert message={error} onDismiss={() => store.getState().setError(null)} className="mb-5" />}
 
       {items.length === 0 && !loading && !error && (
         <EmptyState icon={Zap} title="No startup items found" description="Unable to detect startup programs." />
@@ -393,7 +400,7 @@ export function StartupPage() {
                 )} />
               </button>
               <button
-                onClick={() => setDeleteTarget(item)}
+                onClick={() => store.getState().setDeleteTarget(item)}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-600 transition-colors hover:text-red-400"
                 style={{ background: 'rgba(255,255,255,0.02)' }}
                 title={`Remove ${item.displayName}`}
@@ -408,7 +415,7 @@ export function StartupPage() {
       {deleteTarget && (
         <ConfirmDialog
           open
-          onCancel={() => setDeleteTarget(null)}
+          onCancel={() => store.getState().setDeleteTarget(null)}
           onConfirm={() => handleDelete(deleteTarget)}
           title={`Remove ${deleteTarget.displayName}?`}
           description="This will permanently remove this startup entry. The program will no longer start with Windows."

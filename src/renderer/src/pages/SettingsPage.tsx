@@ -71,10 +71,13 @@ export function SettingsPage() {
   const addExclusion = () => {
     const value = newExclusion.trim()
     if (!value) return
-    // Must be a valid path (drive letter + colon + backslash) or a *.ext glob pattern
-    const isPath = /^[A-Za-z]:\\/.test(value)
+    // Must be an absolute path: drive letter (C:\...) or UNC path (\\server\share), or a *.ext glob
+    const isDrivePath = /^[A-Za-z]:\\/.test(value)
+    const isUncPath = /^\\\\[A-Za-z0-9]/.test(value)
     const isGlob = /^\*\.[A-Za-z0-9]+$/.test(value)
-    if (!isPath && !isGlob) return
+    // Reject relative path traversal sequences
+    if (value.includes('..')) return
+    if (!isDrivePath && !isUncPath && !isGlob) return
     // Prevent duplicates
     if (settings.exclusions.includes(value)) return
     save({ exclusions: [...settings.exclusions, value] })
@@ -104,13 +107,13 @@ export function SettingsPage() {
       </Section>
 
       <Section title="Cleaning Preferences">
-        <Row label="Secure delete (slower)" desc="Overwrite files before deletion — coming soon">
+        <Row label="Secure delete (slower)" desc="Overwrite files before deletion for sensitive data (slower)">
           <Toggle checked={settings.cleaner.secureDelete} onChange={(v) => save({ cleaner: { ...settings.cleaner, secureDelete: v } })} />
         </Row>
         <Row label="Close browsers before clean" desc="Automatically close browsers to unlock cache files">
           <Toggle checked={settings.cleaner.closeBrowsersBeforeClean} onChange={(v) => save({ cleaner: { ...settings.cleaner, closeBrowsersBeforeClean: v } })} />
         </Row>
-        <Row label="Create restore point" desc="Create a system restore point before cleaning — coming soon">
+        <Row label="Create restore point" desc="Create a system restore point before cleaning (requires admin)">
           <Toggle checked={settings.cleaner.createRestorePoint} onChange={(v) => save({ cleaner: { ...settings.cleaner, createRestorePoint: v } })} />
         </Row>
         <Row label="Skip recent files" desc="Don't delete files modified within this time" last>

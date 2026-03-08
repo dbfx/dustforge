@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { HardDrive, ChevronRight, Folder, File, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { ScanProgress } from '@/components/shared/ScanProgress'
 import { cn, formatBytes } from '@/lib/utils'
+import { useDiskStore } from '@/stores/disk-store'
 import type { DiskNode, DriveInfo } from '@shared/types'
 
 const COLORS = ['#f59e0b', '#d97706', '#b45309', '#92400e', '#78350f', '#a16207', '#ca8a04', '#eab308', '#facc15', '#fbbf24']
@@ -86,29 +87,32 @@ function layoutTreemap(items: { name: string; size: number; fill: string }[], wi
 }
 
 export function DiskAnalyzerPage() {
-  const [drives, setDrives] = useState<DriveInfo[]>([])
-  const [selectedDrive, setSelectedDrive] = useState('C')
-  const [data, setData] = useState<DiskNode | null>(null)
-  const [analyzing, setAnalyzing] = useState(false)
-  const [breadcrumb, setBreadcrumb] = useState<DiskNode[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const drives = useDiskStore((s) => s.drives)
+  const selectedDrive = useDiskStore((s) => s.selectedDrive)
+  const data = useDiskStore((s) => s.data)
+  const analyzing = useDiskStore((s) => s.analyzing)
+  const breadcrumb = useDiskStore((s) => s.breadcrumb)
+  const error = useDiskStore((s) => s.error)
+  const store = useDiskStore()
 
   useEffect(() => {
-    window.dustforge?.diskDrives?.().then(setDrives).catch((err) => {
-      console.error('Failed to load drives:', err)
-    })
+    if (drives.length === 0) {
+      window.dustforge?.diskDrives?.().then(store.setDrives).catch((err) => {
+        console.error('Failed to load drives:', err)
+      })
+    }
   }, [])
 
   const handleAnalyze = async () => {
-    setAnalyzing(true); setData(null); setBreadcrumb([]); setError(null)
+    store.setAnalyzing(true); store.setData(null); store.setBreadcrumb([]); store.setError(null)
     try {
       const result = await window.dustforge.diskAnalyze(selectedDrive)
-      setData(result); setBreadcrumb([result])
+      store.setData(result); store.setBreadcrumb([result])
     } catch (err) {
       console.error('Disk analysis failed:', err)
-      setError(`Failed to analyze drive ${selectedDrive}:. Make sure the drive is accessible.`)
+      store.setError(`Failed to analyze drive ${selectedDrive}:. Make sure the drive is accessible.`)
     }
-    setAnalyzing(false)
+    store.setAnalyzing(false)
   }
 
   const currentNode = breadcrumb[breadcrumb.length - 1] ?? data
@@ -117,14 +121,14 @@ export function DiskAnalyzerPage() {
     return currentNode.children.sort((a, b) => b.size - a.size).map((c, i) => ({ name: c.name, size: c.size, fill: COLORS[i % COLORS.length] }))
   }, [currentNode])
 
-  const drillDown = (node: DiskNode) => { if (node.children?.length) setBreadcrumb((p) => [...p, node]) }
+  const drillDown = (node: DiskNode) => { if (node.children?.length) store.pushBreadcrumb(node) }
 
   return (
     <div className="animate-fade-in">
       <PageHeader title="Disk Analyzer" description="Visualize disk space usage"
         action={
           <div className="flex items-center gap-2.5">
-            <select value={selectedDrive} onChange={(e) => setSelectedDrive(e.target.value)}
+            <select value={selectedDrive} onChange={(e) => store.setSelectedDrive(e.target.value)}
               className="rounded-xl px-4 py-2.5 text-[13px] text-zinc-400 outline-none"
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
               {(drives.length > 0 ? drives : [{ letter: 'C', label: 'System', totalSize: 0, freeSpace: 0, usedSpace: 0 }]).map((d) => (
@@ -141,7 +145,7 @@ export function DiskAnalyzerPage() {
         }
       />
 
-      {error && <ErrorAlert message={error} onDismiss={() => setError(null)} className="mb-5" />}
+      {error && <ErrorAlert message={error} onDismiss={() => store.setError(null)} className="mb-5" />}
 
       {analyzing && <ScanProgress status="scanning" progress={0} currentPath={`Analyzing ${selectedDrive}:\\...`} className="mb-5" />}
       {!data && !analyzing && !error && <EmptyState icon={HardDrive} title="No analysis data" description="Select a drive and click Analyze to visualize disk space usage." />}
@@ -153,7 +157,7 @@ export function DiskAnalyzerPage() {
             {breadcrumb.map((node, i) => (
               <div key={node.path} className="flex items-center">
                 {i > 0 && <ChevronRight className="mx-1 h-3 w-3" style={{ color: '#3a3a42' }} />}
-                <button onClick={() => setBreadcrumb((p) => p.slice(0, i + 1))}
+                <button onClick={() => store.sliceBreadcrumb(i)}
                   className="rounded-md px-2 py-1 font-mono text-[12px] transition-colors"
                   style={{ color: i === breadcrumb.length - 1 ? '#f59e0b' : '#6e6e76' }}>
                   {node.name}

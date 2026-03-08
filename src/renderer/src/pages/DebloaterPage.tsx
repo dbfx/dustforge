@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ScanProgress } from '@/components/shared/ScanProgress'
 import { useHistoryStore } from '@/stores/history-store'
 import { useStatsStore } from '@/stores/stats-store'
+import { useDebloaterStore } from '@/stores/debloater-store'
 import type { BloatwareApp } from '@shared/types'
 
 type FilterType = 'all' | BloatwareApp['category']
@@ -21,51 +22,54 @@ const categoryColors: Record<BloatwareApp['category'], { bg: string; text: strin
 }
 
 export function DebloaterPage() {
-  const [apps, setApps] = useState<BloatwareApp[]>([])
-  const [scanning, setScanning] = useState(false)
-  const [filter, setFilter] = useState<FilterType>('all')
+  const apps = useDebloaterStore((s) => s.apps)
+  const scanning = useDebloaterStore((s) => s.scanning)
+  const filter = useDebloaterStore((s) => s.filter)
+  const removing = useDebloaterStore((s) => s.removing)
+  const removeProgress = useDebloaterStore((s) => s.removeProgress)
+  const removeResult = useDebloaterStore((s) => s.removeResult)
+  const error = useDebloaterStore((s) => s.error)
+  const store = useDebloaterStore
+
   const [showConfirm, setShowConfirm] = useState(false)
-  const [removing, setRemoving] = useState(false)
-  const [removeProgress, setRemoveProgress] = useState<{ current: number; total: number; currentApp: string; status: string } | null>(null)
-  const [removeResult, setRemoveResult] = useState<{ removed: number; failed: number } | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const removeStartRef = useRef<number>(0)
   const historyStore = useHistoryStore()
   const recomputeStats = useStatsStore((s) => s.recompute)
 
   useEffect(() => {
     const cleanup = window.dustforge.onDebloaterRemoveProgress((data) => {
-      setRemoveProgress(data)
+      store.getState().setRemoveProgress(data)
     })
     return cleanup
   }, [])
 
   const handleScan = useCallback(async () => {
-    setScanning(true)
-    setApps([])
-    setRemoveResult(null)
-    setError(null)
+    store.getState().setScanning(true)
+    store.getState().setApps([])
+    store.getState().setRemoveResult(null)
+    store.getState().setError(null)
     try {
       const results = await window.dustforge.debloaterScan()
-      setApps(results)
+      store.getState().setApps(results)
     } catch (err) {
       console.error('Debloater scan failed:', err)
-      setError('Failed to scan for bloatware. Make sure PowerShell is available.')
+      store.getState().setError('Failed to scan for bloatware. Make sure PowerShell is available.')
     }
-    setScanning(false)
+    store.getState().setScanning(false)
   }, [])
 
   const handleRemove = useCallback(async () => {
     setShowConfirm(false)
-    setRemoving(true)
-    setRemoveResult(null)
-    setRemoveProgress(null)
+    store.getState().setRemoving(true)
+    store.getState().setRemoveResult(null)
+    store.getState().setRemoveProgress(null)
     removeStartRef.current = Date.now()
-    const selectedApps = apps.filter((a) => a.selected)
+    const currentApps = store.getState().apps
+    const selectedApps = currentApps.filter((a) => a.selected)
     const selectedPkgs = selectedApps.map((a) => a.packageName)
     try {
       const result = await window.dustforge.debloaterRemove(selectedPkgs)
-      setRemoveResult(result)
+      store.getState().setRemoveResult(result)
 
       // Build category breakdown by app category
       const byCategory: Record<string, { found: number; removed: number }> = {}
@@ -84,7 +88,7 @@ export function DebloaterPage() {
         type: 'debloater',
         timestamp: new Date().toISOString(),
         duration: Date.now() - removeStartRef.current,
-        totalItemsFound: apps.length,
+        totalItemsFound: currentApps.length,
         totalItemsCleaned: result.removed,
         totalItemsSkipped: result.failed,
         totalSpaceSaved: 0,
@@ -96,20 +100,18 @@ export function DebloaterPage() {
       recomputeStats()
 
       if (result.removed > 0) {
-        setApps((prev) => prev.filter((a) => !a.selected || selectedPkgs.indexOf(a.packageName) === -1))
         const results = await window.dustforge.debloaterScan()
-        setApps(results)
+        store.getState().setApps(results)
       }
     } catch (err) {
       console.error('Debloater remove failed:', err)
-      setError('Failed to remove some apps. Administrator privileges may be required.')
+      store.getState().setError('Failed to remove some apps. Administrator privileges may be required.')
     } finally {
-      setRemoving(false)
-      setRemoveProgress(null)
+      store.getState().setRemoving(false)
+      store.getState().setRemoveProgress(null)
     }
-  }, [apps])
+  }, [])
 
-  const toggleApp = (id: string) => setApps((prev) => prev.map((a) => (a.id === id ? { ...a, selected: !a.selected } : a)))
   const filtered = filter === 'all' ? apps : apps.filter((a) => a.category === filter)
   const selectedCount = apps.filter((a) => a.selected).length
 
@@ -154,7 +156,7 @@ export function DebloaterPage() {
         </p>
       </div>
 
-      {error && <ErrorAlert message={error} onDismiss={() => setError(null)} className="mb-5" />}
+      {error && <ErrorAlert message={error} onDismiss={() => store.getState().setError(null)} className="mb-5" />}
 
       {scanning && <ScanProgress status="scanning" progress={0} currentPath="Scanning installed packages..." className="mb-5" />}
 
@@ -204,7 +206,7 @@ export function DebloaterPage() {
             const count = f.value === 'all' ? apps.length : apps.filter((a) => a.category === f.value).length
             if (count === 0 && f.value !== 'all') return null
             return (
-              <button key={f.value} onClick={() => setFilter(f.value)}
+              <button key={f.value} onClick={() => store.getState().setFilter(f.value)}
                 className="rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors"
                 style={{
                   background: filter === f.value ? 'rgba(245,158,11,0.1)' : 'rgba(255,255,255,0.04)',
@@ -217,12 +219,12 @@ export function DebloaterPage() {
 
           {/* Quick select buttons */}
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={() => setApps((prev) => prev.map((a) => ({ ...a, selected: true })))}
+            <button onClick={() => store.getState().selectAll()}
               className="rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors"
               style={{ background: 'rgba(255,255,255,0.04)', color: '#6e6e76' }}>
               Select All
             </button>
-            <button onClick={() => setApps((prev) => prev.map((a) => ({ ...a, selected: false })))}
+            <button onClick={() => store.getState().deselectAll()}
               className="rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors"
               style={{ background: 'rgba(255,255,255,0.04)', color: '#6e6e76' }}>
               Deselect All
@@ -245,11 +247,8 @@ export function DebloaterPage() {
               <input type="checkbox"
                 checked={filtered.every((a) => a.selected)}
                 onChange={() => {
-                  const all = filtered.every((a) => a.selected)
-                  setApps((prev) => prev.map((a) => {
-                    const inFilter = filter === 'all' || a.category === filter
-                    return inFilter ? { ...a, selected: !all } : a
-                  }))
+                  const allSelected = filtered.every((a) => a.selected)
+                  store.getState().selectFiltered(filter, !allSelected)
                 }}
                 className="accent-amber-500" />
             </div>
@@ -264,7 +263,7 @@ export function DebloaterPage() {
                 border: `1px solid ${app.selected ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.04)'}`
               }}>
               {/* Checkbox */}
-              <div className="w-6" onClick={() => toggleApp(app.id)}>
+              <div className="w-6" onClick={() => store.getState().toggleApp(app.id)}>
                 <input type="checkbox" checked={app.selected} readOnly className="pointer-events-none accent-amber-500 cursor-pointer" />
               </div>
 
