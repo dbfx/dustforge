@@ -280,6 +280,39 @@
     }
     .stats-grid .stat-label { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
 
+    /* ── Trust Banner ────────────────────── */
+    .trust { background: var(--bg); position: relative; overflow: hidden; }
+    .trust::before {
+      content: '';
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 900px; height: 400px;
+      background: radial-gradient(ellipse, rgba(34,197,94,0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .trust-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;
+      margin-top: 48px;
+    }
+    .trust-item {
+      text-align: center; padding: 32px 20px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 16px; transition: all 0.3s;
+    }
+    .trust-item:hover {
+      border-color: rgba(34,197,94,0.2);
+      transform: translateY(-4px);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+    }
+    .trust-icon {
+      width: 48px; height: 48px; border-radius: 14px;
+      display: inline-flex; align-items: center; justify-content: center;
+      margin-bottom: 16px; background: rgba(34,197,94,0.1); color: var(--green);
+    }
+    .trust-item h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+    .trust-item p { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+    @media (max-width: 900px) { .trust-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 640px) { .trust-grid { grid-template-columns: 1fr; } }
+
     /* ── CTA ──────────────────────────────── */
     .cta-section { text-align: center; position: relative; overflow: hidden; }
     .cta-section::before {
@@ -353,7 +386,7 @@
     <div class="container">
       <div class="hero-badge">
         <span class="dot"></span>
-        v1.2.0 &mdash; Driver Manager, Performance Monitor & more
+        v1.4.1 &mdash; Driver Manager, Performance Monitor & more
       </div>
       <h1>Your Windows,<br>dust-free.</h1>
       <p>An advanced open-source system cleaner, optimizer, and security tool built for Windows power users. 15+ specialized tools in one beautiful interface.</p>
@@ -393,6 +426,47 @@
         <div>
           <div class="stat-value">100%</div>
           <div class="stat-label">Open Source</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Trust -->
+  <section class="trust">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-label">No Catches</div>
+        <h2 class="section-title">Clean software that stays clean</h2>
+        <p class="section-subtitle">Too many system tools have turned into the very bloatware they claim to remove. DustForge is different.</p>
+      </div>
+      <div class="trust-grid">
+        <div class="trust-item">
+          <div class="trust-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+          </div>
+          <h3>No Bundled Junk</h3>
+          <p>No toolbars, no browser hijackers, no "recommended" software. Just the cleaner, nothing else.</p>
+        </div>
+        <div class="trust-item">
+          <div class="trust-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg>
+          </div>
+          <h3>Zero Ads, Forever</h3>
+          <p>No banners, no pop-ups, no upsells. You'll never see an advertisement inside DustForge.</p>
+        </div>
+        <div class="trust-item">
+          <div class="trust-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <h3>100% Free</h3>
+          <p>No "pro" tier, no feature gates, no trial periods. Every feature is available to everyone, always.</p>
+        </div>
+        <div class="trust-item">
+          <div class="trust-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
+          </div>
+          <h3>Open Source</h3>
+          <p>Every line of code is public on GitHub. Audit it, fork it, contribute to it. Full transparency, no secrets.</p>
         </div>
       </div>
     </div>
