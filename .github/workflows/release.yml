@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -30,11 +32,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: npx electron-vite build && npx electron-builder --publish always
 
-      - name: Update release notes
+      - name: Generate changelog and update release notes
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          NOTES=$(gh api repos/${{ github.repository }}/releases/generate-notes \
-            -f tag_name=${{ github.ref_name }} --jq '.body')
-          gh release edit ${{ github.ref_name }} --notes "$NOTES"
+          npx conventional-changelog -p angular -r 1 -o _RELEASE_NOTES.md
+          gh release edit ${{ github.ref_name }} --notes-file _RELEASE_NOTES.md

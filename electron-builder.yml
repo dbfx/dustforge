@@ -8,7 +8,10 @@ directories:
 
 files:
   - out/**/*
-  - "!node_modules/**/*"
+
+extraResources:
+  - from: resources/icon.ico
+    to: icon.ico
 
 win:
   target:

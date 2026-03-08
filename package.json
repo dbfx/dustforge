@@ -10,7 +10,9 @@
     "package": "electron-vite build && electron-builder",
     "test": "vitest run",
     "test:watch": "vitest",
-    "release": "node -e \"const v='v'+require('./package.json').version;const{execSync:r}=require('child_process');r('git tag '+v,{stdio:'inherit'});r('git push origin '+v,{stdio:'inherit'});console.log('\\nTag '+v+' pushed. GitHub CI will build and publish the release.\\nTrack progress: https://github.com/dbfx/dustforge/actions/workflows/release.yml')\""
+    "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
+    "release": "node -e \"const v='v'+require('./package.json').version;const{execSync:r}=require('child_process');r('git tag '+v,{stdio:'inherit'});r('git push origin '+v,{stdio:'inherit'});console.log('\\nTag '+v+' pushed. GitHub CI will build and publish the release.\\nTrack progress: https://github.com/dbfx/dustforge/actions/workflows/release.yml')\"",
+    "prepare": "husky"
   },
   "keywords": [
     "system-cleaner",
@@ -21,13 +23,17 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@commitlint/cli": "^20.4.3",
+    "@commitlint/config-conventional": "^20.4.3",
     "@tailwindcss/vite": "^4.2.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.4",
+    "conventional-changelog-cli": "^5.0.0",
     "electron": "^35.7.5",
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
+    "husky": "^9.1.7",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "tailwindcss": "^4.2.1",

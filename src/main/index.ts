@@ -22,6 +22,10 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let ipcRegistered = false
 
+const iconPath = app.isPackaged
+  ? join(process.resourcesPath, 'icon.ico')
+  : join(__dirname, '../../resources/icon.ico')
+
 function applyAutoLaunch(enabled: boolean): void {
   app.setLoginItemSettings({
     openAtLogin: enabled,
@@ -32,7 +36,7 @@ function applyAutoLaunch(enabled: boolean): void {
 function createTray(): void {
   if (tray) return
 
-  const icon = nativeImage.createFromPath(join(__dirname, '../../resources/icon.ico'))
+  const icon = nativeImage.createFromPath(iconPath)
   // Resize for tray (16x16 on most platforms)
   const trayIcon = icon.resize({ width: 16, height: 16 })
 
@@ -87,7 +91,7 @@ function createWindow(): void {
   const width = Math.round(screenWidth * 0.75)
   const height = Math.round(screenHeight * 0.8)
 
-  const icon = nativeImage.createFromPath(join(__dirname, '../../resources/icon.ico'))
+  const icon = nativeImage.createFromPath(iconPath)
 
   mainWindow = new BrowserWindow({
     width,
