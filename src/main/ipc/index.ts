@@ -20,6 +20,7 @@ import { isAdmin } from '../services/elevation'
 import { getHistory, addHistoryEntry, clearHistory } from '../services/history-store'
 import { validateSettingsPartial, validateHistoryEntry } from '../services/ipc-validation'
 import { createRestorePoint } from '../services/restore-point'
+import { checkForUpdates, downloadUpdate, installUpdate, getUpdateStatus, setAutoDownload } from '../services/auto-updater'
 
 export type WindowGetter = () => BrowserWindow | null
 
@@ -44,7 +45,12 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettings())
   ipcMain.handle(IPC.SETTINGS_SET, (_event, settings) => {
     const validated = validateSettingsPartial(settings)
-    if (validated) setSettings(validated)
+    if (validated) {
+      setSettings(validated)
+      if (typeof validated.autoUpdate === 'boolean') {
+        setAutoDownload(validated.autoUpdate)
+      }
+    }
   })
 
   // Onboarding
@@ -70,4 +76,10 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
     if (validated) addHistoryEntry(validated)
   })
   ipcMain.handle(IPC.HISTORY_CLEAR, () => clearHistory())
+
+  // Auto-updater
+  ipcMain.handle(IPC.UPDATER_CHECK, () => checkForUpdates())
+  ipcMain.handle(IPC.UPDATER_DOWNLOAD, () => downloadUpdate())
+  ipcMain.handle(IPC.UPDATER_INSTALL, () => { installUpdate() })
+  ipcMain.handle(IPC.UPDATER_GET_STATUS, () => getUpdateStatus())
 }

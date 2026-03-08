@@ -30,7 +30,8 @@ import type {
   PerfSystemInfo,
   PerfSnapshot,
   PerfProcessList,
-  PerfKillResult
+  PerfKillResult,
+  UpdateStatus
 } from '../shared/types'
 
 const api = {
@@ -193,6 +194,17 @@ const api = {
     const handler = (_event: Electron.IpcRendererEvent, data: PerfProcessList) => callback(data)
     ipcRenderer.on(IPC.PERF_PROCESS_LIST, handler)
     return () => ipcRenderer.removeListener(IPC.PERF_PROCESS_LIST, handler)
+  },
+
+  // Auto-updater
+  updaterCheck: (): Promise<void> => ipcRenderer.invoke(IPC.UPDATER_CHECK),
+  updaterDownload: (): Promise<void> => ipcRenderer.invoke(IPC.UPDATER_DOWNLOAD),
+  updaterInstall: (): Promise<void> => ipcRenderer.invoke(IPC.UPDATER_INSTALL),
+  updaterGetStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke(IPC.UPDATER_GET_STATUS),
+  onUpdaterStatus: (callback: (data: UpdateStatus) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: UpdateStatus) => callback(data)
+    ipcRenderer.on(IPC.UPDATER_STATUS, handler)
+    return () => ipcRenderer.removeListener(IPC.UPDATER_STATUS, handler)
   },
 
   // Progress events

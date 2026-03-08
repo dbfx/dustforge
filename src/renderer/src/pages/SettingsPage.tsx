@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Github, Bug, ExternalLink, Plus, X, FolderOpen, Clock } from 'lucide-react'
+import { Github, Bug, ExternalLink, Plus, X, FolderOpen, Clock, RefreshCw, Download, CheckCircle, AlertCircle, Loader } from 'lucide-react'
+import type { UpdateStatus } from '@shared/types'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -27,8 +28,15 @@ export function SettingsPage() {
   const { settings, updateSettings, setSettings } = useSettingsStore()
   const [newExclusion, setNewExclusion] = useState('')
   const [nextScan, setNextScan] = useState<string | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
 
   useEffect(() => { window.dustforge?.settingsGet?.().then(setSettings).catch(() => {}) }, [])
+
+  useEffect(() => {
+    window.dustforge?.updaterGetStatus?.().then(setUpdateStatus).catch(() => {})
+    const unsub = window.dustforge?.onUpdaterStatus?.((s) => setUpdateStatus(s))
+    return () => unsub?.()
+  }, [])
 
   // Fetch next scan time whenever schedule settings change
   useEffect(() => {
@@ -226,6 +234,80 @@ export function SettingsPage() {
               <p className="text-[12px]" style={{ color: '#52525e' }}>MIT License · Open Source</p>
             </div>
           </div>
+
+          <div className="mt-4 flex items-center gap-3">
+            {updateStatus.state === 'idle' && (
+              <button
+                onClick={() => window.dustforge?.updaterCheck?.()}
+                className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[12px] font-medium text-zinc-400 transition-colors"
+                style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+                <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.8} /> Check for updates
+              </button>
+            )}
+            {updateStatus.state === 'checking' && (
+              <span className="flex items-center gap-2 text-[12px] text-zinc-500">
+                <Loader className="h-3.5 w-3.5 animate-spin" strokeWidth={1.8} /> Checking for updates...
+              </span>
+            )}
+            {updateStatus.state === 'not-available' && (
+              <>
+                <span className="flex items-center gap-2 text-[12px] text-zinc-500">
+                  <CheckCircle className="h-3.5 w-3.5" style={{ color: '#22c55e' }} strokeWidth={1.8} /> You're up to date
+                </span>
+                <button
+                  onClick={() => window.dustforge?.updaterCheck?.()}
+                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px] font-medium text-zinc-400 transition-colors"
+                  style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <RefreshCw className="h-3 w-3" strokeWidth={1.8} /> Check again
+                </button>
+              </>
+            )}
+            {updateStatus.state === 'available' && (
+              <>
+                <span className="text-[12px] text-zinc-400">v{updateStatus.version} available</span>
+                <button
+                  onClick={() => window.dustforge?.updaterDownload?.()}
+                  className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[12px] font-medium text-zinc-200 transition-colors"
+                  style={{ background: '#f59e0b', color: '#09090b' }}>
+                  <Download className="h-3.5 w-3.5" strokeWidth={1.8} /> Download
+                </button>
+              </>
+            )}
+            {updateStatus.state === 'downloading' && (
+              <div className="flex flex-1 items-center gap-3">
+                <Loader className="h-3.5 w-3.5 shrink-0 animate-spin text-zinc-500" strokeWidth={1.8} />
+                <div className="flex-1">
+                  <div className="mb-1 text-[12px] text-zinc-400">Downloading... {updateStatus.progress ?? 0}%</div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    <div className="h-full rounded-full transition-all" style={{ width: `${updateStatus.progress ?? 0}%`, background: '#f59e0b' }} />
+                  </div>
+                </div>
+              </div>
+            )}
+            {updateStatus.state === 'downloaded' && (
+              <button
+                onClick={() => window.dustforge?.updaterInstall?.()}
+                className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[12px] font-medium transition-colors"
+                style={{ background: '#22c55e', color: '#09090b' }}>
+                <Download className="h-3.5 w-3.5" strokeWidth={1.8} /> Restart & Install v{updateStatus.version}
+              </button>
+            )}
+            {updateStatus.state === 'error' && (
+              <>
+                <span className="flex items-center gap-2 text-[12px] text-red-400">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+                  {updateStatus.error}
+                </span>
+                <button
+                  onClick={() => window.dustforge?.updaterCheck?.()}
+                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px] font-medium text-zinc-400 transition-colors"
+                  style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+                  Retry
+                </button>
+              </>
+            )}
+          </div>
+
           <div className="mt-5 flex items-center gap-2.5">
             <LinkButton icon={Github} label="GitHub" href="https://github.com/dbfx/dustforge" />
             <LinkButton icon={Bug} label="Report Bug" href="https://github.com/dbfx/dustforge/issues" />

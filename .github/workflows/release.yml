@@ -25,13 +25,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and package
-        run: npx electron-vite build && npx electron-builder --publish never
-
-      - name: Create GitHub Release and upload installer
+      - name: Build, package, and publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          $tag = "${{ github.ref_name }}"
-          $exe = Get-ChildItem dist/DustForge-Setup-*.exe | Select-Object -First 1
-          gh release create $tag $exe.FullName --title $tag --generate-notes
+        run: npx electron-vite build && npx electron-builder --publish always

@@ -104,6 +104,13 @@ export const IPC = {
   PERF_PROCESS_LIST: 'perf:process-list',
   PERF_KILL_PROCESS: 'perf:kill',
 
+  // Auto-updater
+  UPDATER_CHECK: 'updater:check',
+  UPDATER_DOWNLOAD: 'updater:download',
+  UPDATER_INSTALL: 'updater:install',
+  UPDATER_GET_STATUS: 'updater:get-status',
+  UPDATER_STATUS: 'updater:status',
+
   // Window controls
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_MAXIMIZE: 'window:maximize',

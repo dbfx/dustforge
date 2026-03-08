@@ -4,6 +4,7 @@ import { IPC } from '../shared/channels'
 import { registerCleanerIpc } from './ipc'
 import { getSettings } from './services/settings-store'
 import { startScheduler, stopScheduler, getNextScanTime, notifyScheduledScanComplete } from './services/scheduler'
+import { initAutoUpdater } from './services/auto-updater'
 import { runCli } from './cli'
 
 // ─── CLI mode ────────────────────────────────────────────────
@@ -179,6 +180,9 @@ app.whenReady().then(() => {
   }
 
   createWindow()
+
+  // Initialize auto-updater
+  initAutoUpdater()
 
   // Start the scheduled scan checker
   startScheduler(() => mainWindow)

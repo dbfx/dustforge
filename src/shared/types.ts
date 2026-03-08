@@ -354,6 +354,14 @@ export interface PerfKillResult {
   requiresAdmin?: boolean
 }
 
+// ─── Auto-Updater ────────────────────────────────────────────
+export interface UpdateStatus {
+  state: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+  version?: string
+  progress?: number
+  error?: string
+}
+
 export interface DustForgeSettings {
   minimizeToTray: boolean
   showNotificationOnComplete: boolean
