@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   Database, Search, Wrench, Shield, CheckCircle2, ChevronDown,
-  ShieldAlert, Eye, Gauge, Wifi, Server, CalendarClock, Trash2, Loader2, Check
+  ShieldAlert, Gauge, Wifi, Server, CalendarClock, Trash2, Loader2, Check
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -21,7 +21,7 @@ const typeColors: Record<CardType, { bg: string; text: string }> = {
   orphaned: { bg: 'rgba(59,130,246,0.1)', text: '#3b82f6' },
   broken: { bg: 'rgba(239,68,68,0.1)', text: '#ef4444' },
   vulnerability: { bg: 'rgba(168,85,247,0.1)', text: '#a855f7' },
-  privacy: { bg: 'rgba(236,72,153,0.1)', text: '#ec4899' },
+  privacy: { bg: 'rgba(236,72,153,0.1)', text: '#ec4899' },  // kept for type compat
   performance: { bg: 'rgba(20,184,166,0.1)', text: '#14b8a6' },
   network: { bg: 'rgba(99,102,241,0.1)', text: '#6366f1' },
   service: { bg: 'rgba(251,146,60,0.1)', text: '#fb923c' },
@@ -59,20 +59,12 @@ const cards: CardDef[] = [
     totalChecks: 12
   },
   {
-    types: ['privacy'],
-    icon: Eye,
-    title: 'Privacy',
-    description: 'Telemetry, advertising ID, activity history, Bing search, and feedback prompts',
-    color: typeColors.privacy,
-    totalChecks: 8
-  },
-  {
     types: ['performance'],
     icon: Gauge,
     title: 'Performance',
-    description: 'Cortana and SysMain (Superfetch) optimization',
+    description: 'SysMain (Superfetch) optimization',
     color: typeColors.performance,
-    totalChecks: 2
+    totalChecks: 1
   },
   {
     types: ['network'],
@@ -86,9 +78,9 @@ const cards: CardDef[] = [
     types: ['service'],
     icon: Server,
     title: 'Services',
-    description: 'DiagTrack telemetry, Print Spooler, Fax, and Maps services',
+    description: 'Print Spooler and Fax service audit',
     color: typeColors.service,
-    totalChecks: 5
+    totalChecks: 2
   },
   {
     types: ['task'],
