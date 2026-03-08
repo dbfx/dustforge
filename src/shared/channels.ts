@@ -56,6 +56,7 @@ export const IPC = {
 
   // System
   ELEVATION_CHECK: 'elevation:check',
+  RESTORE_POINT_CREATE: 'system:restore-point:create',
 
   // Scheduled scans
   SCHEDULE_NEXT_SCAN: 'schedule:next-scan',
@@ -83,9 +84,25 @@ export const IPC = {
   PRIVACY_APPLY: 'privacy:apply',
   PRIVACY_PROGRESS: 'privacy:progress',
 
+  // Driver Manager
+  DRIVER_SCAN: 'driver:scan',
+  DRIVER_CLEAN: 'driver:clean',
+  DRIVER_PROGRESS: 'driver:progress',
+  DRIVER_UPDATE_SCAN: 'driver:update:scan',
+  DRIVER_UPDATE_INSTALL: 'driver:update:install',
+  DRIVER_UPDATE_PROGRESS: 'driver:update:progress',
+
   // Onboarding
   ONBOARDING_GET: 'onboarding:get',
   ONBOARDING_SET: 'onboarding:set',
+
+  // Performance Monitor
+  PERF_GET_SYSTEM_INFO: 'perf:system-info',
+  PERF_START_MONITORING: 'perf:start',
+  PERF_STOP_MONITORING: 'perf:stop',
+  PERF_SNAPSHOT: 'perf:snapshot',
+  PERF_PROCESS_LIST: 'perf:process-list',
+  PERF_KILL_PROCESS: 'perf:kill',
 
   // Window controls
   WINDOW_MINIMIZE: 'window:minimize',

@@ -19,7 +19,18 @@ import type {
   MalwareActionResult,
   PrivacyShieldState,
   PrivacyApplyResult,
-  PrivacyScanProgress
+  PrivacyScanProgress,
+  RestorePointResult,
+  DriverScanResult,
+  DriverCleanResult,
+  DriverScanProgress,
+  DriverUpdateScanResult,
+  DriverUpdateInstallResult,
+  DriverUpdateProgress,
+  PerfSystemInfo,
+  PerfSnapshot,
+  PerfProcessList,
+  PerfKillResult
 } from '../shared/types'
 
 const api = {
@@ -102,6 +113,10 @@ const api = {
   // Elevation
   elevationCheck: (): Promise<boolean> => ipcRenderer.invoke(IPC.ELEVATION_CHECK),
 
+  // System Restore Point
+  createRestorePoint: (description: string): Promise<RestorePointResult> =>
+    ipcRenderer.invoke(IPC.RESTORE_POINT_CREATE, description),
+
   // Scheduled scans
   scheduleNextScan: (): Promise<string | null> => ipcRenderer.invoke(IPC.SCHEDULE_NEXT_SCAN),
   applyStartup: (enabled: boolean) => ipcRenderer.send(IPC.SETTINGS_APPLY_STARTUP, enabled),
@@ -141,6 +156,43 @@ const api = {
     const handler = (_event: Electron.IpcRendererEvent, data: MalwareScanProgress) => callback(data)
     ipcRenderer.on(IPC.MALWARE_PROGRESS, handler)
     return () => ipcRenderer.removeListener(IPC.MALWARE_PROGRESS, handler)
+  },
+
+  // Driver Manager
+  driverScan: (): Promise<DriverScanResult> => ipcRenderer.invoke(IPC.DRIVER_SCAN),
+  driverClean: (publishedNames: string[]): Promise<DriverCleanResult> =>
+    ipcRenderer.invoke(IPC.DRIVER_CLEAN, publishedNames),
+  onDriverProgress: (callback: (data: DriverScanProgress) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: DriverScanProgress) => callback(data)
+    ipcRenderer.on(IPC.DRIVER_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC.DRIVER_PROGRESS, handler)
+  },
+
+  // Driver Updates
+  driverUpdateScan: (): Promise<DriverUpdateScanResult> => ipcRenderer.invoke(IPC.DRIVER_UPDATE_SCAN),
+  driverUpdateInstall: (updateIds: string[]): Promise<DriverUpdateInstallResult> =>
+    ipcRenderer.invoke(IPC.DRIVER_UPDATE_INSTALL, updateIds),
+  onDriverUpdateProgress: (callback: (data: DriverUpdateProgress) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: DriverUpdateProgress) => callback(data)
+    ipcRenderer.on(IPC.DRIVER_UPDATE_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC.DRIVER_UPDATE_PROGRESS, handler)
+  },
+
+  // Performance Monitor
+  perfGetSystemInfo: (): Promise<PerfSystemInfo> => ipcRenderer.invoke(IPC.PERF_GET_SYSTEM_INFO),
+  perfStartMonitoring: (): Promise<void> => ipcRenderer.invoke(IPC.PERF_START_MONITORING),
+  perfStopMonitoring: (): Promise<void> => ipcRenderer.invoke(IPC.PERF_STOP_MONITORING),
+  perfKillProcess: (pid: number): Promise<PerfKillResult> =>
+    ipcRenderer.invoke(IPC.PERF_KILL_PROCESS, pid),
+  onPerfSnapshot: (callback: (data: PerfSnapshot) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: PerfSnapshot) => callback(data)
+    ipcRenderer.on(IPC.PERF_SNAPSHOT, handler)
+    return () => ipcRenderer.removeListener(IPC.PERF_SNAPSHOT, handler)
+  },
+  onPerfProcessList: (callback: (data: PerfProcessList) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: PerfProcessList) => callback(data)
+    ipcRenderer.on(IPC.PERF_PROCESS_LIST, handler)
+    return () => ipcRenderer.removeListener(IPC.PERF_PROCESS_LIST, handler)
   },
 
   // Progress events

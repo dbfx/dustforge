@@ -7,7 +7,7 @@ export interface ScanHistoryCategory {
 
 export interface ScanHistoryEntry {
   id: string
-  type: 'cleaner' | 'registry' | 'debloater' | 'network'
+  type: 'cleaner' | 'registry' | 'debloater' | 'network' | 'drivers'
   timestamp: string
   duration: number
   totalItemsFound: number
@@ -133,7 +133,7 @@ export interface AppStats {
 
 export interface ActivityEntry {
   id: string
-  type: 'clean' | 'registry' | 'startup' | 'scan'
+  type: 'clean' | 'registry' | 'startup' | 'scan' | 'drivers' | 'network'
   message: string
   timestamp: string
   spaceSaved?: number
@@ -230,6 +230,128 @@ export interface PrivacyApplyResult {
   succeeded: number
   failed: number
   errors: { id: string; label: string; reason: string }[]
+}
+
+// ─── Driver Manager ─────────────────────────────────────────
+export interface DriverPackage {
+  id: string
+  publishedName: string       // e.g. "oem42.inf"
+  originalName: string        // e.g. "nvlddmkm.inf"
+  provider: string
+  className: string           // e.g. "Display adapters"
+  version: string
+  date: string
+  signer: string
+  folderPath: string          // full path in FileRepository
+  size: number                // bytes
+  isCurrent: boolean          // true = actively bound to hardware
+  selected: boolean
+}
+
+export interface DriverScanResult {
+  packages: DriverPackage[]
+  totalStaleSize: number
+  totalStaleCount: number
+  totalCurrentCount: number
+}
+
+export interface DriverCleanResult {
+  removed: number
+  failed: number
+  spaceRecovered: number
+  errors: { publishedName: string; reason: string }[]
+}
+
+export interface DriverScanProgress {
+  phase: 'enumerating' | 'analyzing' | 'measuring'
+  current: number
+  total: number
+  currentDriver: string
+}
+
+export interface DriverUpdate {
+  id: string
+  updateId: string            // Windows Update Identity.UpdateID (used for install matching)
+  deviceName: string
+  deviceId: string
+  className: string
+  currentVersion: string
+  currentDate: string
+  availableVersion: string
+  availableDate: string
+  provider: string
+  updateTitle: string       // Windows Update title string
+  downloadSize: string      // human-readable size from WU
+  selected: boolean
+}
+
+export interface DriverUpdateScanResult {
+  updates: DriverUpdate[]
+  totalAvailable: number
+  scanDuration: number
+}
+
+export interface DriverUpdateInstallResult {
+  installed: number
+  failed: number
+  rebootRequired: boolean
+  errors: { deviceName: string; reason: string }[]
+}
+
+export interface DriverUpdateProgress {
+  phase: 'checking' | 'downloading' | 'installing'
+  current: number
+  total: number
+  currentDevice: string
+  percent: number
+}
+
+export interface RestorePointResult {
+  success: boolean
+  error?: string
+}
+
+// ─── Performance Monitor ────────────────────────────────────
+export interface PerfSystemInfo {
+  cpuModel: string
+  cpuCores: number
+  cpuThreads: number
+  totalMemBytes: number
+  osVersion: string
+  hostname: string
+}
+
+export interface PerfSnapshot {
+  timestamp: number
+  cpu: { overall: number; perCore: number[] }
+  memory: { usedBytes: number; totalBytes: number; cachedBytes: number; percent: number }
+  disk: { readBytesPerSec: number; writeBytesPerSec: number }
+  network: { rxBytesPerSec: number; txBytesPerSec: number }
+  uptime: number
+}
+
+export interface PerfProcess {
+  pid: number
+  name: string
+  cpuPercent: number
+  memBytes: number
+  memPercent: number
+  user: string
+  started: string
+  isStartupItem?: boolean
+  startupItemName?: string
+}
+
+export interface PerfProcessList {
+  timestamp: number
+  processes: PerfProcess[]
+  totalCount: number
+}
+
+export interface PerfKillResult {
+  success: boolean
+  error?: string
+  requiresAdmin?: boolean
 }
 
 export interface DustForgeSettings {
