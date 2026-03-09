@@ -423,6 +423,7 @@ export function registerStartupManagerIpc(): void {
           ], { timeout: 10000 })
           deletedSource = true
         } else if (source === 'startup-folder') {
+          // `location` receives the file path from the renderer (which passes item.command for startup-folder)
           try {
             unlinkSync(location)
             deletedSource = true

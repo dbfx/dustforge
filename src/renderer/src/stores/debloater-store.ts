@@ -69,9 +69,11 @@ export const useDebloaterStore = create<DebloaterState>((set) => ({
     set({
       apps: [],
       scanning: false,
+      filter: 'all',
       removing: false,
       removeProgress: null,
       removeResult: null,
-      error: null
+      error: null,
+      hasScanned: false
     })
 }))

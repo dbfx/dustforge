@@ -29,14 +29,20 @@ export function getNextScanTime(settings: DustForgeSettings): Date | null {
       if (next <= now) next.setDate(next.getDate() + 7)
       break
 
-    case 'monthly':
-      // day = 1-28 (day of month)
-      next.setDate(settings.schedule.day)
-      if (next <= now) next.setMonth(next.getMonth() + 1)
-      // Clamp to valid day for the month
-      const maxDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()
-      if (settings.schedule.day > maxDay) next.setDate(maxDay)
+    case 'monthly': {
+      // Clamp day to valid range for the target month BEFORE calling setDate
+      // to avoid overflow (e.g. setDate(31) on Feb 1 silently rolls to March)
+      const clampDay = (d: Date, day: number) => {
+        const max = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+        d.setDate(Math.min(day, max))
+      }
+      clampDay(next, settings.schedule.day)
+      if (next <= now) {
+        next.setMonth(next.getMonth() + 1)
+        clampDay(next, settings.schedule.day)
+      }
       break
+    }
   }
 
   return next

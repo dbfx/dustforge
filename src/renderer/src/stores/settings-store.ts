@@ -33,5 +33,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   loaded: false,
   setSettings: (settings) => set({ settings, loaded: true }),
   updateSettings: (partial) =>
-    set((s) => ({ settings: { ...s.settings, ...partial } }))
+    set((s) => ({
+      settings: {
+        ...s.settings,
+        ...partial,
+        cleaner: { ...s.settings.cleaner, ...(partial.cleaner ?? {}) },
+        schedule: { ...s.settings.schedule, ...(partial.schedule ?? {}) }
+      }
+    }))
 }))

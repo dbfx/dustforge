@@ -77,6 +77,11 @@ body {
   color: #fff;
 }
 
+/* ── clickables ──────────────────────────────── */
+button, [role="button"], a, select, label[for],
+input[type="checkbox"], input[type="radio"],
+summary, .clickable { cursor: pointer; }
+
 /* ── window chrome ───────────────────────────── */
 .drag-region { -webkit-app-region: drag; }
 .no-drag     { -webkit-app-region: no-drag; }

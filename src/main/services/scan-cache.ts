@@ -10,7 +10,12 @@ const MAX_CACHE_SIZE = 10000
 export function cacheItems(items: ScanItem[]): void {
   // Evict oldest entries if cache is getting too large
   if (itemCache.size + items.length > MAX_CACHE_SIZE) {
-    itemCache.clear()
+    const toRemove = itemCache.size + items.length - MAX_CACHE_SIZE
+    const keys = itemCache.keys()
+    for (let i = 0; i < toRemove; i++) {
+      const key = keys.next().value
+      if (key !== undefined) itemCache.delete(key)
+    }
   }
   for (const item of items) {
     itemCache.set(item.id, item)

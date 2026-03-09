@@ -203,6 +203,26 @@ export async function getInstalledProgramsFull(): Promise<InstalledProgram[]> {
   return programs.sort((a, b) => a.displayName.localeCompare(b.displayName))
 }
 
+/** Split an argument string respecting quoted segments (e.g. `/DIR="C:\Program Files\App"`) */
+function splitArgs(str: string): string[] {
+  const args: string[] = []
+  let current = ''
+  let inQuote = false
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i]
+    if (ch === '"') {
+      inQuote = !inQuote
+      current += ch
+    } else if (/\s/.test(ch) && !inQuote) {
+      if (current) { args.push(current); current = '' }
+    } else {
+      current += ch
+    }
+  }
+  if (current) args.push(current)
+  return args
+}
+
 /**
  * Parse an UninstallString into command and arguments.
  */
@@ -223,7 +243,7 @@ function parseUninstallCommand(program: InstalledProgram): { command: string; ar
     if (endQuote > 1) {
       const command = raw.substring(1, endQuote)
       const rest = raw.substring(endQuote + 1).trim()
-      const args = rest ? rest.split(/\s+/) : []
+      const args = rest ? splitArgs(rest) : []
       return { command, args }
     }
   }
@@ -231,7 +251,7 @@ function parseUninstallCommand(program: InstalledProgram): { command: string; ar
   // Unquoted path: try to find .exe boundary
   const exeMatch = raw.match(/^(.+?\.exe)\s*(.*)/i)
   if (exeMatch) {
-    const args = exeMatch[2] ? exeMatch[2].trim().split(/\s+/) : []
+    const args = exeMatch[2] ? splitArgs(exeMatch[2].trim()) : []
     return { command: exeMatch[1], args }
   }
 
@@ -254,6 +274,7 @@ export function runUninstaller(program: InstalledProgram): Promise<number | null
       })
 
       const timeout = setTimeout(() => {
+        try { child.kill() } catch { /* already exited */ }
         resolve(null)
       }, 10 * 60 * 1000) // 10 minute timeout
 

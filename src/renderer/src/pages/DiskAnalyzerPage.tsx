@@ -118,7 +118,7 @@ export function DiskAnalyzerPage() {
   const currentNode = breadcrumb[breadcrumb.length - 1] ?? data
   const treemapData = useMemo(() => {
     if (!currentNode?.children) return []
-    return currentNode.children.sort((a, b) => b.size - a.size).map((c, i) => ({ name: c.name, size: c.size, fill: COLORS[i % COLORS.length] }))
+    return [...currentNode.children].sort((a, b) => b.size - a.size).map((c, i) => ({ name: c.name, size: c.size, fill: COLORS[i % COLORS.length] }))
   }, [currentNode])
 
   const drillDown = (node: DiskNode) => { if (node.children?.length) store.pushBreadcrumb(node) }
@@ -201,7 +201,7 @@ export function DiskAnalyzerPage() {
                 <div className="w-44">Usage</div>
               </div>
               <div>
-                {currentNode.children.sort((a, b) => b.size - a.size).map((child) => {
+                {[...currentNode.children].sort((a, b) => b.size - a.size).map((child) => {
                   const percent = currentNode.size > 0 ? (child.size / currentNode.size) * 100 : 0
                   return (
                     <button key={child.path} onClick={() => drillDown(child)}

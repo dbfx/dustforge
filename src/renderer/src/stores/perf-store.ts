@@ -42,13 +42,13 @@ export const usePerfStore = create<PerfState>((set, get) => ({
 
   setSystemInfo: (info) => set({ systemInfo: info }),
 
-  pushSnapshot: (snap) => {
-    const history = get().history
-    const next = history.length >= MAX_HISTORY
-      ? [...history.slice(history.length - MAX_HISTORY + 1), snap]
-      : [...history, snap]
-    set({ currentSnapshot: snap, history: next })
-  },
+  pushSnapshot: (snap) =>
+    set((state) => {
+      const next = state.history.length >= MAX_HISTORY
+        ? [...state.history.slice(state.history.length - MAX_HISTORY + 1), snap]
+        : [...state.history, snap]
+      return { currentSnapshot: snap, history: next }
+    }),
 
   setProcessList: (processes, totalCount) =>
     set({ processList: processes, processCount: totalCount }),

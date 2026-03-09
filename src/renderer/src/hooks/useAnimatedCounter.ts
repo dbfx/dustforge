@@ -9,6 +9,8 @@ export function useAnimatedCounter(target: number, duration = 800): number {
     startRef.current = value
     startTimeRef.current = null
 
+    let rafId: number
+
     const animate = (timestamp: number) => {
       if (startTimeRef.current === null) {
         startTimeRef.current = timestamp
@@ -21,11 +23,13 @@ export function useAnimatedCounter(target: number, duration = 800): number {
       setValue(startRef.current + (target - startRef.current) * eased)
 
       if (progress < 1) {
-        requestAnimationFrame(animate)
+        rafId = requestAnimationFrame(animate)
       }
     }
 
-    requestAnimationFrame(animate)
+    rafId = requestAnimationFrame(animate)
+
+    return () => cancelAnimationFrame(rafId)
   }, [target, duration])
 
   return value
