@@ -1,1 +1,2 @@
-npm test
+NODE_DIR="C:/Users/User/AppData/Local/nvm/v25.6.1"
+"$NODE_DIR/node.exe" "$NODE_DIR/node_modules/npm/bin/npm-cli.js" test

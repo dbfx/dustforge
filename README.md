@@ -17,7 +17,7 @@
 ---
 
 <p align="center">
-  <img src="screenshots/dashboard.png" alt="DustForge Dashboard" width="800" />
+  <img src="docs/screenshots/dashboard.png" alt="DustForge Dashboard" width="800" />
 </p>
 
 ## Features
