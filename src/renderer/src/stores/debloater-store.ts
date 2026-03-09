@@ -11,6 +11,7 @@ interface DebloaterState {
   removeProgress: { current: number; total: number; currentApp: string; status: string } | null
   removeResult: { removed: number; failed: number } | null
   error: string | null
+  hasScanned: boolean
 
   setApps: (apps: BloatwareApp[]) => void
   setScanning: (scanning: boolean) => void
@@ -19,6 +20,7 @@ interface DebloaterState {
   setRemoveProgress: (progress: { current: number; total: number; currentApp: string; status: string } | null) => void
   setRemoveResult: (result: { removed: number; failed: number } | null) => void
   setError: (error: string | null) => void
+  setHasScanned: (hasScanned: boolean) => void
   toggleApp: (id: string) => void
   selectAll: () => void
   deselectAll: () => void
@@ -34,6 +36,7 @@ export const useDebloaterStore = create<DebloaterState>((set) => ({
   removeProgress: null,
   removeResult: null,
   error: null,
+  hasScanned: false,
 
   setApps: (apps) => set({ apps }),
   setScanning: (scanning) => set({ scanning }),
@@ -42,6 +45,7 @@ export const useDebloaterStore = create<DebloaterState>((set) => ({
   setRemoveProgress: (removeProgress) => set({ removeProgress }),
   setRemoveResult: (removeResult) => set({ removeResult }),
   setError: (error) => set({ error }),
+  setHasScanned: (hasScanned) => set({ hasScanned }),
   toggleApp: (id) =>
     set((s) => ({
       apps: s.apps.map((a) => (a.id === id ? { ...a, selected: !a.selected } : a))

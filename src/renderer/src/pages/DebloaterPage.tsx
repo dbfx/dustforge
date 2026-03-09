@@ -51,12 +51,19 @@ export function DebloaterPage() {
     try {
       const results = await window.dustforge.debloaterScan()
       store.getState().setApps(results)
+      store.getState().setHasScanned(true)
     } catch (err) {
       console.error('Debloater scan failed:', err)
       store.getState().setError('Failed to scan for bloatware. Make sure PowerShell is available.')
     }
     store.getState().setScanning(false)
   }, [])
+
+  // Auto-scan on first visit
+  useEffect(() => {
+    const s = store.getState()
+    if (!s.hasScanned && !s.scanning) handleScan()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRemove = useCallback(async () => {
     setShowConfirm(false)
