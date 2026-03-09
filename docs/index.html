@@ -180,89 +180,6 @@
     .section-header { text-align: center; margin-bottom: 64px; }
     .section-header .section-subtitle { margin: 0 auto; }
 
-    /* ── Feature Showcase (tabbed screenshots) ── */
-    .showcase { background: var(--bg-surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-    .showcase-nav {
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      margin-bottom: 48px;
-    }
-    .showcase-nav-btn {
-      width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border);
-      background: var(--bg-card); color: var(--text-muted); cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      transition: all 0.2s; flex-shrink: 0;
-    }
-    .showcase-nav-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.12); background: var(--bg-elevated); }
-    .showcase-nav-btn svg { width: 18px; height: 18px; }
-    .showcase-tabs-track {
-      display: flex; gap: 6px; overflow: hidden; max-width: 800px;
-      mask-image: linear-gradient(90deg, transparent, black 16px, black calc(100% - 16px), transparent);
-      -webkit-mask-image: linear-gradient(90deg, transparent, black 16px, black calc(100% - 16px), transparent);
-      padding: 0 16px;
-    }
-    .showcase-tabs {
-      display: flex; gap: 6px;
-      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    .showcase-tab {
-      padding: 10px 20px; border-radius: 10px; font-size: 14px;
-      font-weight: 600; cursor: pointer; transition: all 0.2s;
-      background: transparent; border: 1px solid transparent;
-      color: var(--text-muted); white-space: nowrap; flex-shrink: 0;
-    }
-    .showcase-tab:hover { color: var(--text); background: var(--bg-card); }
-    .showcase-tab.active {
-      background: var(--bg-card); color: var(--amber);
-      border-color: rgba(245,158,11,0.2);
-      box-shadow: 0 0 20px rgba(245,158,11,0.06);
-    }
-    .showcase-counter {
-      font-size: 13px; color: var(--text-dim); text-align: center; margin-top: -36px; margin-bottom: 36px;
-    }
-    .showcase-counter span { color: var(--amber); font-weight: 600; }
-    .showcase-display {
-      position: relative; max-width: 1060px; margin: 0 auto;
-    }
-    .showcase-panel { display: none; animation: fadeScale 0.4s ease; }
-    .showcase-panel.active { display: block; }
-    .showcase-image-wrap {
-      border-radius: 16px; overflow: hidden;
-      border: 1px solid var(--border);
-      box-shadow: 0 20px 80px rgba(0,0,0,0.4);
-    }
-    .showcase-image-wrap img { width: 100%; display: block; }
-    .showcase-info {
-      margin-top: 32px; text-align: center; padding: 0 20px;
-    }
-    .showcase-info h3 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
-    .showcase-info p { font-size: 15px; color: var(--text-muted); max-width: 600px; margin: 0 auto; }
-
-    @keyframes fadeScale {
-      from { opacity: 0; transform: scale(0.98) translateY(8px); }
-      to { opacity: 1; transform: scale(1) translateY(0); }
-    }
-
-    /* ── Feature Grid ────────────────────── */
-    .features-grid {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
-    }
-    .feature-card {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 16px; padding: 32px; transition: all 0.3s;
-    }
-    .feature-card:hover {
-      border-color: rgba(245,158,11,0.15);
-      transform: translateY(-4px);
-      box-shadow: 0 16px 48px rgba(0,0,0,0.3);
-    }
-    .feature-icon {
-      width: 44px; height: 44px; border-radius: 12px;
-      display: flex; align-items: center; justify-content: center;
-      margin-bottom: 20px; font-size: 20px;
-    }
-    .feature-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
-    .feature-card p { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
-
     /* ── Stats ────────────────────────────── */
     .stats {
       background: var(--bg-surface);
@@ -313,6 +230,120 @@
     @media (max-width: 900px) { .trust-grid { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 640px) { .trust-grid { grid-template-columns: 1fr; } }
 
+    /* ── Features List ───────────────────── */
+    .features-list-section { background: var(--bg-surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .features-category { margin-bottom: 56px; }
+    .features-category:last-child { margin-bottom: 0; }
+    .features-category-header {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 24px; padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .features-category-icon {
+      width: 40px; height: 40px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .features-category-header h3 {
+      font-size: 20px; font-weight: 700;
+    }
+    .features-category-header .feat-count {
+      font-size: 12px; font-weight: 600; color: var(--text-dim);
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 100px; padding: 2px 10px; margin-left: auto;
+    }
+    .features-list {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;
+    }
+    .feat-item {
+      display: flex; gap: 16px; padding: 20px 24px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 14px; transition: all 0.25s;
+    }
+    .feat-item:hover {
+      border-color: rgba(245,158,11,0.15);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    }
+    .feat-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      margin-top: 8px; flex-shrink: 0;
+    }
+    .feat-item h4 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .feat-item p { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+    .feat-badge {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1px;
+      padding: 2px 8px; border-radius: 6px; margin-left: 8px;
+      vertical-align: middle;
+    }
+    .feat-badge-new { background: rgba(34,197,94,0.15); color: var(--green); }
+
+    /* ── Screenshot Gallery ──────────────── */
+    .gallery { position: relative; overflow: hidden; }
+    .gallery-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px;
+    }
+    .gallery-item {
+      border-radius: 16px; overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      transition: all 0.3s; cursor: pointer;
+    }
+    .gallery-item:hover {
+      border-color: rgba(245,158,11,0.2);
+      transform: translateY(-4px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    .gallery-item img {
+      width: 100%; display: block;
+      transition: transform 0.3s;
+    }
+    .gallery-item:hover img { transform: scale(1.02); }
+    .gallery-caption {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+    }
+    .gallery-caption h4 { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+    .gallery-caption p { font-size: 13px; color: var(--text-muted); }
+
+    /* Lightbox */
+    .lightbox {
+      display: none; position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,0.92); backdrop-filter: blur(20px);
+      align-items: center; justify-content: center;
+      cursor: zoom-out;
+    }
+    .lightbox.active { display: flex; }
+    .lightbox img {
+      max-width: 92vw; max-height: 90vh; border-radius: 12px;
+      box-shadow: 0 40px 120px rgba(0,0,0,0.6);
+    }
+    .lightbox-close {
+      position: absolute; top: 24px; right: 24px;
+      width: 44px; height: 44px; border-radius: 50%;
+      background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1);
+      color: var(--text); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    .lightbox-close:hover { background: rgba(255,255,255,0.2); }
+    .lightbox-nav {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      width: 48px; height: 48px; border-radius: 50%;
+      background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1);
+      color: var(--text); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    .lightbox-nav:hover { background: rgba(255,255,255,0.2); }
+    .lightbox-prev { left: 24px; }
+    .lightbox-next { right: 24px; }
+    .lightbox-counter {
+      position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+      font-size: 14px; color: var(--text-muted);
+    }
+
     /* ── CTA ──────────────────────────────── */
     .cta-section { text-align: center; position: relative; overflow: hidden; }
     .cta-section::before {
@@ -342,16 +373,14 @@
 
     /* ── Responsive ───────────────────────── */
     @media (max-width: 900px) {
-      .features-grid { grid-template-columns: repeat(2, 1fr); }
+      .features-list { grid-template-columns: 1fr; }
+      .gallery-grid { grid-template-columns: 1fr; }
       .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 24px; }
     }
     @media (max-width: 640px) {
-      .features-grid { grid-template-columns: 1fr; }
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
       .nav-links { display: none; }
       .nav-mobile-toggle { display: block; }
-      .showcase-tab { padding: 8px 14px; font-size: 13px; }
-      .showcase-tabs-track { max-width: calc(100vw - 120px); }
       section { padding: 64px 0; }
       .hero { padding: 120px 0 60px; }
     }
@@ -368,10 +397,10 @@
       </a>
       <div class="nav-links">
         <a href="#features">Features</a>
-        <a href="#showcase">Screenshots</a>
+        <a href="#gallery">Screenshots</a>
         <a href="https://github.com/dbfx/dustforge" target="_blank">GitHub</a>
         <a href="https://github.com/dbfx/dustforge/releases/latest" class="nav-cta">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Download
         </a>
       </div>
@@ -386,10 +415,10 @@
     <div class="container">
       <div class="hero-badge">
         <span class="dot"></span>
-        v1.4.1 &mdash; Driver Manager, Performance Monitor & more
+        v1.5.0 &mdash; Service Manager, Uninstaller, Software Updater & more
       </div>
       <h1>Your Windows,<br>dust-free.</h1>
-      <p>An advanced open-source system cleaner, optimizer, and security tool built for Windows power users. 15+ specialized tools in one beautiful interface.</p>
+      <p>An advanced open-source system cleaner, optimizer, and security tool built for Windows power users. 20+ specialized tools in one beautiful interface.</p>
       <div class="hero-actions">
         <a href="https://github.com/dbfx/dustforge/releases/latest" class="btn-primary">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -412,7 +441,7 @@
     <div class="container">
       <div class="stats-grid">
         <div>
-          <div class="stat-value">15+</div>
+          <div class="stat-value">20+</div>
           <div class="stat-label">Specialized Tools</div>
         </div>
         <div>
@@ -472,124 +501,8 @@
     </div>
   </section>
 
-  <!-- Feature Showcase (tabbed screenshots) -->
-  <section class="showcase" id="showcase">
-    <div class="container">
-      <div class="section-header">
-        <div class="section-label">Screenshots</div>
-        <h2 class="section-title">See it in action</h2>
-        <p class="section-subtitle">Every tool is designed with clarity and purpose. Tab through the features below.</p>
-      </div>
-
-      <div class="showcase-nav">
-        <button class="showcase-nav-btn" onclick="navTab(-1)" aria-label="Previous">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <div class="showcase-tabs-track">
-          <div class="showcase-tabs" role="tablist" id="tabStrip">
-            <button class="showcase-tab active" onclick="showTab(0)" role="tab">Dashboard</button>
-            <button class="showcase-tab" onclick="showTab(1)" role="tab">System Cleaner</button>
-            <button class="showcase-tab" onclick="showTab(2)" role="tab">Malware Scanner</button>
-            <button class="showcase-tab" onclick="showTab(3)" role="tab">Privacy Shield</button>
-            <button class="showcase-tab" onclick="showTab(4)" role="tab">Registry</button>
-            <button class="showcase-tab" onclick="showTab(5)" role="tab">Startup Manager</button>
-            <button class="showcase-tab" onclick="showTab(6)" role="tab">Disk Analyzer</button>
-            <button class="showcase-tab" onclick="showTab(7)" role="tab">Debloater</button>
-            <button class="showcase-tab" onclick="showTab(8)" role="tab">Network</button>
-            <button class="showcase-tab" onclick="showTab(9)" role="tab">Driver Manager</button>
-            <button class="showcase-tab" onclick="showTab(10)" role="tab">Performance</button>
-          </div>
-        </div>
-        <button class="showcase-nav-btn" onclick="navTab(1)" aria-label="Next">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-      </div>
-      <div class="showcase-counter"><span id="tabCurrent">1</span> / 11</div>
-
-      <div class="showcase-display">
-        <div class="showcase-panel active" data-tab="0">
-          <div class="showcase-image-wrap"><img src="screenshots/dashboard.png" alt="Dashboard" loading="lazy"></div>
-          <div class="showcase-info">
-            <h3>Dashboard</h3>
-            <p>Your system at a glance. Health score, storage overview, quick actions, and recent activity &mdash; all in one place. Launch a full clean or jump into any tool with a single click.</p>
-          </div>
-        </div>
-        <div class="showcase-panel" data-tab="1">
-          <div class="showcase-image-wrap"><img src="screenshots/cleaner.png" alt="System Cleaner" loading="lazy"></div>
-          <div class="showcase-info">
-            <h3>System Cleaner</h3>
-            <p>Scan and remove junk files across 6 categories: system temp files, browser data, app caches, gaming redistributables, recycle bin, and uninstall leftovers. Every item is individually selectable.</p>
-          </div>
-        </div>
-        <div class="showcase-panel" data-tab="2">
-          <div class="showcase-image-wrap"><img src="screenshots/malware.png" alt="Malware Scanner" loading="lazy"></div>
-          <div class="showcase-info">
-            <h3>Malware Scanner</h3>
-            <p>Multi-engine threat detection using signature matching, heuristic analysis, and Windows Defender integration. Quarantine or delete threats with full progress tracking across each scan phase.</p>
-          </div>
-        </div>
-        <div class="showcase-panel" data-tab="3">
-          <div class="showcase-image-wrap"><img src="screenshots/privacy.png" alt="Privacy Shield" loading="lazy"></div>
-          <div class="showcase-info">
-            <h3>Privacy Shield</h3>
-            <p>Take control of 30+ Windows privacy settings. Disable telemetry, advertising ID, Cortana, Bing search, and more. See your privacy score and apply all protections with one click.</p>
-          </div>
-        </div>
-        <div class="showcase-panel" data-tab="4">
-          <div class="showcase-image-wrap"><img src="screenshots/registry.png" alt="Registry & System" loading="lazy"></div>
-          <div class="showcase-info">
-            <h3>Registry & System</h3>
-            <p>Deep registry analysis covering broken paths, orphaned entries, security vulnerabilities, performance tweaks, network settings, service audits, and scheduled tasks. Auto-backup before any fix.</p>
-          </div>
-        </div>
-        <div class="showcase-panel" data-tab="5">
-          <div class="showcase-image-wrap"><img src="screenshots/startup-times.png" alt="Startup Manager" loading="lazy"></div>
-          <div class="showcase-info">
-            <h3>Startup Manager</h3>
-            <p>Visualize boot impact with real-time analysis from Windows Event Trace. See exactly which apps slow your boot the most, with per-app timing charts and one-toggle control.</p>
-          </div>
-        </div>
-        <div class="showcase-panel" data-tab="6">
-          <div class="showcase-image-wrap"><img src="screenshots/disk-analyzer.png" alt="Disk Analyzer" loading="lazy"></div>
-          <div class="showcase-info">
-            <h3>Disk Analyzer</h3>
-            <p>Interactive treemap visualization showing exactly where your disk space is going. Drill into any folder, see sizes at a glance, and identify the biggest space hogs across all drives.</p>
-          </div>
-        </div>
-        <div class="showcase-panel" data-tab="7">
-          <div class="showcase-image-wrap"><img src="screenshots/debloater.png" alt="Debloater" loading="lazy"></div>
-          <div class="showcase-info">
-            <h3>Debloater</h3>
-            <p>Remove pre-installed Windows bloatware you don't need. Filter by category &mdash; Microsoft, Gaming, Media, Communication &mdash; and reclaim resources from apps running in the background.</p>
-          </div>
-        </div>
-        <div class="showcase-panel" data-tab="8">
-          <div class="showcase-image-wrap"><img src="screenshots/network.png" alt="Network Cleanup" loading="lazy"></div>
-          <div class="showcase-info">
-            <h3>Network Cleanup</h3>
-            <p>Clear DNS cache, manage saved Wi-Fi profiles, flush ARP cache, and clean network history. Keep your network configuration lean and your connection data private.</p>
-          </div>
-        </div>
-        <div class="showcase-panel" data-tab="9">
-          <div class="showcase-image-wrap"><img src="screenshots/dashboard.png" alt="Driver Manager" loading="lazy"></div>
-          <div class="showcase-info">
-            <h3>Driver Manager</h3>
-            <p>Scan your DriverStore for stale driver packages consuming disk space. Remove old versions safely, and check for driver updates through Windows Update &mdash; all from one interface.</p>
-          </div>
-        </div>
-        <div class="showcase-panel" data-tab="10">
-          <div class="showcase-image-wrap"><img src="screenshots/dashboard.png" alt="Performance Monitor" loading="lazy"></div>
-          <div class="showcase-info">
-            <h3>Performance Monitor</h3>
-            <p>Real-time system monitoring with CPU, memory, disk, and network gauges. Per-core utilization, time-series charts, and a built-in process manager to identify and kill resource-hungry processes.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Features Grid -->
-  <section id="features">
+  <!-- Features List -->
+  <section class="features-list-section" id="features">
     <div class="container">
       <div class="section-header">
         <div class="section-label">Features</div>
@@ -597,87 +510,299 @@
         <p class="section-subtitle">Purpose-built tools for maintaining, optimizing, and securing your Windows system.</p>
       </div>
 
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(245,158,11,0.1); color: var(--amber);">
+      <!-- Cleaning & Optimization -->
+      <div class="features-category">
+        <div class="features-category-header">
+          <div class="features-category-icon" style="background: rgba(245,158,11,0.1); color: var(--amber);">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
           </div>
-          <h3>Smart Scanning</h3>
-          <p>Scans system files, browsers, app caches, gaming folders, recycle bin, and uninstall leftovers with real-time progress tracking.</p>
+          <h3>Cleaning &amp; Optimization</h3>
+          <span class="feat-count">15 tools</span>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(239,68,68,0.1); color: var(--red);">
+        <div class="features-list">
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--amber);"></div>
+            <div>
+              <h4>System Cleaner</h4>
+              <p>Remove temp files, logs, caches, crash dumps, and other system junk with granular per-item selection.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--amber);"></div>
+            <div>
+              <h4>Browser Cleaner</h4>
+              <p>Clear caches, cookies, and history across Chrome, Edge, Brave, Firefox, Opera, and more.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--amber);"></div>
+            <div>
+              <h4>App Cleaner</h4>
+              <p>Clean up leftover data from Discord, VS Code, npm, Teams, and dozens of other applications.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--amber);"></div>
+            <div>
+              <h4>Gaming Cleaner</h4>
+              <p>Free space from game launcher caches, GPU shader caches, and redistributable packages.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--amber);"></div>
+            <div>
+              <h4>Registry Cleaner</h4>
+              <p>Deep scan for broken paths, orphaned entries, security vulnerabilities, and performance issues. Auto-backup before any fix.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--amber);"></div>
+            <div>
+              <h4>Startup Manager</h4>
+              <p>Visualize boot impact with Windows Event Trace data. See per-app timing charts and disable high-impact entries.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--amber);"></div>
+            <div>
+              <h4>Network Cleanup</h4>
+              <p>Flush DNS cache, manage saved Wi-Fi profiles, clear ARP cache, and clean network history.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--amber);"></div>
+            <div>
+              <h4>Disk Analyzer</h4>
+              <p>Interactive treemap visualization showing exactly where your disk space is going across all drives.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--amber);"></div>
+            <div>
+              <h4>Debloater</h4>
+              <p>Remove pre-installed Windows bloatware by category. Reclaim resources from apps you never asked for.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--amber);"></div>
+            <div>
+              <h4>Driver Manager</h4>
+              <p>Scan for stale driver packages, remove old versions safely, and check for updates via Windows Update.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--amber);"></div>
+            <div>
+              <h4>Uninstall Leftovers</h4>
+              <p>Detect and clean orphaned files, folders, and registry entries from previously uninstalled programs.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--green);"></div>
+            <div>
+              <h4>Program Uninstaller <span class="feat-badge feat-badge-new">New</span></h4>
+              <p>List all installed programs with usage data. Uninstall cleanly with automatic leftover detection and cleanup.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--green);"></div>
+            <div>
+              <h4>Service Manager <span class="feat-badge feat-badge-new">New</span></h4>
+              <p>Scan and classify all Windows services with a built-in safety knowledge base. Safely disable unnecessary services to reduce resource usage.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--green);"></div>
+            <div>
+              <h4>Software Updater <span class="feat-badge feat-badge-new">New</span></h4>
+              <p>Check for outdated applications via winget. See version comparisons, severity ratings, and bulk-update everything in one click.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--amber);"></div>
+            <div>
+              <h4>One-Click Clean</h4>
+              <p>Scan and clean junk files, registry, network, and stale drivers with a single click from the dashboard.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Security & Privacy -->
+      <div class="features-category">
+        <div class="features-category-header">
+          <div class="features-category-icon" style="background: rgba(239,68,68,0.1); color: var(--red);">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
           </div>
-          <h3>Malware Detection</h3>
-          <p>Three-engine scanning with signature matching, heuristic analysis, and Windows Defender integration. Quarantine or delete threats.</p>
+          <h3>Security &amp; Privacy</h3>
+          <span class="feat-count">2 tools</span>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(34,197,94,0.1); color: var(--green);">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+        <div class="features-list">
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--red);"></div>
+            <div>
+              <h4>Malware Scanner</h4>
+              <p>Multi-engine threat detection with signature matching, heuristic analysis, and Windows Defender integration. Quarantine or delete threats.</p>
+            </div>
           </div>
-          <h3>Privacy Shield</h3>
-          <p>Control 30+ Windows privacy settings. Disable telemetry, ads, Cortana, and tracking with a privacy score and one-click hardening.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(59,130,246,0.1); color: var(--blue);">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--red);"></div>
+            <div>
+              <h4>Privacy Shield</h4>
+              <p>Control 30+ Windows privacy settings. Disable telemetry, advertising ID, Cortana, Bing search, and more with one-click hardening.</p>
+            </div>
           </div>
-          <h3>Registry Cleaner</h3>
-          <p>Deep scan for broken paths, orphaned entries, security vulnerabilities, and performance issues. Auto-backup before any fix.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(168,85,247,0.1); color: var(--purple);">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
-          </div>
-          <h3>Disk Analyzer</h3>
-          <p>Interactive treemap visualization showing where your space goes. Navigate folders and identify the biggest space consumers.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(251,146,60,0.1); color: #fb923c;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
-          </div>
-          <h3>Startup Optimizer</h3>
-          <p>Analyze boot impact with Windows Event Trace data. See per-app timing charts and disable high-impact startup entries.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(236,72,153,0.1); color: #ec4899;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m20 5-8.5 8.5"/><path d="m3 3 4.5 4.5"/><path d="m18 22-4.5-4.5"/><path d="m21 11-8.5 8.5"/><path d="m3 21 4.5-4.5"/><circle cx="12" cy="12" r="1"/></svg>
-          </div>
-          <h3>Debloater</h3>
-          <p>Remove pre-installed Windows apps and bloatware by category. Reclaim resources from apps you never asked for.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(99,102,241,0.1); color: #6366f1;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-          </div>
-          <h3>Network Cleanup</h3>
-          <p>Flush DNS, manage Wi-Fi profiles, clear ARP cache, and remove network history to keep your connections private and clean.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(168,85,247,0.1); color: var(--purple);">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
-          </div>
-          <h3>Driver Manager</h3>
-          <p>Scan for stale driver packages consuming disk space and check for driver updates via Windows Update. Clean old versions safely.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(14,165,233,0.1); color: #0ea5e9;">
+      </div>
+
+      <!-- Monitoring & Tools -->
+      <div class="features-category">
+        <div class="features-category-header">
+          <div class="features-category-icon" style="background: rgba(59,130,246,0.1); color: var(--blue);">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
           </div>
-          <h3>Performance Monitor</h3>
-          <p>Real-time CPU, memory, disk, and network monitoring with per-core stats, time-series charts, and a process manager to kill resource hogs.</p>
+          <h3>Monitoring &amp; Tools</h3>
+          <span class="feat-count">6 tools</span>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(20,184,166,0.1); color: #14b8a6;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <div class="features-list">
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--blue);"></div>
+            <div>
+              <h4>Performance Monitor</h4>
+              <p>Real-time CPU, memory, disk, and network monitoring with per-core stats, time-series charts, and a built-in process manager.</p>
+            </div>
           </div>
-          <h3>Scheduled Scans</h3>
-          <p>Set it and forget it. Configure automatic scans on your schedule with system tray integration and notification alerts.</p>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--green);"></div>
+            <div>
+              <h4>Disk Health <span class="feat-badge feat-badge-new">New</span></h4>
+              <p>S.M.A.R.T. monitoring for all drives. See temperature, remaining life, power-on hours, and health status at a glance.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--blue);"></div>
+            <div>
+              <h4>System Restore Points</h4>
+              <p>Create Windows restore points before cleaning operations for safe rollback if anything goes wrong.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--blue);"></div>
+            <div>
+              <h4>Scheduled Scans</h4>
+              <p>Set it and forget it. Configure automatic scans on a daily, weekly, or monthly schedule with tray notifications.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--blue);"></div>
+            <div>
+              <h4>Cleaning History</h4>
+              <p>Track past cleaning sessions, space recovered, and operations performed with a full timeline view.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--blue);"></div>
+            <div>
+              <h4>CLI Mode</h4>
+              <p>Run scans from the command line for scripting, automation, and IT admin workflows without opening the GUI.</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </section>
+
+  <!-- Screenshot Gallery -->
+  <section class="gallery" id="gallery">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-label">Screenshots</div>
+        <h2 class="section-title">See it in action</h2>
+        <p class="section-subtitle">Every tool is designed with clarity and purpose. Click any screenshot to enlarge.</p>
+      </div>
+
+      <div class="gallery-grid">
+        <div class="gallery-item" onclick="openLightbox(0)">
+          <img src="screenshots/dashboard.png" alt="Dashboard" loading="lazy">
+          <div class="gallery-caption">
+            <h4>Dashboard</h4>
+            <p>System health score, storage overview, quick actions, and recent activity.</p>
+          </div>
+        </div>
+        <div class="gallery-item" onclick="openLightbox(1)">
+          <img src="screenshots/cleaner.png" alt="System Cleaner" loading="lazy">
+          <div class="gallery-caption">
+            <h4>System Cleaner</h4>
+            <p>Scan and remove junk across 6 categories with per-item selection.</p>
+          </div>
+        </div>
+        <div class="gallery-item" onclick="openLightbox(2)">
+          <img src="screenshots/malware.png" alt="Malware Scanner" loading="lazy">
+          <div class="gallery-caption">
+            <h4>Malware Scanner</h4>
+            <p>Multi-engine threat detection with quarantine and delete options.</p>
+          </div>
+        </div>
+        <div class="gallery-item" onclick="openLightbox(3)">
+          <img src="screenshots/privacy.png" alt="Privacy Shield" loading="lazy">
+          <div class="gallery-caption">
+            <h4>Privacy Shield</h4>
+            <p>Control 30+ Windows privacy and telemetry settings.</p>
+          </div>
+        </div>
+        <div class="gallery-item" onclick="openLightbox(4)">
+          <img src="screenshots/registry.png" alt="Registry Cleaner" loading="lazy">
+          <div class="gallery-caption">
+            <h4>Registry Cleaner</h4>
+            <p>Deep scan for broken paths, orphaned entries, and security issues.</p>
+          </div>
+        </div>
+        <div class="gallery-item" onclick="openLightbox(5)">
+          <img src="screenshots/startup-times.png" alt="Startup Manager" loading="lazy">
+          <div class="gallery-caption">
+            <h4>Startup Manager</h4>
+            <p>Boot impact analysis with per-app timing charts.</p>
+          </div>
+        </div>
+        <div class="gallery-item" onclick="openLightbox(6)">
+          <img src="screenshots/disk-analyzer.png" alt="Disk Analyzer" loading="lazy">
+          <div class="gallery-caption">
+            <h4>Disk Analyzer</h4>
+            <p>Interactive treemap visualization of disk usage.</p>
+          </div>
+        </div>
+        <div class="gallery-item" onclick="openLightbox(7)">
+          <img src="screenshots/debloater.png" alt="Debloater" loading="lazy">
+          <div class="gallery-caption">
+            <h4>Debloater</h4>
+            <p>Remove pre-installed Windows bloatware by category.</p>
+          </div>
+        </div>
+        <div class="gallery-item" onclick="openLightbox(8)">
+          <img src="screenshots/network.png" alt="Network Cleanup" loading="lazy">
+          <div class="gallery-caption">
+            <h4>Network Cleanup</h4>
+            <p>DNS, Wi-Fi profiles, ARP cache, and network history.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Lightbox -->
+  <div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
+    <button class="lightbox-close" onclick="closeLightbox(event)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <button class="lightbox-nav lightbox-prev" onclick="event.stopPropagation(); navLightbox(-1)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <img id="lightboxImg" src="" alt="">
+    <button class="lightbox-nav lightbox-next" onclick="event.stopPropagation(); navLightbox(1)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+    <div class="lightbox-counter"><span id="lbCurrent">1</span> / <span id="lbTotal">9</span></div>
+  </div>
 
   <!-- CTA -->
   <section class="cta-section">
@@ -712,40 +837,52 @@
   </footer>
 
   <script>
-    let currentTab = 0;
-    const totalTabs = 11;
+    // Gallery lightbox
+    const galleryImages = [
+      'screenshots/dashboard.png',
+      'screenshots/cleaner.png',
+      'screenshots/malware.png',
+      'screenshots/privacy.png',
+      'screenshots/registry.png',
+      'screenshots/startup-times.png',
+      'screenshots/disk-analyzer.png',
+      'screenshots/debloater.png',
+      'screenshots/network.png'
+    ];
+    let lbIndex = 0;
 
-    function showTab(index) {
-      currentTab = index;
-      document.querySelectorAll('.showcase-tab').forEach((tab, i) => {
-        tab.classList.toggle('active', i === index);
-      });
-      document.querySelectorAll('.showcase-panel').forEach((panel, i) => {
-        panel.classList.toggle('active', i === index);
-      });
-      document.getElementById('tabCurrent').textContent = index + 1;
-      // Scroll active tab into view within the strip
-      const strip = document.getElementById('tabStrip');
-      const activeTab = strip.children[index];
-      if (activeTab && strip.parentElement) {
-        const track = strip.parentElement;
-        const tabLeft = activeTab.offsetLeft;
-        const tabWidth = activeTab.offsetWidth;
-        const trackWidth = track.offsetWidth;
-        const offset = tabLeft - (trackWidth / 2) + (tabWidth / 2);
-        strip.style.transform = 'translateX(' + (-Math.max(0, Math.min(offset, strip.scrollWidth - trackWidth))) + 'px)';
+    function openLightbox(index) {
+      lbIndex = index;
+      updateLightbox();
+      document.getElementById('lightbox').classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeLightbox(e) {
+      if (e.target === document.getElementById('lightbox') || e.currentTarget.classList.contains('lightbox-close')) {
+        document.getElementById('lightbox').classList.remove('active');
+        document.body.style.overflow = '';
       }
     }
 
-    function navTab(dir) {
-      const next = (currentTab + dir + totalTabs) % totalTabs;
-      showTab(next);
+    function navLightbox(dir) {
+      lbIndex = (lbIndex + dir + galleryImages.length) % galleryImages.length;
+      updateLightbox();
+    }
+
+    function updateLightbox() {
+      document.getElementById('lightboxImg').src = galleryImages[lbIndex];
+      document.getElementById('lbCurrent').textContent = lbIndex + 1;
+      document.getElementById('lbTotal').textContent = galleryImages.length;
     }
 
     // Keyboard navigation
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowRight') navTab(1);
-      else if (e.key === 'ArrowLeft') navTab(-1);
+      const lb = document.getElementById('lightbox');
+      if (!lb.classList.contains('active')) return;
+      if (e.key === 'Escape') { lb.classList.remove('active'); document.body.style.overflow = ''; }
+      else if (e.key === 'ArrowRight') navLightbox(1);
+      else if (e.key === 'ArrowLeft') navLightbox(-1);
     });
   </script>
 

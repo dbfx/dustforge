@@ -35,13 +35,16 @@
 - **Debloater** — Remove pre-installed Windows bloatware by category
 - **Driver Manager** — Scan and remove stale driver packages, check for driver updates via Windows Update
 - **Uninstall Leftovers** — Detect and clean orphaned files from uninstalled programs
+- **Program Uninstaller** — List all installed programs, uninstall with automatic leftover cleanup
+- **Service Manager** — Scan, classify, and optimize Windows services with a built-in safety knowledge base
+- **Software Updater** — Check for outdated applications via winget and bulk-update them
 
 ### Security & Privacy
 - **Malware Scanner** — Multi-engine threat detection with signature matching, heuristic analysis, and Windows Defender integration
 - **Privacy Shield** — Control 30+ Windows privacy settings including telemetry, advertising ID, Cortana, and tracking
 
 ### Monitoring & Tools
-- **Performance Monitor** — Real-time CPU, memory, disk, and network monitoring with per-core stats and process manager
+- **Performance Monitor** — Real-time CPU, memory, disk, and network monitoring with per-core stats, process manager, and disk health via S.M.A.R.T.
 - **System Restore Points** — Create Windows restore points before cleaning operations
 - **Secure Delete** — Overwrite files with random data before deletion for sensitive data
 - **Cleaning History** — Track past cleaning sessions and space recovered
