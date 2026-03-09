@@ -8,24 +8,17 @@ import type {
   DriverUpdateInstallResult
 } from '@shared/types'
 
-type Tab = 'cleanup' | 'updates'
-type FilterType = 'all' | 'stale' | 'current'
-
 interface DriverState {
-  // Shared
-  tab: Tab
-
-  // Cleanup tab
+  // Stale packages
   packages: DriverPackage[]
   scanning: boolean
   scanProgress: DriverScanProgress | null
-  filter: FilterType
   cleaning: boolean
   cleanResult: DriverCleanResult | null
   error: string | null
   totalStaleSize: number
 
-  // Updates tab
+  // Updates
   updates: DriverUpdate[]
   updateScanning: boolean
   updateProgress: DriverUpdateProgress | null
@@ -33,19 +26,21 @@ interface DriverState {
   installResult: DriverUpdateInstallResult | null
   updateError: string | null
 
+  // Combined
+  applying: boolean
+  hasScanned: boolean
+
   // Actions
-  setTab: (tab: Tab) => void
   setPackages: (packages: DriverPackage[]) => void
   setScanning: (scanning: boolean) => void
   setScanProgress: (progress: DriverScanProgress | null) => void
-  setFilter: (filter: FilterType) => void
   setCleaning: (cleaning: boolean) => void
   setCleanResult: (result: DriverCleanResult | null) => void
   setError: (error: string | null) => void
   setTotalStaleSize: (size: number) => void
   togglePackage: (id: string) => void
   selectAllStale: () => void
-  deselectAll: () => void
+  deselectAllStale: () => void
 
   setUpdates: (updates: DriverUpdate[]) => void
   setUpdateScanning: (scanning: boolean) => void
@@ -57,15 +52,15 @@ interface DriverState {
   selectAllUpdates: () => void
   deselectAllUpdates: () => void
 
+  setApplying: (applying: boolean) => void
+  setHasScanned: (hasScanned: boolean) => void
   reset: () => void
 }
 
 export const useDriverStore = create<DriverState>((set) => ({
-  tab: 'cleanup',
   packages: [],
   scanning: false,
   scanProgress: null,
-  filter: 'all',
   cleaning: false,
   cleanResult: null,
   error: null,
@@ -76,12 +71,12 @@ export const useDriverStore = create<DriverState>((set) => ({
   installing: false,
   installResult: null,
   updateError: null,
+  applying: false,
+  hasScanned: false,
 
-  setTab: (tab) => set({ tab }),
   setPackages: (packages) => set({ packages }),
   setScanning: (scanning) => set({ scanning }),
   setScanProgress: (scanProgress) => set({ scanProgress }),
-  setFilter: (filter) => set({ filter }),
   setCleaning: (cleaning) => set({ cleaning }),
   setCleanResult: (cleanResult) => set({ cleanResult }),
   setError: (error) => set({ error }),
@@ -96,9 +91,9 @@ export const useDriverStore = create<DriverState>((set) => ({
     set((s) => ({
       packages: s.packages.map((p) => (!p.isCurrent ? { ...p, selected: true } : p))
     })),
-  deselectAll: () =>
+  deselectAllStale: () =>
     set((s) => ({
-      packages: s.packages.map((p) => ({ ...p, selected: false }))
+      packages: s.packages.map((p) => (!p.isCurrent ? { ...p, selected: false } : p))
     })),
 
   setUpdates: (updates) => set({ updates }),
@@ -120,6 +115,8 @@ export const useDriverStore = create<DriverState>((set) => ({
       updates: s.updates.map((u) => ({ ...u, selected: false }))
     })),
 
+  setApplying: (applying) => set({ applying }),
+  setHasScanned: (hasScanned) => set({ hasScanned }),
   reset: () =>
     set({
       packages: [],
@@ -134,6 +131,8 @@ export const useDriverStore = create<DriverState>((set) => ({
       updateProgress: null,
       installing: false,
       installResult: null,
-      updateError: null
+      updateError: null,
+      applying: false,
+      hasScanned: false
     })
 }))

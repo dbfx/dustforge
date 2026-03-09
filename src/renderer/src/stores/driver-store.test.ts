@@ -42,11 +42,7 @@ describe('driver-store', () => {
     useDriverStore.getState().reset()
   })
 
-  it('starts with cleanup tab', () => {
-    expect(useDriverStore.getState().tab).toBe('cleanup')
-  })
-
-  describe('cleanup tab', () => {
+  describe('cleanup', () => {
     it('togglePackage only toggles stale drivers (not current)', () => {
       useDriverStore.getState().setPackages([
         makePackage('stale', false),
@@ -71,17 +67,19 @@ describe('driver-store', () => {
       expect(pkgs.find((p) => p.id === 'current')!.selected).toBe(false)
     })
 
-    it('deselectAll deselects everything', () => {
+    it('deselectAllStale deselects stale packages', () => {
       useDriverStore.getState().setPackages([
         makePackage('stale', false, true),
         makePackage('current', true, true),
       ])
-      useDriverStore.getState().deselectAll()
-      expect(useDriverStore.getState().packages.every((p) => !p.selected)).toBe(true)
+      useDriverStore.getState().deselectAllStale()
+      const pkgs = useDriverStore.getState().packages
+      expect(pkgs.find((p) => p.id === 'stale')!.selected).toBe(false)
+      expect(pkgs.find((p) => p.id === 'current')!.selected).toBe(true) // untouched
     })
   })
 
-  describe('updates tab', () => {
+  describe('updates', () => {
     it('toggleUpdate toggles selection', () => {
       useDriverStore.getState().setUpdates([makeUpdate('a'), makeUpdate('b')])
       useDriverStore.getState().toggleUpdate('a')
