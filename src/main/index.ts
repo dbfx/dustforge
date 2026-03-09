@@ -18,6 +18,13 @@ if (process.argv.includes('--cli')) {
 
 function initGui(): void {
 
+// Prevent multiple instances — if another is already running, focus it and quit this one
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+  return
+}
+
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let ipcRegistered = false
@@ -173,6 +180,14 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
+
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    if (!mainWindow.isVisible()) mainWindow.show()
+    mainWindow.focus()
+  }
+})
 
 app.whenReady().then(() => {
   const settings = getSettings()
