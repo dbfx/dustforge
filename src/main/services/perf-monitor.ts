@@ -239,7 +239,8 @@ export class PerfMonitorService {
     }
 
     try {
-      const data = await si.processes()
+      const [data, mem] = await Promise.all([si.processes(), si.mem()])
+      const totalMem = mem.total
 
       // Sort by CPU + memory and take top 100
       const sorted = data.list
@@ -257,7 +258,7 @@ export class PerfMonitorService {
           name: p.name,
           cpuPercent: p.cpu,
           memBytes: p.memRss,
-          memPercent: p.memVsz > 0 ? (p.memRss / p.memVsz) * 100 : 0,
+          memPercent: totalMem > 0 ? (p.memRss / totalMem) * 100 : 0,
           user: p.user || '',
           started: p.started || '',
           isStartupItem: !!startupName,

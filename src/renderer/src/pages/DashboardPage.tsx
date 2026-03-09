@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { StatCard } from '@/components/shared/StatCard'
 import { HealthScore } from '@/components/shared/HealthScore'
 import { formatBytes, formatDate, formatNumber } from '@/lib/utils'
@@ -64,6 +65,9 @@ export function DashboardPage() {
   const [phase, setPhase] = useState<OneClickPhase>('idle')
   const [phaseLabel, setPhaseLabel] = useState('')
   const [result, setResult] = useState<OneClickResult | null>(null)
+  const [showQuickConfirm, setShowQuickConfirm] = useState(false)
+  const [showFullConfirm, setShowFullConfirm] = useState(false)
+  const [stepProgress, setStepProgress] = useState({ current: 0, total: 0 })
 
   useEffect(() => {
     window.dustforge?.diskDrives?.()
@@ -218,9 +222,12 @@ export function DashboardPage() {
     cleanStartRef.current = Date.now()
     setPhase('scanning')
     setResult(null)
+    setStepProgress({ current: 0, total: 2 })
 
     setPhase('cleaning')
+    setStepProgress({ current: 1, total: 2 })
     const { space, files } = await runCleaners()
+    setStepProgress({ current: 2, total: 2 })
     const regFixed = await runRegistry()
 
     const oneClickResult: OneClickResult = {
@@ -265,11 +272,16 @@ export function DashboardPage() {
     cleanStartRef.current = Date.now()
     setPhase('scanning')
     setResult(null)
+    setStepProgress({ current: 0, total: 4 })
 
     setPhase('cleaning')
+    setStepProgress({ current: 1, total: 4 })
     const { space, files } = await runCleaners()
+    setStepProgress({ current: 2, total: 4 })
     const regFixed = await runRegistry()
+    setStepProgress({ current: 3, total: 4 })
     const netCleaned = await runNetwork()
+    setStepProgress({ current: 4, total: 4 })
     const drivers = await runDrivers()
 
     const oneClickResult: OneClickResult = {
@@ -387,7 +399,7 @@ export function DashboardPage() {
       <div className="mb-6 grid grid-cols-2 gap-4">
         {/* Quick Clean */}
         <button
-          onClick={handleQuickClean}
+          onClick={() => setShowQuickConfirm(true)}
           disabled={isRunning}
           className="group relative flex items-center gap-4 rounded-2xl p-5 text-left transition-all disabled:opacity-60"
           style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}
@@ -413,7 +425,7 @@ export function DashboardPage() {
 
         {/* Full Clean */}
         <button
-          onClick={handleFullClean}
+          onClick={() => setShowFullConfirm(true)}
           disabled={isRunning}
           className="group relative flex items-center gap-4 rounded-2xl p-5 text-left transition-all disabled:opacity-60"
           style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}
@@ -441,11 +453,26 @@ export function DashboardPage() {
       {/* Progress / result banner */}
       {isRunning && (
         <div
-          className="mb-6 flex items-center gap-3 rounded-2xl px-5 py-4"
+          className="mb-6 rounded-2xl px-5 py-4"
           style={{ background: '#16161a', border: '1px solid rgba(245,158,11,0.15)' }}
         >
-          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-400" strokeWidth={2} />
-          <span className="text-[13px] text-zinc-400">{phaseLabel || 'Working...'}</span>
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-400" strokeWidth={2} />
+            <span className="flex-1 text-[13px] text-zinc-400">{phaseLabel || 'Working...'}</span>
+            {stepProgress.total > 0 && (
+              <span className="text-[11px] font-mono" style={{ color: '#52525e' }}>
+                {stepProgress.current}/{stepProgress.total}
+              </span>
+            )}
+          </div>
+          {stepProgress.total > 0 && (
+            <div className="mt-2.5 h-[3px] overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.04)' }}>
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${(stepProgress.current / stepProgress.total) * 100}%`, background: '#f59e0b' }}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -553,6 +580,26 @@ export function DashboardPage() {
           ))}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={showQuickConfirm}
+        onConfirm={() => { setShowQuickConfirm(false); handleQuickClean() }}
+        onCancel={() => setShowQuickConfirm(false)}
+        title="Quick Clean"
+        description="This will scan and clean junk files across all non-excluded categories and fix selected registry issues. Your category exclusions from the Cleaner page are respected."
+        confirmLabel="Start Quick Clean"
+        variant="warning"
+      />
+
+      <ConfirmDialog
+        open={showFullConfirm}
+        onConfirm={() => { setShowFullConfirm(false); handleFullClean() }}
+        onCancel={() => setShowFullConfirm(false)}
+        title="Full Clean, Optimize & Protect"
+        description="This will clean junk files, fix registry issues, flush DNS and ARP caches, and remove stale driver packages. Network caches rebuild automatically, but this is a broad operation that touches multiple system areas."
+        confirmLabel="Start Full Clean"
+        variant="warning"
+      />
     </div>
   )
 }

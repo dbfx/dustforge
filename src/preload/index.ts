@@ -42,6 +42,7 @@ import type {
   UpdateCheckResult,
   UpdateProgress,
   UpdateResult,
+  FileTypeInfo,
 } from '../shared/types'
 
 const api = {
@@ -81,7 +82,7 @@ const api = {
 
   // Registry
   registryScan: (): Promise<RegistryEntry[]> => ipcRenderer.invoke(IPC.REGISTRY_SCAN),
-  registryFix: (entryIds: string[]): Promise<{ fixed: number; failed: number }> =>
+  registryFix: (entryIds: string[]): Promise<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] }> =>
     ipcRenderer.invoke(IPC.REGISTRY_FIX, entryIds),
 
   // Debloater
@@ -91,7 +92,7 @@ const api = {
   onDebloaterRemoveProgress: (callback: (data: { current: number; total: number; currentApp: string; status: 'removing' | 'done' | 'failed' }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: { current: number; total: number; currentApp: string; status: 'removing' | 'done' | 'failed' }) => callback(data)
     ipcRenderer.on(IPC.DEBLOATER_REMOVE_PROGRESS, handler)
-    return () => ipcRenderer.removeListener(IPC.DEBLOATER_REMOVE_PROGRESS, handler)
+    return () => { ipcRenderer.removeListener(IPC.DEBLOATER_REMOVE_PROGRESS, handler) }
   },
 
   // Startup manager
@@ -111,6 +112,8 @@ const api = {
   diskAnalyze: (driveLetter: string): Promise<DiskNode> =>
     ipcRenderer.invoke(IPC.DISK_ANALYZE, driveLetter),
   diskDrives: (): Promise<DriveInfo[]> => ipcRenderer.invoke(IPC.DISK_DRIVES),
+  diskFileTypes: (driveLetter: string): Promise<FileTypeInfo[]> =>
+    ipcRenderer.invoke(IPC.DISK_FILE_TYPES, driveLetter),
 
   // Onboarding
   onboardingGet: (): Promise<boolean> => ipcRenderer.invoke(IPC.ONBOARDING_GET),
@@ -123,6 +126,7 @@ const api = {
 
   // Elevation
   elevationCheck: (): Promise<boolean> => ipcRenderer.invoke(IPC.ELEVATION_CHECK),
+  elevationRelaunch: (): Promise<void> => ipcRenderer.invoke(IPC.ELEVATION_RELAUNCH),
 
   // System Restore Point
   createRestorePoint: (description: string): Promise<RestorePointResult> =>
@@ -135,7 +139,7 @@ const api = {
   onScheduledScanTrigger: (callback: () => void) => {
     const handler = () => callback()
     ipcRenderer.on(IPC.SCHEDULE_SCAN_TRIGGER, handler)
-    return () => ipcRenderer.removeListener(IPC.SCHEDULE_SCAN_TRIGGER, handler)
+    return () => { ipcRenderer.removeListener(IPC.SCHEDULE_SCAN_TRIGGER, handler) }
   },
   notifyScheduledScanComplete: (totalSize: number, itemCount: number) =>
     ipcRenderer.send(IPC.SCHEDULE_SCAN_COMPLETE, totalSize, itemCount),
@@ -152,7 +156,7 @@ const api = {
   onPrivacyProgress: (callback: (data: PrivacyScanProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: PrivacyScanProgress) => callback(data)
     ipcRenderer.on(IPC.PRIVACY_PROGRESS, handler)
-    return () => ipcRenderer.removeListener(IPC.PRIVACY_PROGRESS, handler)
+    return () => { ipcRenderer.removeListener(IPC.PRIVACY_PROGRESS, handler) }
   },
 
   // Malware scanner
@@ -166,7 +170,7 @@ const api = {
   onMalwareProgress: (callback: (data: MalwareScanProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: MalwareScanProgress) => callback(data)
     ipcRenderer.on(IPC.MALWARE_PROGRESS, handler)
-    return () => ipcRenderer.removeListener(IPC.MALWARE_PROGRESS, handler)
+    return () => { ipcRenderer.removeListener(IPC.MALWARE_PROGRESS, handler) }
   },
 
   // Driver Manager
@@ -176,7 +180,7 @@ const api = {
   onDriverProgress: (callback: (data: DriverScanProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: DriverScanProgress) => callback(data)
     ipcRenderer.on(IPC.DRIVER_PROGRESS, handler)
-    return () => ipcRenderer.removeListener(IPC.DRIVER_PROGRESS, handler)
+    return () => { ipcRenderer.removeListener(IPC.DRIVER_PROGRESS, handler) }
   },
 
   // Driver Updates
@@ -186,7 +190,7 @@ const api = {
   onDriverUpdateProgress: (callback: (data: DriverUpdateProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: DriverUpdateProgress) => callback(data)
     ipcRenderer.on(IPC.DRIVER_UPDATE_PROGRESS, handler)
-    return () => ipcRenderer.removeListener(IPC.DRIVER_UPDATE_PROGRESS, handler)
+    return () => { ipcRenderer.removeListener(IPC.DRIVER_UPDATE_PROGRESS, handler) }
   },
 
   // Performance Monitor
@@ -200,12 +204,12 @@ const api = {
   onPerfSnapshot: (callback: (data: PerfSnapshot) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: PerfSnapshot) => callback(data)
     ipcRenderer.on(IPC.PERF_SNAPSHOT, handler)
-    return () => ipcRenderer.removeListener(IPC.PERF_SNAPSHOT, handler)
+    return () => { ipcRenderer.removeListener(IPC.PERF_SNAPSHOT, handler) }
   },
   onPerfProcessList: (callback: (data: PerfProcessList) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: PerfProcessList) => callback(data)
     ipcRenderer.on(IPC.PERF_PROCESS_LIST, handler)
-    return () => ipcRenderer.removeListener(IPC.PERF_PROCESS_LIST, handler)
+    return () => { ipcRenderer.removeListener(IPC.PERF_PROCESS_LIST, handler) }
   },
 
   // Auto-updater
@@ -216,7 +220,7 @@ const api = {
   onUpdaterStatus: (callback: (data: UpdateStatus) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: UpdateStatus) => callback(data)
     ipcRenderer.on(IPC.UPDATER_STATUS, handler)
-    return () => ipcRenderer.removeListener(IPC.UPDATER_STATUS, handler)
+    return () => { ipcRenderer.removeListener(IPC.UPDATER_STATUS, handler) }
   },
 
   // Service Manager
@@ -228,7 +232,7 @@ const api = {
   onServiceProgress: (callback: (data: ServiceScanProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: ServiceScanProgress) => callback(data)
     ipcRenderer.on(IPC.SERVICE_PROGRESS, handler)
-    return () => ipcRenderer.removeListener(IPC.SERVICE_PROGRESS, handler)
+    return () => { ipcRenderer.removeListener(IPC.SERVICE_PROGRESS, handler) }
   },
 
   // Program Uninstaller
@@ -238,7 +242,7 @@ const api = {
   onUninstallerProgress: (callback: (data: UninstallProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: UninstallProgress) => callback(data)
     ipcRenderer.on(IPC.UNINSTALLER_PROGRESS, handler)
-    return () => ipcRenderer.removeListener(IPC.UNINSTALLER_PROGRESS, handler)
+    return () => { ipcRenderer.removeListener(IPC.UNINSTALLER_PROGRESS, handler) }
   },
 
   // Software Updater
@@ -249,19 +253,19 @@ const api = {
   onSoftwareUpdateProgress: (callback: (data: UpdateProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: UpdateProgress) => callback(data)
     ipcRenderer.on(IPC.SOFTWARE_UPDATE_PROGRESS, handler)
-    return () => ipcRenderer.removeListener(IPC.SOFTWARE_UPDATE_PROGRESS, handler)
+    return () => { ipcRenderer.removeListener(IPC.SOFTWARE_UPDATE_PROGRESS, handler) }
   },
 
   // Progress events
   onScanProgress: (callback: (data: ProgressData) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: ProgressData) => callback(data)
     ipcRenderer.on(IPC.SCAN_PROGRESS, handler)
-    return () => ipcRenderer.removeListener(IPC.SCAN_PROGRESS, handler)
+    return () => { ipcRenderer.removeListener(IPC.SCAN_PROGRESS, handler) }
   },
   onRegistryFixProgress: (callback: (data: { current: number; total: number; currentEntry: string }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: { current: number; total: number; currentEntry: string }) => callback(data)
     ipcRenderer.on(IPC.REGISTRY_FIX_PROGRESS, handler)
-    return () => ipcRenderer.removeListener(IPC.REGISTRY_FIX_PROGRESS, handler)
+    return () => { ipcRenderer.removeListener(IPC.REGISTRY_FIX_PROGRESS, handler) }
   }
 }
 

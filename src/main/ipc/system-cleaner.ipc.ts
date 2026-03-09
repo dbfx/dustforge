@@ -50,7 +50,7 @@ export function registerSystemCleanerIpc(getWindow: WindowGetter): void {
       { path: SYSTEM_PATHS.windowsOld, subcategory: 'Previous Windows Installation' },
     ]
 
-    // Event log files that must never be cleaned (boot trace, security audit, core OS logs)
+    // Event log files that must never be cleaned (boot trace, security audit, core OS logs, diagnostics)
     const protectedEventLogs = [
       'microsoft-windows-diagnostics-performance%4operational.evtx',
       'security.evtx',
@@ -58,6 +58,16 @@ export function registerSystemCleanerIpc(getWindow: WindowGetter): void {
       'application.evtx',
       'setup.evtx',
       'microsoft-windows-windows defender%4operational.evtx',
+      'microsoft-windows-powershell%4operational.evtx',
+      'microsoft-windows-sysmon%4operational.evtx',
+      'microsoft-windows-taskscheduler%4operational.evtx',
+      'microsoft-windows-wmi-activity%4operational.evtx',
+      'microsoft-windows-bits-client%4operational.evtx',
+      'microsoft-windows-ntlm%4operational.evtx',
+      'microsoft-windows-dns-client%4operational.evtx',
+      'microsoft-windows-groupPolicy%4operational.evtx',
+      'microsoft-windows-codeintegrity%4operational.evtx',
+      'microsoft-windows-appLocker%4exe and dll.evtx',
     ]
 
     for (let i = 0; i < targets.length; i++) {

@@ -284,9 +284,9 @@ export async function scanForLeftovers(getWindow: WindowGetter): Promise<ScanRes
     })
 
     // Read top-level folders
-    let entries: Awaited<ReturnType<typeof readdir>>
+    let entries: import('fs').Dirent<string>[]
     try {
-      entries = await readdir(target.path, { withFileTypes: true })
+      entries = await readdir(target.path, { withFileTypes: true, encoding: 'utf-8' })
     } catch {
       continue // Directory doesn't exist or access denied
     }

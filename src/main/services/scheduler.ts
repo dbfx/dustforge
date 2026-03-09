@@ -6,6 +6,7 @@ import { logInfo, logError } from './logger'
 import type { DustForgeSettings } from '../../shared/types'
 
 let schedulerTimer: ReturnType<typeof setInterval> | null = null
+let initialCheckTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
  * Calculate the next scheduled scan time based on settings.
@@ -155,7 +156,8 @@ export function startScheduler(getMainWindow: () => BrowserWindow | null): void 
   }, 60_000)
 
   // Also check immediately on startup (with a short delay to let the window load)
-  setTimeout(() => {
+  initialCheckTimer = setTimeout(() => {
+    initialCheckTimer = null
     try {
       const settings = getSettings()
       if (isDue(settings)) {
@@ -171,6 +173,10 @@ export function startScheduler(getMainWindow: () => BrowserWindow | null): void 
  * Stop the scheduler.
  */
 export function stopScheduler(): void {
+  if (initialCheckTimer) {
+    clearTimeout(initialCheckTimer)
+    initialCheckTimer = null
+  }
   if (schedulerTimer) {
     clearInterval(schedulerTimer)
     schedulerTimer = null

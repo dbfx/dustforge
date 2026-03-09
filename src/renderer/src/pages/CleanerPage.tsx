@@ -174,7 +174,7 @@ export function CleanerPage() {
       store.setStatus(ScanStatus.Error)
     }
     store.setProgress(null)
-  }, [store.results])
+  }, [store.results, createRestorePointEnabled])
 
   const categoryResults = (type: CleanerType) => store.results.filter((r) => r.category === type)
   const categoryItemCount = (type: CleanerType) => categoryResults(type).reduce((sum, r) => sum + r.itemCount, 0)

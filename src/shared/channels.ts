@@ -41,6 +41,7 @@ export const IPC = {
   // Disk analyzer
   DISK_ANALYZE: 'disk:analyze',
   DISK_DRIVES: 'disk:drives',
+  DISK_FILE_TYPES: 'disk:file-types',
 
   // Network cleanup
   NETWORK_SCAN: 'cleaner:network:scan',
@@ -56,6 +57,7 @@ export const IPC = {
 
   // System
   ELEVATION_CHECK: 'elevation:check',
+  ELEVATION_RELAUNCH: 'elevation:relaunch',
   RESTORE_POINT_CREATE: 'system:restore-point:create',
 
   // Scheduled scans

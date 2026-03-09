@@ -9,7 +9,7 @@ import type { WindowGetter } from './index'
 const execFileAsync = promisify(execFile)
 
 // Known bloatware packages with metadata
-const KNOWN_BLOATWARE: Omit<BloatwareApp, 'id' | 'size' | 'selected'>[] = [
+export const KNOWN_BLOATWARE: Omit<BloatwareApp, 'id' | 'size' | 'selected'>[] = [
   // Microsoft apps
   { name: '3D Viewer', packageName: 'Microsoft.Microsoft3DViewer', publisher: 'Microsoft', category: 'microsoft', description: '3D model viewer — rarely used by most users' },
   { name: 'Bing News', packageName: 'Microsoft.BingNews', publisher: 'Microsoft', category: 'microsoft', description: 'News aggregator with ads' },
@@ -29,7 +29,7 @@ const KNOWN_BLOATWARE: Omit<BloatwareApp, 'id' | 'size' | 'selected'>[] = [
   { name: 'Office Hub', packageName: 'Microsoft.MicrosoftOfficeHub', publisher: 'Microsoft', category: 'microsoft', description: 'Office promotion hub — not the actual Office suite' },
   { name: 'OneNote for Windows', packageName: 'Microsoft.Office.OneNote', publisher: 'Microsoft', category: 'microsoft', description: 'OneNote UWP app — desktop version is separate' },
   { name: 'Outlook (new)', packageName: 'Microsoft.OutlookForWindows', publisher: 'Microsoft', category: 'communication', description: 'New Outlook app — replaces Mail, uses web version' },
-  { name: 'Paint 3D', packageName: 'Microsoft.MSPaint', publisher: 'Microsoft', category: 'microsoft', description: '3D paint app — classic Paint is still available' },
+  { name: 'Paint', packageName: 'Microsoft.MSPaint', publisher: 'Microsoft', category: 'microsoft', description: 'Windows Paint app — remove only if you use a different image editor' },
   { name: 'People', packageName: 'Microsoft.People', publisher: 'Microsoft', category: 'communication', description: 'Contact aggregator — syncs with Microsoft account' },
   { name: 'Phone Link', packageName: 'Microsoft.YourPhone', publisher: 'Microsoft', category: 'communication', description: 'Phone-to-PC app — runs background services' },
   { name: 'Power Automate', packageName: 'Microsoft.PowerAutomateDesktop', publisher: 'Microsoft', category: 'microsoft', description: 'Desktop automation tool — enterprise feature' },
@@ -41,15 +41,13 @@ const KNOWN_BLOATWARE: Omit<BloatwareApp, 'id' | 'size' | 'selected'>[] = [
   { name: 'Widgets', packageName: 'MicrosoftWindows.Client.WebExperience', publisher: 'Microsoft', category: 'microsoft', description: 'Taskbar widgets — uses Edge WebView and background resources' },
   { name: 'Xbox App', packageName: 'Microsoft.XboxApp', publisher: 'Microsoft', category: 'gaming', description: 'Xbox companion app' },
   { name: 'Xbox Game Bar', packageName: 'Microsoft.XboxGamingOverlay', publisher: 'Microsoft', category: 'gaming', description: 'Game overlay — adds input latency' },
-  { name: 'Xbox Identity Provider', packageName: 'Microsoft.XboxIdentityProvider', publisher: 'Microsoft', category: 'gaming', description: 'Xbox authentication — needed for Xbox games' },
   { name: 'Xbox Speech to Text', packageName: 'Microsoft.XboxSpeechToTextOverlay', publisher: 'Microsoft', category: 'gaming', description: 'Xbox accessibility overlay' },
   { name: 'Groove Music', packageName: 'Microsoft.ZuneMusic', publisher: 'Microsoft', category: 'media', description: 'Music player — deprecated, replaced by Media Player' },
   { name: 'Bing Search', packageName: 'Microsoft.BingSearch', publisher: 'Microsoft', category: 'microsoft', description: 'Bing search integration — web searches from taskbar' },
   { name: 'Xbox (Gaming App)', packageName: 'Microsoft.GamingApp', publisher: 'Microsoft', category: 'gaming', description: 'Xbox PC app for game library and social features' },
-  { name: 'Gaming Services', packageName: 'Microsoft.GamingServices', publisher: 'Microsoft', category: 'gaming', description: 'Background gaming services — needed for Xbox/Game Pass games' },
   { name: 'Edge Game Assist', packageName: 'Microsoft.Edge.GameAssist', publisher: 'Microsoft', category: 'gaming', description: 'Edge game overlay assistant' },
 
-  // OEM bloatware (common across manufacturers)
+  // OEM bloatware
   { name: 'Dell SupportAssist', packageName: 'DellInc.DellSupportAssistforPCs', publisher: 'Dell', category: 'oem', description: 'Dell support tool — heavy on resources and notifications' },
   { name: 'Dell Digital Delivery', packageName: 'DellInc.DellDigitalDelivery', publisher: 'Dell', category: 'oem', description: 'Dell software delivery service' },
   { name: 'Dell Command Update', packageName: 'DellInc.DellCommandUpdate', publisher: 'Dell', category: 'oem', description: 'Dell driver/BIOS updater' },
@@ -73,114 +71,117 @@ const KNOWN_BLOATWARE: Omit<BloatwareApp, 'id' | 'size' | 'selected'>[] = [
   { name: 'March of Empires', packageName: 'Gameloft.MarchofEmpires', publisher: 'Gameloft', category: 'gaming', description: 'Pre-installed game with microtransactions' },
 ]
 
-export function registerDebloaterIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.DEBLOATER_SCAN, async (): Promise<BloatwareApp[]> => {
-    const apps: BloatwareApp[] = []
+// ── Exported core logic ──
 
-    try {
-      // Get list of installed Appx packages (current user — no admin needed)
-      // Also calculate sizes in a single PowerShell call to avoid spawning dozens of processes
-      const { stdout } = await execFileAsync('powershell', [
-        '-NoProfile', '-NonInteractive', '-Command',
-        `Get-AppxPackage | ForEach-Object {
-          $size = 0
-          if ($_.InstallLocation -and (Test-Path $_.InstallLocation)) {
-            $size = (Get-ChildItem -Path $_.InstallLocation -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-            if (-not $size) { $size = 0 }
-          }
-          [PSCustomObject]@{ Name = $_.Name; PackageFullName = $_.PackageFullName; InstallLocation = $_.InstallLocation; Size = $size }
-        } | ConvertTo-Json -Compress`
-      ], { timeout: 60000 })
+export async function scanBloatware(): Promise<BloatwareApp[]> {
+  const apps: BloatwareApp[] = []
 
-      let installedPackages: { Name: string; PackageFullName: string; InstallLocation: string; Size: number }[] = []
-      try {
-        const parsed = JSON.parse(stdout)
-        installedPackages = Array.isArray(parsed) ? parsed : [parsed]
-      } catch {
-        return apps
-      }
-
-      for (const bloatware of KNOWN_BLOATWARE) {
-        // Check if the package name matches any installed package
-        // Use exact match or startsWith only to avoid false positives
-        const matchedPkg = installedPackages.find(p =>
-          p.Name === bloatware.packageName ||
-          p.Name.startsWith(bloatware.packageName + '.')
-        )
-
-        if (matchedPkg) {
-          let sizeStr = 'Unknown'
-          const bytes = matchedPkg.Size || 0
-          if (bytes > 0) {
-            if (bytes > 1024 * 1024 * 1024) sizeStr = `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
-            else if (bytes > 1024 * 1024) sizeStr = `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-            else if (bytes > 1024) sizeStr = `${(bytes / 1024).toFixed(0)} KB`
-            else sizeStr = `${bytes} B`
-          }
-
-          apps.push({
-            id: randomUUID(),
-            name: bloatware.name,
-            packageName: matchedPkg.Name,
-            publisher: bloatware.publisher,
-            category: bloatware.category,
-            description: bloatware.description,
-            size: sizeStr,
-            selected: false
-          })
+  try {
+    const { stdout } = await execFileAsync('powershell', [
+      '-NoProfile', '-NonInteractive', '-Command',
+      `Get-AppxPackage | ForEach-Object {
+        $size = 0
+        if ($_.InstallLocation -and (Test-Path $_.InstallLocation)) {
+          $size = (Get-ChildItem -Path $_.InstallLocation -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+          if (-not $size) { $size = 0 }
         }
-      }
+        [PSCustomObject]@{ Name = $_.Name; PackageFullName = $_.PackageFullName; InstallLocation = $_.InstallLocation; Size = $size }
+      } | ConvertTo-Json -Compress`
+    ], { timeout: 60000 })
+
+    let installedPackages: { Name: string; PackageFullName: string; InstallLocation: string; Size: number }[] = []
+    try {
+      const parsed = JSON.parse(stdout)
+      installedPackages = Array.isArray(parsed) ? parsed : [parsed]
     } catch {
-      // PowerShell not available or failed
+      return apps
     }
 
-    return apps
-  })
+    for (const bloatware of KNOWN_BLOATWARE) {
+      const matchedPkg = installedPackages.find(p =>
+        p.Name === bloatware.packageName ||
+        p.Name.startsWith(bloatware.packageName + '.')
+      )
 
-  ipcMain.handle(IPC.DEBLOATER_REMOVE, async (_event, packageNames: string[]): Promise<{ removed: number; failed: number }> => {
-    // Validate package names: only allow known bloatware package names
-    const knownNames = new Set(KNOWN_BLOATWARE.map(b => b.packageName))
-    const validNames = packageNames.filter(name =>
-      typeof name === 'string' && knownNames.has(name)
-    )
+      if (matchedPkg) {
+        let sizeStr = 'Unknown'
+        const bytes = matchedPkg.Size || 0
+        if (bytes > 0) {
+          if (bytes > 1024 * 1024 * 1024) sizeStr = `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+          else if (bytes > 1024 * 1024) sizeStr = `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+          else if (bytes > 1024) sizeStr = `${(bytes / 1024).toFixed(0)} KB`
+          else sizeStr = `${bytes} B`
+        }
 
-    let removed = 0
-    let failed = 0
-    const total = validNames.length
-
-    const sendProgress = (current: number, currentApp: string, status: 'removing' | 'done' | 'failed') => {
-      const win = getWindow()
-      if (win && !win.isDestroyed()) win.webContents.send(IPC.DEBLOATER_REMOVE_PROGRESS, { current, total, currentApp, status })
+        apps.push({
+          id: randomUUID(),
+          name: bloatware.name,
+          packageName: matchedPkg.Name,
+          publisher: bloatware.publisher,
+          category: bloatware.category,
+          description: bloatware.description,
+          size: sizeStr,
+          selected: false
+        })
+      }
     }
+  } catch {
+    // PowerShell not available or failed
+  }
 
-    for (let i = 0; i < validNames.length; i++) {
-      const pkgName = validNames[i]
-      const safeName = pkgName.replace(/'/g, "''")
-      sendProgress(i + 1, pkgName, 'removing')
+  return apps
+}
+
+export async function removeBloatware(
+  packageNames: string[],
+  onProgress?: (current: number, total: number, currentApp: string, status: 'removing' | 'done' | 'failed') => void
+): Promise<{ removed: number; failed: number }> {
+  const knownNames = new Set(KNOWN_BLOATWARE.map(b => b.packageName))
+  const validNames = packageNames.filter(name =>
+    typeof name === 'string' && knownNames.has(name)
+  )
+
+  let removed = 0
+  let failed = 0
+
+  for (let i = 0; i < validNames.length; i++) {
+    const pkgName = validNames[i]
+    const safeName = pkgName.replace(/'/g, "''")
+    onProgress?.(i + 1, validNames.length, pkgName, 'removing')
+    try {
+      await execFileAsync('powershell', [
+        '-NoProfile', '-NonInteractive', '-Command',
+        `Get-AppxPackage '${safeName}' | Remove-AppxPackage -ErrorAction Stop`
+      ], { timeout: 30000 })
+      removed++
+      onProgress?.(i + 1, validNames.length, pkgName, 'done')
+
       try {
-        // Remove for current user first (doesn't need admin)
         await execFileAsync('powershell', [
           '-NoProfile', '-NonInteractive', '-Command',
-          `Get-AppxPackage '${safeName}' | Remove-AppxPackage -ErrorAction Stop`
-        ], { timeout: 30000 })
-        removed++
-        sendProgress(i + 1, pkgName, 'done')
-
-        // Also try to deprovision so it doesn't reinstall for new users (needs admin, best-effort)
-        try {
-          await execFileAsync('powershell', [
-            '-NoProfile', '-NonInteractive', '-Command',
-            `Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -eq '${safeName}' } | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue`
-          ], { timeout: 15000 })
-        } catch {
-          // Deprovisioning failed (needs admin) — not critical
-        }
+          `Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -eq '${safeName}' } | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue`
+        ], { timeout: 15000 })
       } catch {
-        failed++
-        sendProgress(i + 1, pkgName, 'failed')
+        // Deprovisioning failed (needs admin) — not critical
       }
+    } catch {
+      failed++
+      onProgress?.(i + 1, validNames.length, pkgName, 'failed')
     }
+  }
 
-    return { removed, failed }
+  return { removed, failed }
+}
+
+// ── IPC registration ──
+
+export function registerDebloaterIpc(getWindow: WindowGetter): void {
+  ipcMain.handle(IPC.DEBLOATER_SCAN, () => scanBloatware())
+
+  ipcMain.handle(IPC.DEBLOATER_REMOVE, async (_event, packageNames: string[]): Promise<{ removed: number; failed: number }> => {
+    return removeBloatware(packageNames, (current, total, currentApp, status) => {
+      const win = getWindow()
+      if (win && !win.isDestroyed()) win.webContents.send(IPC.DEBLOATER_REMOVE_PROGRESS, { current, total, currentApp, status })
+    })
   })
 }

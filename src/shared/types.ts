@@ -5,9 +5,21 @@ export interface ScanHistoryCategory {
   spaceSaved: number
 }
 
+export type HistoryEntryType =
+  | 'cleaner'
+  | 'registry'
+  | 'debloater'
+  | 'network'
+  | 'drivers'
+  | 'malware'
+  | 'privacy'
+  | 'startup'
+  | 'services'
+  | 'software-update'
+
 export interface ScanHistoryEntry {
   id: string
-  type: 'cleaner' | 'registry' | 'debloater' | 'network' | 'drivers'
+  type: HistoryEntryType
   timestamp: string
   duration: number
   totalItemsFound: number
@@ -16,6 +28,8 @@ export interface ScanHistoryEntry {
   totalSpaceSaved: number
   categories: ScanHistoryCategory[]
   errorCount: number
+  /** true when the entry was created by the scheduler rather than a manual action */
+  scheduled?: boolean
 }
 
 export interface ScanItem {
@@ -121,6 +135,12 @@ export interface DriveInfo {
   totalSize: number
   freeSpace: number
   usedSpace: number
+}
+
+export interface FileTypeInfo {
+  extension: string
+  totalSize: number
+  fileCount: number
 }
 
 export interface AppStats {

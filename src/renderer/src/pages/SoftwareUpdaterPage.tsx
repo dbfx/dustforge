@@ -21,6 +21,7 @@ import { StatCard } from '@/components/shared/StatCard'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { useUpdaterStore, severityOrder } from '@/stores/updater-store'
+import { useHistoryStore } from '@/stores/history-store'
 import type { UpdateProgress, UpdatableApp, UpToDateApp } from '@shared/types'
 
 const SEVERITY_STYLES = {
@@ -155,6 +156,9 @@ export function SoftwareUpdaterPage() {
       store.setError(null)
       store.setProgress(null)
 
+      const startTime = Date.now()
+      const appsToUpdate = store.apps.filter(a => ids.includes(a.id))
+
       try {
         const result = await window.dustforge.softwareUpdateRun(ids)
         const s = useUpdaterStore.getState()
@@ -175,6 +179,30 @@ export function SoftwareUpdaterPage() {
             `${result.failed} update${result.failed !== 1 ? 's' : ''} failed`,
           )
         }
+
+        // Log to history
+        const bySeverity: Record<string, { found: number; updated: number }> = {}
+        const failedAppIds = new Set(result.errors.map(e => e.appId))
+        for (const app of appsToUpdate) {
+          const sev = app.severity
+          if (!bySeverity[sev]) bySeverity[sev] = { found: 0, updated: 0 }
+          bySeverity[sev].found++
+          if (!failedAppIds.has(app.id)) bySeverity[sev].updated++
+        }
+        await useHistoryStore.getState().addEntry({
+          id: Date.now().toString(),
+          type: 'software-update',
+          timestamp: new Date().toISOString(),
+          duration: Date.now() - startTime,
+          totalItemsFound: ids.length,
+          totalItemsCleaned: result.succeeded,
+          totalItemsSkipped: 0,
+          totalSpaceSaved: 0,
+          categories: Object.entries(bySeverity).map(([name, d]) => ({
+            name: `${name} updates`, itemsFound: d.found, itemsCleaned: d.updated, spaceSaved: 0
+          })),
+          errorCount: result.failed
+        })
       } catch (err) {
         console.error('Update failed:', err)
         useUpdaterStore.getState().setError('Update operation failed unexpectedly.')

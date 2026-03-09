@@ -219,18 +219,12 @@ async function getActiveDriverNames(): Promise<Set<string>> {
   return active
 }
 
-export function registerDriverManagerIpc(getWindow: WindowGetter): void {
-  const sendProgress = (data: DriverScanProgress): void => {
-    const win = getWindow()
-    if (win && !win.isDestroyed()) win.webContents.send(IPC.DRIVER_PROGRESS, data)
-  }
+// ── Exported core logic ──
 
-  const sendUpdateProgress = (data: DriverUpdateProgress): void => {
-    const win = getWindow()
-    if (win && !win.isDestroyed()) win.webContents.send(IPC.DRIVER_UPDATE_PROGRESS, data)
-  }
-  ipcMain.handle(IPC.DRIVER_SCAN, async (): Promise<DriverScanResult> => {
-    sendProgress({
+export async function scanDrivers(
+  onProgress?: (data: DriverScanProgress) => void
+): Promise<DriverScanResult> {
+    onProgress?.({
       phase: 'enumerating',
       current: 0,
       total: 0,
@@ -254,7 +248,7 @@ export function registerDriverManagerIpc(getWindow: WindowGetter): void {
       return { packages: [], totalStaleSize: 0, totalStaleCount: 0, totalCurrentCount: 0 }
     }
 
-    sendProgress({
+    onProgress?.({
       phase: 'analyzing',
       current: 0,
       total: rawDrivers.length,
@@ -292,7 +286,7 @@ export function registerDriverManagerIpc(getWindow: WindowGetter): void {
         const isActive = activeNames.has(d.publishedName.toLowerCase())
         const isNewest = i === 0
 
-        sendProgress({
+        onProgress?.({
           phase: 'measuring',
           current: ++idx,
           total: rawDrivers.length,
@@ -340,11 +334,9 @@ export function registerDriverManagerIpc(getWindow: WindowGetter): void {
       totalStaleCount: stale.length,
       totalCurrentCount: packages.length - stale.length
     }
-  })
+}
 
-  ipcMain.handle(
-    IPC.DRIVER_CLEAN,
-    async (_event, publishedNames: string[]): Promise<DriverCleanResult> => {
+export async function cleanDrivers(publishedNames: string[]): Promise<DriverCleanResult> {
       let removed = 0
       let failed = 0
       let spaceRecovered = 0
@@ -386,14 +378,14 @@ export function registerDriverManagerIpc(getWindow: WindowGetter): void {
       }
 
       return { removed, failed, spaceRecovered, errors }
-    }
-  )
+}
 
-  // ─── Driver Update: Scan for available updates via Windows Update ───
-  ipcMain.handle(IPC.DRIVER_UPDATE_SCAN, async (): Promise<DriverUpdateScanResult> => {
+export async function scanDriverUpdates(
+  onProgress?: (data: DriverUpdateProgress) => void
+): Promise<DriverUpdateScanResult> {
     const startTime = Date.now()
 
-    sendUpdateProgress({
+    onProgress?.({
       phase: 'checking',
       current: 0,
       total: 0,
@@ -489,7 +481,7 @@ export function registerDriverManagerIpc(getWindow: WindowGetter): void {
         const availableVersion = versionMatch?.[1] || availableDate
 
         idx++
-        sendUpdateProgress({
+        onProgress?.({
           phase: 'checking',
           current: idx,
           total: totalCount,
@@ -522,12 +514,12 @@ export function registerDriverManagerIpc(getWindow: WindowGetter): void {
       totalAvailable: updates.length,
       scanDuration: Date.now() - startTime
     }
-  })
+}
 
-  // ─── Driver Update: Install selected updates ───
-  ipcMain.handle(
-    IPC.DRIVER_UPDATE_INSTALL,
-    async (_event, wuUpdateIds: string[]): Promise<DriverUpdateInstallResult> => {
+export async function installDriverUpdates(
+  wuUpdateIds: string[],
+  onProgress?: (data: DriverUpdateProgress) => void
+): Promise<DriverUpdateInstallResult> {
       let installed = 0
       let failed = 0
       let rebootRequired = false
@@ -537,7 +529,7 @@ export function registerDriverManagerIpc(getWindow: WindowGetter): void {
         return { installed: 0, failed: 0, rebootRequired: false, errors: [] }
       }
 
-      sendUpdateProgress({
+      onProgress?.({
         phase: 'downloading',
         current: 0,
         total: wuUpdateIds.length,
@@ -615,7 +607,7 @@ export function registerDriverManagerIpc(getWindow: WindowGetter): void {
             const parts = line.split('|')
             const phase = parts[1] === 'installing' ? 'installing' as const : 'downloading' as const
             const total = parseInt(parts[2], 10) || wuUpdateIds.length
-            sendUpdateProgress({
+            onProgress?.({
               phase,
               current: 0,
               total,
@@ -625,7 +617,7 @@ export function registerDriverManagerIpc(getWindow: WindowGetter): void {
           } else if (line.startsWith('INSTALLED|')) {
             installed++
             const name = line.substring('INSTALLED|'.length)
-            sendUpdateProgress({
+            onProgress?.({
               phase: 'installing',
               current: installed + failed,
               total: wuUpdateIds.length,
@@ -650,6 +642,28 @@ export function registerDriverManagerIpc(getWindow: WindowGetter): void {
       }
 
       return { installed, failed, rebootRequired, errors }
-    }
-  )
+}
+
+export function registerDriverManagerIpc(getWindow: WindowGetter): void {
+  const sendProgress = (data: DriverScanProgress): void => {
+    const win = getWindow()
+    if (win && !win.isDestroyed()) win.webContents.send(IPC.DRIVER_PROGRESS, data)
+  }
+
+  const sendUpdateProgress = (data: DriverUpdateProgress): void => {
+    const win = getWindow()
+    if (win && !win.isDestroyed()) win.webContents.send(IPC.DRIVER_UPDATE_PROGRESS, data)
+  }
+
+  ipcMain.handle(IPC.DRIVER_SCAN, () => scanDrivers(sendProgress))
+
+  ipcMain.handle(IPC.DRIVER_CLEAN, async (_event, publishedNames: string[]) => {
+    return cleanDrivers(publishedNames)
+  })
+
+  ipcMain.handle(IPC.DRIVER_UPDATE_SCAN, () => scanDriverUpdates(sendUpdateProgress))
+
+  ipcMain.handle(IPC.DRIVER_UPDATE_INSTALL, async (_event, wuUpdateIds: string[]) => {
+    return installDriverUpdates(wuUpdateIds, sendUpdateProgress)
+  })
 }

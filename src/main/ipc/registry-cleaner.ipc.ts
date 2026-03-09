@@ -72,8 +72,9 @@ function splitTaskPath(fullPath: string): { path: string; name: string } | null 
 const scanSessions = new Map<string, Map<string, RegistryEntry>>()
 let activeScanId = ''
 
-export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.REGISTRY_SCAN, async (): Promise<RegistryEntry[]> => {
+// ── Exported core logic ──
+
+export async function scanRegistry(): Promise<RegistryEntry[]> {
     const entries: RegistryEntry[] = []
 
     // Scan for broken App Paths
@@ -734,39 +735,6 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
       // Skip
     }
 
-    // Check if Windows Script Host is enabled
-    try {
-      const { stdout } = await execFileAsync('reg', [
-        'query',
-        'HKLM\\SOFTWARE\\Microsoft\\Windows Script Host\\Settings',
-        '/v', 'Enabled'
-      ], { timeout: 5000 })
-      const match = stdout.match(/Enabled\s+REG_SZ\s+(\d+)/i)
-      if (!match || match[1] !== '0') {
-        entries.push({
-          id: randomUUID(),
-          type: 'vulnerability',
-          keyPath: 'HKLM\\SOFTWARE\\Microsoft\\Windows Script Host\\Settings',
-          valueName: 'Enabled',
-          issue: 'Windows Script Host is enabled — allows malicious .vbs/.js scripts to execute',
-          risk: 'medium',
-          selected: true,
-          fix: { op: 'set-value', regType: 'REG_SZ', data: '0' }
-        })
-      }
-    } catch {
-      entries.push({
-        id: randomUUID(),
-        type: 'vulnerability',
-        keyPath: 'HKLM\\SOFTWARE\\Microsoft\\Windows Script Host\\Settings',
-        valueName: 'Enabled',
-        issue: 'Windows Script Host is enabled — allows malicious .vbs/.js scripts to execute',
-        risk: 'medium',
-        selected: true,
-        fix: { op: 'set-value', regType: 'REG_SZ', data: '0' }
-      })
-    }
-
     // Check if PowerShell execution policy is unrestricted
     try {
       const { stdout } = await execFileAsync('reg', [
@@ -850,7 +818,7 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
 
     // --- PERFORMANCE TWEAKS ---
 
-    // Check if SysMain (Superfetch) is enabled
+    // Check if SysMain (Superfetch) is enabled — only recommend disabling on SSDs
     try {
       const { stdout } = await execFileAsync('reg', [
         'query',
@@ -859,16 +827,39 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
       ], { timeout: 5000 })
       const match = stdout.match(/Start\s+REG_DWORD\s+0x(\d+)/i)
       if (match && (match[1] === '2' || match[1] === '3')) {
-        entries.push({
-          id: randomUUID(),
-          type: 'performance',
-          keyPath: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\SysMain',
-          valueName: 'Start',
-          issue: 'SysMain (Superfetch) is enabled — unnecessary on SSDs, causes disk thrashing on HDDs',
-          risk: 'low',
-          selected: true,
-          fix: { op: 'set-value', regType: 'REG_DWORD', data: '4' }
-        })
+        // Detect if the system drive is an SSD
+        let isSSD = false
+        try {
+          const { stdout: driveInfo } = await execFileAsync('powershell', [
+            '-NoProfile', '-Command',
+            `$disk = Get-PhysicalDisk | Where-Object { $_.DeviceID -eq (Get-Partition -DriveLetter C | Get-Disk).Number }; $disk.MediaType`
+          ], { timeout: 10000 })
+          isSSD = driveInfo.trim().toUpperCase() === 'SSD'
+        } catch { /* Assume HDD if detection fails — safer to leave SysMain enabled */ }
+
+        if (isSSD) {
+          entries.push({
+            id: randomUUID(),
+            type: 'performance',
+            keyPath: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\SysMain',
+            valueName: 'Start',
+            issue: 'SysMain (Superfetch) is enabled — unnecessary on your SSD, safe to disable',
+            risk: 'low',
+            selected: true,
+            fix: { op: 'set-value', regType: 'REG_DWORD', data: '4' }
+          })
+        } else {
+          entries.push({
+            id: randomUUID(),
+            type: 'performance',
+            keyPath: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\SysMain',
+            valueName: 'Start',
+            issue: 'SysMain (Superfetch) is enabled — improves performance on HDDs, only disable if you have an SSD',
+            risk: 'low',
+            selected: false,
+            fix: { op: 'set-value', regType: 'REG_DWORD', data: '4' }
+          })
+        }
       }
     } catch {
       // Skip
@@ -963,26 +954,6 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
       }
     } catch { /* Skip */ }
 
-    // Check Print Spooler
-    try {
-      const { stdout } = await execFileAsync('reg', [
-        'query', 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\Spooler', '/v', 'Start'
-      ], { timeout: 5000 })
-      const match = stdout.match(/Start\s+REG_DWORD\s+0x(\d+)/i)
-      if (match && match[1] === '2') {
-        entries.push({
-          id: randomUUID(),
-          type: 'service',
-          keyPath: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\Spooler',
-          valueName: 'Start',
-          issue: 'Print Spooler is auto-starting — attack surface for PrintNightmare (disable if no printer)',
-          risk: 'medium',
-          selected: true,
-          fix: { op: 'set-value', regType: 'REG_DWORD', data: '4' }
-        })
-      }
-    } catch { /* Skip */ }
-
     // --- SCHEDULED TASKS CLEANUP ---
     // (MapsBroker moved to Privacy Shield)
 
@@ -1036,13 +1007,16 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
       { pattern: 'CCleaner', exe: 'CCleaner' }
     ]
     try {
-      const { stdout } = await execFileAsync('schtasks', ['/query', '/fo', 'CSV', '/nh'], { timeout: 15000 })
+      const { stdout } = await execFileAsync('schtasks', ['/query', '/fo', 'CSV', '/v', '/nh'], { timeout: 15000 })
       for (const task of thirdPartyTasks) {
         const matchingLines = stdout.split(/\r?\n/).filter(l => l.includes(task.pattern))
         for (const line of matchingLines) {
           const cols = parseCSVLine(line)
           if (cols && cols.length >= 1) {
             const taskName = cols[0]
+            // Check if the executable actually exists — skip if the software is still installed
+            const taskToRun = cols.length >= 9 ? cols[8] : ''
+            if (taskToRun && existsSync(taskToRun.replace(/^"/, '').replace(/".*$/, ''))) continue
             entries.push({
               id: randomUUID(),
               type: 'task',
@@ -1058,33 +1032,17 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
       }
     } catch { /* Skip */ }
 
-    // Store entries in a new scan session
-    const sessionMap = new Map<string, RegistryEntry>()
-    for (const entry of entries) {
-      sessionMap.set(entry.id, entry)
-    }
-    const scanId = randomUUID()
-    scanSessions.set(scanId, sessionMap)
-    activeScanId = scanId
-
-    // Clean up old sessions (keep only last 3)
-    const sessionKeys = [...scanSessions.keys()]
-    while (sessionKeys.length > 3) {
-      scanSessions.delete(sessionKeys.shift()!)
-    }
-
     return entries
-  })
+}
 
-  ipcMain.handle(IPC.REGISTRY_FIX, async (_event, entryIds: string[]): Promise<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] }> => {
-    const total = entryIds.length
-    const sendProgress = (current: number, currentEntry: string) => {
-      const win = getWindow()
-      if (win && !win.isDestroyed()) win.webContents.send(IPC.REGISTRY_FIX_PROGRESS, { current, total, currentEntry })
-    }
+export async function fixRegistryEntries(
+  entries: RegistryEntry[],
+  onProgress?: (current: number, total: number, label: string) => void
+): Promise<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] }> {
+    const total = entries.length
 
     // Create backup first
-    sendProgress(0, 'Creating registry backup...')
+    onProgress?.(0, total, 'Creating registry backup...')
     const backupDir = join(homedir(), 'Documents', 'DustForge Backups')
     try {
       const { mkdirSync } = await import('fs')
@@ -1099,10 +1057,9 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
     let fixed = 0
     let failed = 0
     const failures: { issue: string; reason: string }[] = []
-    const session = scanSessions.get(activeScanId)
 
-    for (let i = 0; i < entryIds.length; i++) {
-      const entry = session?.get(entryIds[i])
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i]
       if (!entry || !entry.fix) {
         failed++
         failures.push({ issue: 'Unknown entry', reason: 'Entry data not found — try scanning again before fixing' })
@@ -1113,7 +1070,7 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
       const key = fix.key || entry.keyPath
       const value = fix.value || entry.valueName
 
-      sendProgress(i + 1, `Fixing: ${entry.issue.substring(0, 80)}...`)
+      onProgress?.(i + 1, total, `Fixing: ${entry.issue.substring(0, 80)}...`)
 
       try {
         switch (fix.op) {
@@ -1134,8 +1091,6 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
             break
 
           case 'disable-task': {
-            // Use PowerShell — schtasks /change fails for system-owned tasks
-            // Split full path into TaskPath + TaskName for PowerShell
             const disableParts = splitTaskPath(entry.keyPath)
             if (!disableParts) throw new Error('Invalid task path')
             const safeDisablePath = disableParts.path.replace(/'/g, "''")
@@ -1171,7 +1126,43 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
       }
     }
 
-    sendProgress(total, 'Done')
+    onProgress?.(total, total, 'Done')
     return { fixed, failed, failures }
+}
+
+export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
+  ipcMain.handle(IPC.REGISTRY_SCAN, async (): Promise<RegistryEntry[]> => {
+    const entries = await scanRegistry()
+
+    // Store entries in a new scan session
+    const sessionMap = new Map<string, RegistryEntry>()
+    for (const entry of entries) {
+      sessionMap.set(entry.id, entry)
+    }
+    const scanId = randomUUID()
+    scanSessions.set(scanId, sessionMap)
+    activeScanId = scanId
+
+    // Clean up old sessions (keep only last 3)
+    const sessionKeys = [...scanSessions.keys()]
+    while (sessionKeys.length > 3) {
+      scanSessions.delete(sessionKeys.shift()!)
+    }
+
+    return entries
+  })
+
+  ipcMain.handle(IPC.REGISTRY_FIX, async (_event, entryIds: string[]): Promise<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] }> => {
+    const session = scanSessions.get(activeScanId)
+    const entriesToFix: RegistryEntry[] = []
+    for (const id of entryIds) {
+      const entry = session?.get(id)
+      if (entry) entriesToFix.push(entry)
+    }
+
+    return fixRegistryEntries(entriesToFix, (current, total, currentEntry) => {
+      const win = getWindow()
+      if (win && !win.isDestroyed()) win.webContents.send(IPC.REGISTRY_FIX_PROGRESS, { current, total, currentEntry })
+    })
   })
 }

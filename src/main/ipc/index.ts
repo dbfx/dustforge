@@ -1,4 +1,5 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
+import { spawn } from 'child_process'
 import { IPC } from '../../shared/channels'
 import { registerSystemCleanerIpc } from './system-cleaner.ipc'
 import { registerBrowserCleanerIpc } from './browser-cleaner.ipc'
@@ -68,6 +69,14 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
 
   // Elevation
   ipcMain.handle(IPC.ELEVATION_CHECK, () => isAdmin())
+  ipcMain.handle(IPC.ELEVATION_RELAUNCH, () => {
+    const exePath = app.getPath('exe')
+    spawn('powershell.exe', ['-Command', `Start-Process '${exePath}' -Verb RunAs`], {
+      detached: true,
+      stdio: 'ignore'
+    }).unref()
+    app.quit()
+  })
 
   // System Restore Point
   ipcMain.handle(IPC.RESTORE_POINT_CREATE, (_event, description: string) => {

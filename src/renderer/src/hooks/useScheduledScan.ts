@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { useScanStore } from '@/stores/scan-store'
+import { useHistoryStore } from '@/stores/history-store'
 import { ScanStatus } from '@shared/enums'
 import type { ScanResult } from '@shared/types'
 import { formatBytes, formatNumber } from '@/lib/utils'
@@ -22,6 +23,7 @@ export function useScheduledScan(): void {
       if (store.status === ScanStatus.Scanning || store.status === ScanStatus.Cleaning) return
 
       scanningRef.current = true
+      const startTime = Date.now()
       toast.info('Scheduled scan started', { description: 'Running automatic system scan...' })
 
       store.setStatus(ScanStatus.Scanning)
@@ -36,10 +38,17 @@ export function useScheduledScan(): void {
           { label: 'Recycle Bin', fn: () => window.dustforge.recycleBinScan() }
         ]
 
+        const categoryResults: Record<string, { found: number; size: number }> = {}
+
         for (const scan of scanFns) {
           try {
             const results = await scan.fn()
             store.addResults(results)
+            const found = results.reduce((s, r) => s + r.itemCount, 0)
+            const size = results.reduce((s, r) => s + r.totalSize, 0)
+            if (found > 0) {
+              categoryResults[scan.label] = { found, size }
+            }
           } catch {
             // Skip failed categories
           }
@@ -52,6 +61,26 @@ export function useScheduledScan(): void {
         const results = useScanStore.getState().results
         const totalSize = results.reduce((s, r) => s + r.totalSize, 0)
         const totalItems = results.reduce((s, r) => s + r.itemCount, 0)
+
+        // Log to history
+        await useHistoryStore.getState().addEntry({
+          id: Date.now().toString(),
+          type: 'cleaner',
+          timestamp: new Date().toISOString(),
+          duration: Date.now() - startTime,
+          totalItemsFound: totalItems,
+          totalItemsCleaned: 0,
+          totalItemsSkipped: 0,
+          totalSpaceSaved: 0,
+          categories: Object.entries(categoryResults).map(([name, d]) => ({
+            name,
+            itemsFound: d.found,
+            itemsCleaned: 0,
+            spaceSaved: d.size
+          })),
+          errorCount: 0,
+          scheduled: true
+        })
 
         // Notify main process for system notification
         window.dustforge.notifyScheduledScanComplete?.(totalSize, totalItems)

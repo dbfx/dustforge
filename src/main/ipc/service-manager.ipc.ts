@@ -41,17 +41,12 @@ function normalizeStatus(raw: string): ServiceStatus {
   return 'Unknown'
 }
 
-// ── Registration ─────────────────────────────────────────────
+// ── Exported core logic ─────────────────────────────────────
 
-export function registerServiceManagerIpc(getWindow: WindowGetter): void {
-  const sendProgress = (data: ServiceScanProgress): void => {
-    const win = getWindow()
-    if (win && !win.isDestroyed()) win.webContents.send(IPC.SERVICE_PROGRESS, data)
-  }
-
-  // ── SCAN ───────────────────────────────────────────────────
-  ipcMain.handle(IPC.SERVICE_SCAN, async (): Promise<ServiceScanResult> => {
-    sendProgress({ phase: 'enumerating', current: 0, total: 0, currentService: 'Enumerating services...' })
+export async function scanServices(
+  onProgress?: (data: ServiceScanProgress) => void
+): Promise<ServiceScanResult> {
+    onProgress?.({ phase: 'enumerating', current: 0, total: 0, currentService: 'Enumerating services...' })
 
     // Single PowerShell call to enumerate all services with details
     const script = `
@@ -106,7 +101,7 @@ export function registerServiceManagerIpc(getWindow: WindowGetter): void {
       })
     }
 
-    sendProgress({ phase: 'classifying', current: 0, total: rawServices.length, currentService: 'Resolving dependencies...' })
+    onProgress?.({ phase: 'classifying', current: 0, total: rawServices.length, currentService: 'Resolving dependencies...' })
 
     // Resolve dependencies in a second PowerShell call
     const depScript = `
@@ -141,7 +136,7 @@ export function registerServiceManagerIpc(getWindow: WindowGetter): void {
     // Classify and build final service list
     const services: WindowsService[] = rawServices.map((raw, i) => {
       if (i % 20 === 0) {
-        sendProgress({ phase: 'classifying', current: i, total: rawServices.length, currentService: raw.displayName })
+        onProgress?.({ phase: 'classifying', current: i, total: rawServices.length, currentService: raw.displayName })
       }
 
       const kb = lookupServiceSafety(raw.name)
@@ -176,16 +171,12 @@ export function registerServiceManagerIpc(getWindow: WindowGetter): void {
       disabledCount,
       safeToDisableCount
     }
-  })
+}
 
-  // ── APPLY ──────────────────────────────────────────────────
-  ipcMain.handle(
-    IPC.SERVICE_APPLY,
-    async (
-      _event,
-      changes: { name: string; targetStartType: string }[],
-      force?: boolean
-    ): Promise<ServiceApplyResult> => {
+export async function applyServiceChanges(
+  changes: { name: string; targetStartType: string }[],
+  force?: boolean
+): Promise<ServiceApplyResult> {
       if (!Array.isArray(changes) || changes.length === 0) {
         return { succeeded: 0, failed: 0, errors: [] }
       }
@@ -250,6 +241,17 @@ try {
       }
 
       return { succeeded, failed, errors }
-    }
-  )
+}
+
+// ── Registration ─────────────────────────────────────────────
+
+export function registerServiceManagerIpc(getWindow: WindowGetter): void {
+  ipcMain.handle(IPC.SERVICE_SCAN, () => scanServices((data) => {
+    const win = getWindow()
+    if (win && !win.isDestroyed()) win.webContents.send(IPC.SERVICE_PROGRESS, data)
+  }))
+
+  ipcMain.handle(IPC.SERVICE_APPLY, async (_event, changes: { name: string; targetStartType: string }[], force?: boolean) => {
+    return applyServiceChanges(changes, force)
+  })
 }

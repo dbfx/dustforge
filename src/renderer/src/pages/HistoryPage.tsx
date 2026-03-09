@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo } from 'react'
 import {
   History, Sparkles, Database, PackageMinus, Trash2, ChevronDown,
-  TrendingUp, Calendar, HardDrive, BarChart3, Clock, AlertCircle, Wifi, Cpu
+  TrendingUp, Calendar, HardDrive, BarChart3, Clock, AlertCircle, Wifi, Cpu,
+  ShieldCheck, Bug, Zap, Settings2, RefreshCw
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -12,15 +13,20 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { useHistoryStore } from '@/stores/history-store'
 import { formatBytes } from '@/lib/utils'
-import type { ScanHistoryEntry } from '@shared/types'
+import type { ScanHistoryEntry, HistoryEntryType } from '@shared/types'
 
-const typeConfig = {
+const typeConfig: Record<HistoryEntryType, { label: string; icon: typeof Sparkles; color: string; bg: string }> = {
   cleaner: { label: 'System Clean', icon: Sparkles, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
   registry: { label: 'Registry Fix', icon: Database, color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
   debloater: { label: 'Debloater', icon: PackageMinus, color: '#a855f7', bg: 'rgba(168,85,247,0.1)' },
   network: { label: 'Network Cleanup', icon: Wifi, color: '#22c55e', bg: 'rgba(34,197,94,0.1)' },
-  drivers: { label: 'Driver Cleanup', icon: Cpu, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' }
-} as const
+  drivers: { label: 'Driver Cleanup', icon: Cpu, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
+  malware: { label: 'Malware Scan', icon: Bug, color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
+  privacy: { label: 'Privacy Shield', icon: ShieldCheck, color: '#14b8a6', bg: 'rgba(20,184,166,0.1)' },
+  startup: { label: 'Startup Manager', icon: Zap, color: '#f97316', bg: 'rgba(249,115,22,0.1)' },
+  services: { label: 'Service Manager', icon: Settings2, color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
+  'software-update': { label: 'Software Update', icon: RefreshCw, color: '#06b6d4', bg: 'rgba(6,182,212,0.1)' }
+}
 
 const PIE_COLORS = ['#f59e0b', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#14b8a6', '#ef4444', '#6366f1']
 
@@ -405,7 +411,12 @@ function TimelineView({
     { label: 'Registry', value: 'registry' },
     { label: 'Debloater', value: 'debloater' },
     { label: 'Network', value: 'network' },
-    { label: 'Drivers', value: 'drivers' }
+    { label: 'Drivers', value: 'drivers' },
+    { label: 'Malware', value: 'malware' },
+    { label: 'Privacy', value: 'privacy' },
+    { label: 'Startup', value: 'startup' },
+    { label: 'Services', value: 'services' },
+    { label: 'Updates', value: 'software-update' }
   ]
 
   return (
@@ -459,6 +470,12 @@ function TimelineView({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2.5">
                     <span className="text-[13px] font-semibold text-zinc-200">{config.label}</span>
+                    {entry.scheduled && (
+                      <span className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                        style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>
+                        Scheduled
+                      </span>
+                    )}
                     {entry.errorCount > 0 && (
                       <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
                         style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>

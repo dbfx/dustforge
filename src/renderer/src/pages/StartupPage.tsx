@@ -7,6 +7,7 @@ import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { cn } from '@/lib/utils'
 import { useStartupStore } from '@/stores/startup-store'
+import { useHistoryStore } from '@/stores/history-store'
 import type { StartupItem, StartupBootTrace } from '@shared/types'
 
 const impactStyles: Record<StartupItem['impact'], { bg: string; text: string }> = {
@@ -157,9 +158,9 @@ function BootTracePanel({ trace, loading }: { trace: StartupBootTrace | null; lo
                       }}
                       labelStyle={{ color: '#e4e4e7' }}
                       itemStyle={{ color: '#a1a1aa' }}
-                      formatter={(value: number) => [formatMs(value), 'Delay']}
-                      labelFormatter={(label: string, payload: Array<{ payload?: { fullName?: string } }>) =>
-                        payload?.[0]?.payload?.fullName || label
+                      formatter={(value: unknown) => [formatMs(value as number), 'Delay']}
+                      labelFormatter={(label: unknown, payload: readonly { payload?: { fullName?: string } }[]) =>
+                        payload?.[0]?.payload?.fullName || String(label)
                       }
                     />
                     <Bar dataKey="delay" radius={[0, 6, 6, 0]} maxBarSize={22}>
@@ -206,7 +207,7 @@ function BootTracePanel({ trace, loading }: { trace: StartupBootTrace | null; lo
                     }}
                     labelStyle={{ color: '#e4e4e7' }}
                     itemStyle={{ color: '#a1a1aa' }}
-                    formatter={(value: number) => [formatMs(value), '']}
+                    formatter={(value: unknown) => [formatMs(value as number), '']}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -287,13 +288,27 @@ export function StartupPage() {
   }, [loadItems, loadBootTrace])
 
   const handleToggle = async (item: StartupItem, enabled: boolean) => {
+    const startTime = Date.now()
     store.getState().updateItem(item.id, { enabled })
     try {
       const success = await window.dustforge.startupToggle(item.name, item.location, item.command, item.source, enabled)
       if (!success) {
         store.getState().updateItem(item.id, { enabled: !enabled })
         store.getState().setError(`Failed to ${enabled ? 'enable' : 'disable'} ${item.displayName}. This may require administrator privileges.`)
+        return
       }
+      await useHistoryStore.getState().addEntry({
+        id: Date.now().toString(),
+        type: 'startup',
+        timestamp: new Date().toISOString(),
+        duration: Date.now() - startTime,
+        totalItemsFound: 1,
+        totalItemsCleaned: 1,
+        totalItemsSkipped: 0,
+        totalSpaceSaved: 0,
+        categories: [{ name: enabled ? 'Enabled' : 'Disabled', itemsFound: 1, itemsCleaned: 1, spaceSaved: 0 }],
+        errorCount: 0
+      })
     } catch {
       store.getState().updateItem(item.id, { enabled: !enabled })
       store.getState().setError(`Failed to ${enabled ? 'enable' : 'disable'} ${item.displayName}. This may require administrator privileges.`)
@@ -301,10 +316,23 @@ export function StartupPage() {
   }
 
   const handleDelete = async (item: StartupItem) => {
+    const startTime = Date.now()
     try {
       const success = await window.dustforge.startupDelete(item.name, item.source === 'startup-folder' ? item.command : item.location, item.source)
       if (success) {
         store.getState().removeItem(item.id)
+        await useHistoryStore.getState().addEntry({
+          id: Date.now().toString(),
+          type: 'startup',
+          timestamp: new Date().toISOString(),
+          duration: Date.now() - startTime,
+          totalItemsFound: 1,
+          totalItemsCleaned: 1,
+          totalItemsSkipped: 0,
+          totalSpaceSaved: 0,
+          categories: [{ name: 'Removed', itemsFound: 1, itemsCleaned: 1, spaceSaved: 0 }],
+          errorCount: 0
+        })
       } else {
         store.getState().setError(`Failed to remove ${item.displayName}. This may require administrator privileges.`)
       }

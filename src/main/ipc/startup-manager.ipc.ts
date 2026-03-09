@@ -273,8 +273,9 @@ const ALLOWED_STARTUP_LOCATIONS = new Set([
   'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run',
 ])
 
-export function registerStartupManagerIpc(): void {
-  ipcMain.handle(IPC.STARTUP_LIST, async (): Promise<StartupItem[]> => {
+// ── Exported core logic ──
+
+export async function listStartupItems(): Promise<StartupItem[]> {
     const items: StartupItem[] = []
 
     // Read HKCU Run
@@ -348,15 +349,11 @@ export function registerStartupManagerIpc(): void {
     }
 
     return items
-  })
+}
 
-  ipcMain.handle(IPC.STARTUP_BOOT_TRACE, async (): Promise<StartupBootTrace> => {
-    return getBootTrace()
-  })
-
-  ipcMain.handle(
-    IPC.STARTUP_TOGGLE,
-    async (_event, name: string, location: string, command: string, source: StartupItem['source'], enabled: boolean): Promise<boolean> => {
+export async function toggleStartupItem(
+  name: string, location: string, command: string, source: StartupItem['source'], enabled: boolean
+): Promise<boolean> {
       if (source === 'task-scheduler') {
         if (!isSafeTaskName(name)) return false
         // Enable/disable scheduled tasks via PowerShell
@@ -406,12 +403,11 @@ export function registerStartupManagerIpc(): void {
         })
       }
       return true
-    }
-  )
+}
 
-  ipcMain.handle(
-    IPC.STARTUP_DELETE,
-    async (_event, name: string, location: string, source: StartupItem['source']): Promise<boolean> => {
+export async function deleteStartupItem(
+  name: string, location: string, source: StartupItem['source']
+): Promise<boolean> {
       let deletedSource = false
 
       try {
@@ -464,6 +460,24 @@ export function registerStartupManagerIpc(): void {
       } catch { /* ignore */ }
 
       return deletedSource
+}
+
+export function registerStartupManagerIpc(): void {
+  ipcMain.handle(IPC.STARTUP_LIST, () => listStartupItems())
+
+  ipcMain.handle(IPC.STARTUP_BOOT_TRACE, () => getBootTrace())
+
+  ipcMain.handle(
+    IPC.STARTUP_TOGGLE,
+    async (_event, name: string, location: string, command: string, source: StartupItem['source'], enabled: boolean) => {
+      return toggleStartupItem(name, location, command, source, enabled)
+    }
+  )
+
+  ipcMain.handle(
+    IPC.STARTUP_DELETE,
+    async (_event, name: string, location: string, source: StartupItem['source']) => {
+      return deleteStartupItem(name, location, source)
     }
   )
 }
@@ -500,7 +514,7 @@ function extractPublisher(command: string | undefined): string {
   return 'Unknown'
 }
 
-async function getBootTrace(): Promise<StartupBootTrace> {
+export async function getBootTrace(): Promise<StartupBootTrace> {
   const empty: StartupBootTrace = {
     totalBootMs: 0,
     lastBootDate: null,

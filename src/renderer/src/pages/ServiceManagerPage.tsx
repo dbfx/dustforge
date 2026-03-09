@@ -18,6 +18,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { useServiceStore } from '@/stores/service-store'
+import { useHistoryStore } from '@/stores/history-store'
 import type { ServiceScanProgress, WindowsService, ServiceCategory } from '@shared/types'
 
 const SAFETY_COLORS = {
@@ -114,6 +115,7 @@ export function ServiceManagerPage() {
     store.setApplyResult(null)
     store.setError(null)
 
+    const startTime = Date.now()
     const selected = store.services.filter((s) => s.selected)
     const changes = selected.map((s) => ({
       name: s.name,
@@ -127,6 +129,29 @@ export function ServiceManagerPage() {
       // Re-scan to refresh state
       const scanResult = await window.dustforge.serviceScan()
       useServiceStore.getState().setServices(scanResult.services)
+
+      // Log to history
+      const byCat: Record<string, { found: number; disabled: number }> = {}
+      for (const svc of selected) {
+        const cat = svc.category
+        if (!byCat[cat]) byCat[cat] = { found: 0, disabled: 0 }
+        byCat[cat].found++
+        if (!result.errors.some(e => e.name === svc.name)) byCat[cat].disabled++
+      }
+      await useHistoryStore.getState().addEntry({
+        id: Date.now().toString(),
+        type: 'services',
+        timestamp: new Date().toISOString(),
+        duration: Date.now() - startTime,
+        totalItemsFound: selected.length,
+        totalItemsCleaned: result.succeeded,
+        totalItemsSkipped: 0,
+        totalSpaceSaved: 0,
+        categories: Object.entries(byCat).map(([name, d]) => ({
+          name, itemsFound: d.found, itemsCleaned: d.disabled, spaceSaved: 0
+        })),
+        errorCount: result.failed
+      })
     } catch (err) {
       useServiceStore
         .getState()

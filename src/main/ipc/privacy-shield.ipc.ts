@@ -485,18 +485,20 @@ const SETTINGS: SettingDef[] = [
   }
 ]
 
-// ─── IPC handlers ────────────────────────────────────────────
+// ─── Exported core logic ─────────────────────────────────────
 
-export function registerPrivacyShieldIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.PRIVACY_SCAN, async (): Promise<PrivacyShieldState> => {
+export { SETTINGS as PRIVACY_SETTINGS }
+
+export async function scanPrivacy(
+  onProgress?: (data: { current: number; total: number; currentLabel: string; category: string }) => void
+): Promise<PrivacyShieldState> {
     const settings: PrivacySetting[] = []
     const total = SETTINGS.length
 
     for (let i = 0; i < SETTINGS.length; i++) {
       const def = SETTINGS[i]
 
-      // Send progress to renderer (safe — won't throw if window closed)
-      sendProgress(getWindow(), {
+      onProgress?.({
         current: i + 1,
         total,
         currentLabel: def.label,
@@ -524,9 +526,9 @@ export function registerPrivacyShieldIpc(getWindow: WindowGetter): void {
     const score = total > 0 ? Math.round((protectedCount / total) * 100) : 0
 
     return { settings, score, total, protected: protectedCount }
-  })
+}
 
-  ipcMain.handle(IPC.PRIVACY_APPLY, async (_event, ids: string[]): Promise<PrivacyApplyResult> => {
+export async function applyPrivacySettings(ids: string[]): Promise<PrivacyApplyResult> {
     let succeeded = 0
     let failed = 0
     const errors: PrivacyApplyResult['errors'] = []
@@ -549,5 +551,16 @@ export function registerPrivacyShieldIpc(getWindow: WindowGetter): void {
     }
 
     return { succeeded, failed, errors }
+}
+
+// ─── IPC handlers ────────────────────────────────────────────
+
+export function registerPrivacyShieldIpc(getWindow: WindowGetter): void {
+  ipcMain.handle(IPC.PRIVACY_SCAN, () => scanPrivacy((data) => {
+    sendProgress(getWindow(), data)
+  }))
+
+  ipcMain.handle(IPC.PRIVACY_APPLY, async (_event, ids: string[]) => {
+    return applyPrivacySettings(ids)
   })
 }

@@ -69,6 +69,7 @@ export function NetworkCleanupPage() {
     setShowConfirm(false)
     const store = useNetworkStore.getState()
     store.setStatus('cleaning')
+    const cleanStart = Date.now()
     try {
       const { selectedIds: currentSelectedIds, items: currentItems } = useNetworkStore.getState()
       const result = await window.dustforge.networkClean([...currentSelectedIds])
@@ -89,7 +90,7 @@ export function NetworkCleanupPage() {
         id: Date.now().toString(),
         type: 'network',
         timestamp: new Date().toISOString(),
-        duration: Date.now() - scanStartRef.current,
+        duration: Date.now() - cleanStart,
         totalItemsFound: currentItems.length,
         totalItemsCleaned: result.cleaned,
         totalItemsSkipped: result.failed,
@@ -343,7 +344,7 @@ export function NetworkCleanupPage() {
         onConfirm={handleClean}
         onCancel={() => setShowConfirm(false)}
         title="Clean Network Items"
-        description={`This will clean ${selectedIds.size} network item${selectedIds.size === 1 ? '' : 's'}. DNS and ARP caches will rebuild automatically. Wi-Fi profiles and network history will be permanently removed.`}
+        description={`This will clean ${selectedIds.size} network item${selectedIds.size === 1 ? '' : 's'}. DNS and ARP caches will rebuild automatically.${selectedIds.size > 0 && items.some((i) => i.type === 'wifi-profile' && selectedIds.has(i.id)) ? ' Warning: removing Wi-Fi profiles will delete saved passwords — you will need to re-enter them to reconnect.' : ''} Network history entries will be permanently removed.`}
         confirmLabel="Clean Now"
         variant="warning"
       />

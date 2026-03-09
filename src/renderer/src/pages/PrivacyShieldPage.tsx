@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { cn } from '@/lib/utils'
 import { usePrivacyStore } from '@/stores/privacy-store'
+import { useHistoryStore } from '@/stores/history-store'
 import type { PrivacySetting } from '@shared/types'
 import type { LucideIcon } from 'lucide-react'
 
@@ -168,6 +169,7 @@ export function PrivacyShieldPage() {
     const unprotectedIds = store.state.settings.filter(s => !s.enabled).map(s => s.id)
     if (unprotectedIds.length === 0) return
 
+    const startTime = Date.now()
     store.setStatus('applying')
     store.setApplyResult(null)
     try {
@@ -177,6 +179,38 @@ export function PrivacyShieldPage() {
       const updated = await window.dustforge.privacyScan()
       usePrivacyStore.getState().setState(updated)
       usePrivacyStore.getState().setStatus('done')
+
+      // Log to history
+      const catMap: Record<string, { found: number; applied: number }> = {}
+      for (const id of unprotectedIds) {
+        const setting = store.state!.settings.find(s => s.id === id)
+        if (setting) {
+          if (!catMap[setting.category]) catMap[setting.category] = { found: 0, applied: 0 }
+          catMap[setting.category].found++
+        }
+      }
+      // Mark succeeded ones
+      const failedIds = new Set(result.errors.map(e => e.id))
+      for (const id of unprotectedIds) {
+        const setting = store.state!.settings.find(s => s.id === id)
+        if (setting && !failedIds.has(id)) {
+          catMap[setting.category].applied++
+        }
+      }
+      await useHistoryStore.getState().addEntry({
+        id: Date.now().toString(),
+        type: 'privacy',
+        timestamp: new Date().toISOString(),
+        duration: Date.now() - startTime,
+        totalItemsFound: unprotectedIds.length,
+        totalItemsCleaned: result.succeeded,
+        totalItemsSkipped: 0,
+        totalSpaceSaved: 0,
+        categories: Object.entries(catMap).map(([name, d]) => ({
+          name, itemsFound: d.found, itemsCleaned: d.applied, spaceSaved: 0
+        })),
+        errorCount: result.failed
+      })
     } catch (err) {
       console.error('Privacy apply failed:', err)
       usePrivacyStore.getState().setApplyResult({ succeeded: 0, failed: unprotectedIds.length, errors: [{ id: '', label: 'All settings', reason: 'IPC call failed — try running as administrator' }] })
@@ -190,6 +224,7 @@ export function PrivacyShieldPage() {
     const ids = store.state.settings.filter(s => s.category === categoryId && !s.enabled).map(s => s.id)
     if (ids.length === 0) return
 
+    const startTime = Date.now()
     store.setStatus('applying')
     store.setApplyResult(null)
     try {
@@ -198,6 +233,19 @@ export function PrivacyShieldPage() {
       const updated = await window.dustforge.privacyScan()
       usePrivacyStore.getState().setState(updated)
       usePrivacyStore.getState().setStatus('done')
+
+      await useHistoryStore.getState().addEntry({
+        id: Date.now().toString(),
+        type: 'privacy',
+        timestamp: new Date().toISOString(),
+        duration: Date.now() - startTime,
+        totalItemsFound: ids.length,
+        totalItemsCleaned: result.succeeded,
+        totalItemsSkipped: 0,
+        totalSpaceSaved: 0,
+        categories: [{ name: categoryId, itemsFound: ids.length, itemsCleaned: result.succeeded, spaceSaved: 0 }],
+        errorCount: result.failed
+      })
     } catch (err) {
       console.error('Privacy apply failed:', err)
       usePrivacyStore.getState().setApplyResult({ succeeded: 0, failed: ids.length, errors: [{ id: '', label: categoryId, reason: 'IPC call failed — try running as administrator' }] })

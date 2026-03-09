@@ -1,4 +1,5 @@
 import { Sidebar } from './Sidebar'
+import { AdminBanner } from './AdminBanner'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -9,6 +10,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="drag-region h-8 shrink-0" />
         {/* Window controls float in top right */}
         <WindowControls />
+        <AdminBanner />
         <main className="flex-1 overflow-y-auto px-10 pb-10 pt-2">
           {children}
         </main>
