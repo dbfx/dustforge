@@ -18,4 +18,6 @@ export function registerPerfMonitorIpc(): void {
   ipcMain.handle(IPC.PERF_KILL_PROCESS, (_event, pid: number) => {
     return service.killProcess(pid)
   })
+
+  ipcMain.handle(IPC.PERF_DISK_HEALTH, () => service.getDiskHealth())
 }

@@ -8,6 +8,7 @@ import type {
   PerfProcess,
   PerfProcessList,
   PerfKillResult,
+  DiskSmartInfo,
   StartupItem
 } from '../../shared/types'
 
@@ -108,6 +109,82 @@ export class PerfMonitorService {
         }
       }
     }
+  }
+
+  async getDiskHealth(): Promise<DiskSmartInfo[]> {
+    try {
+      const disks = await si.diskLayout()
+      const reliabilityMap = await this.getStorageReliability()
+
+      return disks.map((d) => {
+        const smartStatus =
+          d.smartStatus === 'Ok'
+            ? 'Healthy'
+            : d.smartStatus === 'Caution'
+              ? 'Caution'
+              : d.smartStatus === 'Bad'
+                ? 'Bad'
+                : 'Unknown'
+
+        let diskType: DiskSmartInfo['type'] = 'Unknown'
+        if (d.interfaceType === 'NVMe') diskType = 'NVMe'
+        else if (d.type === 'SSD') diskType = 'SSD'
+        else if (d.type === 'HD') diskType = 'HDD'
+
+        // Match reliability data by device index (e.g. "\\.\PHYSICALDRIVE0" → "0")
+        const deviceIndex = d.device.replace(/\D/g, '')
+        const rel = reliabilityMap.get(deviceIndex)
+
+        return {
+          device: d.device,
+          model: d.name,
+          type: diskType,
+          sizeBytes: d.size,
+          temperature: rel?.temperature ?? d.temperature ?? null,
+          healthStatus: smartStatus as DiskSmartInfo['healthStatus'],
+          powerOnHours: rel?.powerOnHours ?? null,
+          remainingLife: rel?.wear !== null && rel?.wear !== undefined ? 100 - rel.wear : null,
+          readErrors: rel?.readErrors ?? null,
+          writeErrors: rel?.writeErrors ?? null,
+          reallocatedSectors: null,
+          smartAttributes: []
+        }
+      })
+    } catch {
+      return []
+    }
+  }
+
+  private async getStorageReliability(): Promise<
+    Map<string, { temperature: number | null; powerOnHours: number | null; wear: number | null; readErrors: number | null; writeErrors: number | null }>
+  > {
+    const map = new Map<string, { temperature: number | null; powerOnHours: number | null; wear: number | null; readErrors: number | null; writeErrors: number | null }>()
+
+    try {
+      const script = 'Get-PhysicalDisk | ForEach-Object { $disk = $_; $rel = $_ | Get-StorageReliabilityCounter; [PSCustomObject]@{ DeviceId = $disk.DeviceId; Temperature = $rel.Temperature; PowerOnHours = $rel.PowerOnHours; ReadErrorsTotal = $rel.ReadErrorsTotal; WriteErrorsTotal = $rel.WriteErrorsTotal; Wear = $rel.Wear } } | ConvertTo-Json -Compress'
+      const encoded = Buffer.from(script, 'utf16le').toString('base64')
+
+      const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-EncodedCommand', encoded], {
+        timeout: 10000
+      })
+
+      const parsed = JSON.parse(stdout.trim())
+      const entries = Array.isArray(parsed) ? parsed : [parsed]
+
+      for (const entry of entries) {
+        map.set(String(entry.DeviceId), {
+          temperature: entry.Temperature ?? null,
+          powerOnHours: entry.PowerOnHours ?? null,
+          wear: entry.Wear ?? null,
+          readErrors: entry.ReadErrorsTotal ?? null,
+          writeErrors: entry.WriteErrorsTotal ?? null
+        })
+      }
+    } catch {
+      // Requires admin — return empty map, fall back to basic data
+    }
+
+    return map
   }
 
   private async collectSnapshot(): Promise<void> {

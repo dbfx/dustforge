@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { PerfSystemInfo, PerfSnapshot, PerfProcess } from '@shared/types'
+import type { PerfSystemInfo, PerfSnapshot, PerfProcess, DiskSmartInfo } from '@shared/types'
 
 const MAX_HISTORY = 900 // 15 minutes at 1s intervals
 
@@ -14,6 +14,7 @@ interface PerfState {
   processFilter: string
   processSortColumn: 'cpuPercent' | 'memBytes' | 'name' | 'pid'
   processSortDir: 'asc' | 'desc'
+  diskHealth: DiskSmartInfo[]
 
   setSystemInfo: (info: PerfSystemInfo) => void
   pushSnapshot: (snap: PerfSnapshot) => void
@@ -22,6 +23,7 @@ interface PerfState {
   setTimeRange: (range: '60s' | '5m' | '15m') => void
   setProcessFilter: (filter: string) => void
   setProcessSort: (column: PerfState['processSortColumn']) => void
+  setDiskHealth: (disks: DiskSmartInfo[]) => void
   reset: () => void
 }
 
@@ -36,6 +38,7 @@ export const usePerfStore = create<PerfState>((set, get) => ({
   processFilter: '',
   processSortColumn: 'cpuPercent',
   processSortDir: 'desc',
+  diskHealth: [],
 
   setSystemInfo: (info) => set({ systemInfo: info }),
 
@@ -56,6 +59,8 @@ export const usePerfStore = create<PerfState>((set, get) => ({
 
   setProcessFilter: (filter) => set({ processFilter: filter }),
 
+  setDiskHealth: (disks) => set({ diskHealth: disks }),
+
   setProcessSort: (column) => {
     const { processSortColumn, processSortDir } = get()
     if (processSortColumn === column) {
@@ -72,6 +77,7 @@ export const usePerfStore = create<PerfState>((set, get) => ({
       processList: [],
       processCount: 0,
       isMonitoring: false,
-      processFilter: ''
+      processFilter: '',
+      diskHealth: []
     })
 }))

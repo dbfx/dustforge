@@ -5,6 +5,7 @@ import { GaugeCard } from '@/components/perf/GaugeCard'
 import { SystemInfoHeader } from '@/components/perf/SystemInfoHeader'
 import { TimeSeriesChart } from '@/components/perf/TimeSeriesChart'
 import { AlertBanner } from '@/components/perf/AlertBanner'
+import { DiskHealthPanel } from '@/components/perf/DiskHealthPanel'
 import { ProcessTable } from '@/components/perf/ProcessTable'
 import { usePerfStore } from '@/stores/perf-store'
 import { formatBytes, formatSpeed } from '@/lib/utils'
@@ -19,6 +20,8 @@ export function PerformanceMonitorPage() {
   const setSystemInfo = usePerfStore((s) => s.setSystemInfo)
   const pushSnapshot = usePerfStore((s) => s.pushSnapshot)
   const setProcessList = usePerfStore((s) => s.setProcessList)
+  const diskHealth = usePerfStore((s) => s.diskHealth)
+  const setDiskHealth = usePerfStore((s) => s.setDiskHealth)
   const setMonitoring = usePerfStore((s) => s.setMonitoring)
   const setTimeRange = usePerfStore((s) => s.setTimeRange)
   const reset = usePerfStore((s) => s.reset)
@@ -32,8 +35,12 @@ export function PerformanceMonitorPage() {
 
     const start = async () => {
       try {
-        const info = await window.dustforge.perfGetSystemInfo()
+        const [info, disks] = await Promise.all([
+          window.dustforge.perfGetSystemInfo(),
+          window.dustforge.perfGetDiskHealth()
+        ])
         setSystemInfo(info)
+        setDiskHealth(disks)
 
         snapshotUnsub = window.dustforge.onPerfSnapshot((data) => {
           pushSnapshot(data)
@@ -194,6 +201,9 @@ export function PerformanceMonitorPage() {
           color="#22c55e"
         />
       </div>
+
+      {/* Disk Health */}
+      <DiskHealthPanel disks={diskHealth} />
 
       {/* Process Table */}
       <ProcessTable />
