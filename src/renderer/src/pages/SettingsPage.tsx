@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Github, Bug, ExternalLink, Plus, X, FolderOpen, Clock, RefreshCw, Download, CheckCircle, AlertCircle, Loader } from 'lucide-react'
-import type { UpdateStatus } from '@shared/types'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useAppUpdateStore } from '@/stores/app-update-store'
 import logoSrc from '@/assets/logo.png'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -28,15 +28,9 @@ export function SettingsPage() {
   const { settings, updateSettings, setSettings } = useSettingsStore()
   const [newExclusion, setNewExclusion] = useState('')
   const [nextScan, setNextScan] = useState<string | null>(null)
-  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
+  const updateStatus = useAppUpdateStore((s) => s.status)
 
   useEffect(() => { window.dustforge?.settingsGet?.().then(setSettings).catch(() => {}) }, [])
-
-  useEffect(() => {
-    window.dustforge?.updaterGetStatus?.().then(setUpdateStatus).catch(() => {})
-    const unsub = window.dustforge?.onUpdaterStatus?.((s) => setUpdateStatus(s))
-    return () => unsub?.()
-  }, [])
 
   // Fetch next scan time whenever schedule settings change
   useEffect(() => {

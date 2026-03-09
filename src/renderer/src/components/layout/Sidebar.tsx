@@ -20,6 +20,7 @@ import {
 import { cn } from '@/lib/utils'
 import type { LucideIcon } from 'lucide-react'
 import logoSrc from '@/assets/logo.png'
+import { useAppUpdateStore } from '@/stores/app-update-store'
 
 interface NavItemDef {
   icon: LucideIcon
@@ -110,16 +111,25 @@ export function Sidebar() {
       </nav>
 
       {/* Bottom */}
-      <div className="px-3 pb-4 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-        {bottomNavItems.map((item) => (
-          <NavItem key={item.path} item={item} />
-        ))}
-      </div>
+      <BottomNav />
     </div>
   )
 }
 
-function NavItem({ item }: { item: NavItemDef }) {
+function BottomNav() {
+  const updateState = useAppUpdateStore((s) => s.status.state)
+  const showBadge = updateState === 'available' || updateState === 'downloaded'
+
+  return (
+    <div className="px-3 pb-4 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+      {bottomNavItems.map((item) => (
+        <NavItem key={item.path} item={item} badge={showBadge} />
+      ))}
+    </div>
+  )
+}
+
+function NavItem({ item, badge }: { item: NavItemDef; badge?: boolean }) {
   const location = useLocation()
   const navigate = useNavigate()
   const isActive = location.pathname === item.path
@@ -149,6 +159,14 @@ function NavItem({ item }: { item: NavItemDef }) {
         strokeWidth={isActive ? 2.2 : 1.8}
       />
       <span>{item.label}</span>
+      {badge && (
+        <span
+          className="ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none"
+          style={{ background: '#f59e0b', color: '#09090b' }}
+        >
+          1
+        </span>
+      )}
     </button>
   )
 }

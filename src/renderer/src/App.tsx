@@ -22,6 +22,7 @@ import { SoftwareUpdaterPage } from './pages/SoftwareUpdaterPage'
 import { Onboarding } from './components/Onboarding'
 import { useStatsStore } from './stores/stats-store'
 import { useHistoryStore } from './stores/history-store'
+import { useAppUpdateStore } from './stores/app-update-store'
 
 export function App() {
   const loadHistory = useHistoryStore((s) => s.load)
@@ -51,6 +52,13 @@ export function App() {
   }, [historyLoaded, recomputeStats])
 
   useScheduledScan()
+
+  // Initialize app update checker on mount
+  const initAppUpdate = useAppUpdateStore((s) => s.init)
+  useEffect(() => {
+    const cleanup = initAppUpdate()
+    return cleanup
+  }, [initAppUpdate])
 
   if (!onboardingChecked) return null
 
