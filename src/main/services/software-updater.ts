@@ -275,32 +275,69 @@ export async function runUpdates(
     })
 
     try {
-      await execFileAsync(
-        'winget',
-        [
-          'upgrade',
-          appId,
-          '--accept-source-agreements',
-          '--accept-package-agreements',
-          '--disable-interactivity',
-        ],
-        { timeout: 5 * 60 * 1000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
-      )
-      succeeded++
-      onProgress({
-        phase: 'updating',
-        current: i + 1,
-        total: appIds.length,
-        currentApp: appId,
-        percent: Math.round(((i + 1) / appIds.length) * 100),
-        status: 'done',
-      })
+      let upgradeStdout = ''
+      try {
+        const result = await execFileAsync(
+          'winget',
+          [
+            'upgrade',
+            appId,
+            '--accept-source-agreements',
+            '--accept-package-agreements',
+            '--disable-interactivity',
+            '--include-unknown',
+          ],
+          { timeout: 5 * 60 * 1000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
+        )
+        upgradeStdout = result.stdout
+      } catch (err: any) {
+        // winget often exits non-zero even on success — check stdout for result
+        if (err?.stdout) {
+          upgradeStdout = err.stdout
+        } else {
+          throw err
+        }
+      }
+
+      // Check if the output indicates success despite non-zero exit code
+      const output = cleanOutput(upgradeStdout).toLowerCase()
+      const wasSuccessful =
+        output.includes('successfully installed') ||
+        output.includes('successfully upgraded') ||
+        output.includes('installer succeeded') ||
+        output.includes('no available upgrade')
+
+      // If we got stdout without throwing, and it doesn't contain clear failure
+      // indicators, treat it as success (winget exit codes are unreliable)
+      const hasClearFailure =
+        output.includes('installer failed') ||
+        output.includes('no package found') ||
+        output.includes('no applicable update') ||
+        output.includes('another version of this application') ||
+        output.includes('installer aborted')
+
+      if (wasSuccessful || !hasClearFailure) {
+        succeeded++
+        onProgress({
+          phase: 'updating',
+          current: i + 1,
+          total: appIds.length,
+          currentApp: appId,
+          percent: Math.round(((i + 1) / appIds.length) * 100),
+          status: 'done',
+        })
+      } else {
+        throw new Error(upgradeStdout.trim().split('\n').pop() || 'Upgrade failed')
+      }
     } catch (err) {
       failed++
+      const rawMsg = err instanceof Error ? err.message : 'Unknown error'
+      // Extract a cleaner reason from verbose winget output
+      const lastLine = cleanOutput(rawMsg).trim().split('\n').pop() || rawMsg
       errors.push({
         appId,
         name: appId,
-        reason: err instanceof Error ? err.message : 'Unknown error',
+        reason: lastLine.length > 200 ? lastLine.slice(0, 200) + '...' : lastLine,
       })
       onProgress({
         phase: 'updating',
