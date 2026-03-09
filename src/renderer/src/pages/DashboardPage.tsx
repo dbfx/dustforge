@@ -14,7 +14,9 @@ import {
   Wifi,
   Loader2,
   Cpu,
-  Check
+  Check,
+  Download,
+  Server
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -24,6 +26,9 @@ import { formatBytes, formatDate, formatNumber } from '@/lib/utils'
 import { useStatsStore } from '@/stores/stats-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useScanStore } from '@/stores/scan-store'
+import { useUpdaterStore } from '@/stores/updater-store'
+import { useServiceStore } from '@/stores/service-store'
+import { useStartupStore } from '@/stores/startup-store'
 import type { DriveInfo, ActivityEntry, ScanResult, CleanResult } from '@shared/types'
 import { CleanerType } from '@shared/enums'
 
@@ -50,6 +55,9 @@ export function DashboardPage() {
   const recomputeStats = useStatsStore((s) => s.recompute)
   const historyStore = useHistoryStore()
   const scanStore = useScanStore()
+  const updaterHasChecked = useUpdaterStore((s) => s.hasChecked)
+  const serviceHasScanned = useServiceStore((s) => s.hasScanned)
+  const startupItems = useStartupStore((s) => s.items)
   const cleanStartRef = useRef<number>(0)
   const navigate = useNavigate()
   const [drives, setDrives] = useState<DriveInfo[]>([])
@@ -71,51 +79,64 @@ export function DashboardPage() {
     const recentTypes = new Set(recentEntries.map((e) => e.type))
     const allTypes = new Set(entries.map((e) => e.type))
 
-    const tools = [
-      { key: 'cleaner', label: 'Cleaner', icon: Search, color: '#f59e0b' },
-      { key: 'registry', label: 'Registry', icon: Database, color: '#3b82f6' },
-      { key: 'network', label: 'Network', icon: Wifi, color: '#22c55e' },
-      { key: 'drivers', label: 'Drivers', icon: Cpu, color: '#a855f7' }
-    ] as const
+    // History-based tools
+    const historyTools = [
+      { key: 'cleaner' as const, label: 'Cleaner', icon: Search, color: '#f59e0b' },
+      { key: 'registry' as const, label: 'Registry', icon: Database, color: '#3b82f6' },
+      { key: 'drivers' as const, label: 'Drivers', icon: Cpu, color: '#a855f7' }
+    ]
 
-    return tools.map((t) => ({
+    const historyResults = historyTools.map((t) => ({
       ...t,
       usedRecently: recentTypes.has(t.key),
       usedEver: allTypes.has(t.key)
     }))
+
+    // Session-based tools (tracked by whether they've been run this session)
+    const sessionTools = [
+      { key: 'updater', label: 'Updater', icon: Download, color: '#06b6d4', active: updaterHasChecked },
+      { key: 'services', label: 'Services', icon: Server, color: '#ec4899', active: serviceHasScanned },
+      { key: 'startup', label: 'Startup', icon: Zap, color: '#22c55e', active: startupItems.length > 0 }
+    ]
+
+    const sessionResults = sessionTools.map((t) => ({
+      key: t.key,
+      label: t.label,
+      icon: t.icon,
+      color: t.color,
+      usedRecently: t.active,
+      usedEver: t.active
+    }))
+
+    return [...historyResults, ...sessionResults]
   })()
 
   const healthScore = (() => {
-    let score = 100
+    // Health is primarily driven by tool coverage shown in the icons
+    const totalTools = toolCoverage.length
+    const doneTools = toolCoverage.filter((t) => t.usedRecently).length
 
-    // Penalize if no scans have ever been run
-    if (!stats.lastScanDate) return 50
+    // Base score from tool coverage (0-60 points)
+    let score = Math.round((doneTools / totalTools) * 60)
 
-    // Recency penalty: lose up to 25 points as scan ages (stale after 7 days)
-    const daysSinceScan = (Date.now() - new Date(stats.lastScanDate).getTime()) / (1000 * 60 * 60 * 24)
-    score -= Math.min(25, Math.round(daysSinceScan * (25 / 7)))
-
-    // Drive space penalty: lose up to 25 points based on worst drive usage
+    // Drive space penalty: lose up to 20 points based on worst drive usage
     if (drives.length > 0) {
       const worstUsage = Math.max(...drives.map((d) => d.usedSpace / d.totalSize))
       if (worstUsage > 0.7) {
-        score -= Math.min(25, Math.round((worstUsage - 0.7) / 0.3 * 25))
+        score -= Math.min(20, Math.round((worstUsage - 0.7) / 0.3 * 20))
       }
     }
 
-    // Tool coverage bonus: up to 20 points for using all tools recently
-    const recentToolCount = toolCoverage.filter((t) => t.usedRecently).length
-    score += Math.min(20, recentToolCount * 5)
+    // Recency penalty: lose up to 20 points as last scan ages (stale after 7 days)
+    if (stats.lastScanDate) {
+      const daysSinceScan = (Date.now() - new Date(stats.lastScanDate).getTime()) / (1000 * 60 * 60 * 24)
+      score -= Math.min(20, Math.round(daysSinceScan * (20 / 7)))
+    } else {
+      score -= 10
+    }
 
-    // Activity bonus: up to 10 points for recent cleaning activity (past 7 days)
-    const recentCleans = stats.recentActivity.filter((a) => {
-      const age = Date.now() - new Date(a.timestamp).getTime()
-      return age < 7 * 24 * 60 * 60 * 1000
-    }).length
-    score += Math.min(10, recentCleans * 3)
-
-    // Scan count bonus: up to 10 points for regular usage
-    score += Math.min(10, stats.totalScans * 2)
+    // Base bonus for having run at least one scan ever
+    if (stats.lastScanDate) score += 40
 
     return Math.max(0, Math.min(100, score))
   })()

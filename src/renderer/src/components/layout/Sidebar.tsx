@@ -21,6 +21,8 @@ import { cn } from '@/lib/utils'
 import type { LucideIcon } from 'lucide-react'
 import logoSrc from '@/assets/logo.png'
 import { useAppUpdateStore } from '@/stores/app-update-store'
+import { useUpdaterStore } from '@/stores/updater-store'
+import { useDriverStore } from '@/stores/driver-store'
 
 interface NavItemDef {
   icon: LucideIcon
@@ -72,7 +74,20 @@ const bottomNavItems: NavItemDef[] = [
   { icon: Settings, label: 'Settings', path: '/settings' }
 ]
 
+// Map nav paths to badge counts from stores
+function useBadgeCounts(): Record<string, number> {
+  const updaterApps = useUpdaterStore((s) => s.apps)
+  const driverUpdates = useDriverStore((s) => s.updates)
+
+  return {
+    '/updater': updaterApps.length,
+    '/drivers': driverUpdates.length
+  }
+}
+
 export function Sidebar() {
+  const badgeCounts = useBadgeCounts()
+
   return (
     <div
       className="flex h-full w-[220px] shrink-0 flex-col"
@@ -103,7 +118,7 @@ export function Sidebar() {
             )}
             <div className="space-y-0.5">
               {group.items.map((item) => (
-                <NavItem key={item.path} item={item} />
+                <NavItem key={item.path} item={item} badgeCount={badgeCounts[item.path]} />
               ))}
             </div>
           </div>
@@ -129,7 +144,7 @@ function BottomNav() {
   )
 }
 
-function NavItem({ item, badge }: { item: NavItemDef; badge?: boolean }) {
+function NavItem({ item, badge, badgeCount }: { item: NavItemDef; badge?: boolean; badgeCount?: number }) {
   const location = useLocation()
   const navigate = useNavigate()
   const isActive = location.pathname === item.path
@@ -159,12 +174,12 @@ function NavItem({ item, badge }: { item: NavItemDef; badge?: boolean }) {
         strokeWidth={isActive ? 2.2 : 1.8}
       />
       <span>{item.label}</span>
-      {badge && (
+      {(badge || (badgeCount != null && badgeCount > 0)) && (
         <span
           className="ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none"
           style={{ background: '#f59e0b', color: '#09090b' }}
         >
-          1
+          {badgeCount ?? 1}
         </span>
       )}
     </button>

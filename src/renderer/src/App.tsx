@@ -23,6 +23,7 @@ import { Onboarding } from './components/Onboarding'
 import { useStatsStore } from './stores/stats-store'
 import { useHistoryStore } from './stores/history-store'
 import { useAppUpdateStore } from './stores/app-update-store'
+import { useBackgroundScans } from './hooks/useBackgroundScans'
 
 export function App() {
   const loadHistory = useHistoryStore((s) => s.load)
@@ -52,6 +53,9 @@ export function App() {
   }, [historyLoaded, recomputeStats])
 
   useScheduledScan()
+
+  // Run software-update & driver-update scans silently in the background
+  useBackgroundScans()
 
   // Initialize app update checker on mount
   const initAppUpdate = useAppUpdateStore((s) => s.init)
