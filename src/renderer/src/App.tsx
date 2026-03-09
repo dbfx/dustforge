@@ -16,6 +16,9 @@ import { PrivacyShieldPage } from './pages/PrivacyShieldPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { DriverManagerPage } from './pages/DriverManagerPage'
 import { PerformanceMonitorPage } from './pages/PerformanceMonitorPage'
+import { UninstallerPage } from './pages/UninstallerPage'
+import { ServiceManagerPage } from './pages/ServiceManagerPage'
+import { SoftwareUpdaterPage } from './pages/SoftwareUpdaterPage'
 import { Onboarding } from './components/Onboarding'
 import { useStatsStore } from './stores/stats-store'
 import { useHistoryStore } from './stores/history-store'
@@ -67,6 +70,9 @@ export function App() {
           <Route path="/privacy" element={<PrivacyShieldPage />} />
           <Route path="/drivers" element={<DriverManagerPage />} />
           <Route path="/performance" element={<PerformanceMonitorPage />} />
+          <Route path="/uninstaller" element={<UninstallerPage />} />
+          <Route path="/services" element={<ServiceManagerPage />} />
+          <Route path="/updater" element={<SoftwareUpdaterPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>

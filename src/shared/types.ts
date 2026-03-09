@@ -354,12 +354,77 @@ export interface PerfKillResult {
   requiresAdmin?: boolean
 }
 
+export interface DiskSmartInfo {
+  device: string
+  model: string
+  type: 'SSD' | 'HDD' | 'NVMe' | 'Unknown'
+  sizeBytes: number
+  temperature: number | null
+  healthStatus: 'Healthy' | 'Caution' | 'Bad' | 'Unknown'
+  powerOnHours: number | null
+  /** SSD/NVMe remaining life percentage (100 = new, 0 = worn out) */
+  remainingLife: number | null
+  readErrors: number | null
+  writeErrors: number | null
+  reallocatedSectors: number | null
+  smartAttributes: SmartAttribute[]
+}
+
+export interface SmartAttribute {
+  id: number
+  name: string
+  value: number
+  worst: number
+  thresh: number
+  raw: number
+}
+
 // ─── Auto-Updater ────────────────────────────────────────────
 export interface UpdateStatus {
   state: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
   version?: string
   progress?: number
   error?: string
+}
+
+// ─── Program Uninstaller ────────────────────────────────────
+export interface InstalledProgram {
+  id: string
+  displayName: string
+  publisher: string
+  displayVersion: string
+  installDate: string
+  estimatedSize: number
+  installLocation: string
+  uninstallString: string
+  quietUninstallString: string
+  displayIcon: string
+  registryKey: string
+  isSystemComponent: boolean
+  isWindowsInstaller: boolean
+  lastUsed: number              // timestamp ms, 0 = unknown/never seen in Prefetch
+}
+
+export interface UninstallerListResult {
+  programs: InstalledProgram[]
+  totalCount: number
+}
+
+export interface UninstallProgress {
+  phase: 'listing' | 'uninstalling' | 'scanning-leftovers' | 'cleaning-leftovers'
+  currentProgram: string
+  progress: number
+  detail: string
+}
+
+export interface UninstallResult {
+  success: boolean
+  programName: string
+  exitCode: number | null
+  error?: string
+  leftoversFound: number
+  leftoversCleaned: number
+  leftoversSize: number
 }
 
 export interface DustForgeSettings {
@@ -380,4 +445,120 @@ export interface DustForgeSettings {
     day: number
     hour: number
   }
+}
+
+// ─── Service Manager ────────────────────────────────────────
+export type ServiceStatus =
+  | 'Running'
+  | 'Stopped'
+  | 'StartPending'
+  | 'StopPending'
+  | 'Paused'
+  | 'Unknown'
+
+export type ServiceStartType =
+  | 'Automatic'
+  | 'AutomaticDelayed'
+  | 'Manual'
+  | 'Disabled'
+  | 'Boot'
+  | 'System'
+
+export type ServiceSafety = 'safe' | 'caution' | 'unsafe'
+
+export type ServiceCategory =
+  | 'telemetry'
+  | 'xbox'
+  | 'print'
+  | 'fax'
+  | 'media'
+  | 'network'
+  | 'bluetooth'
+  | 'remote'
+  | 'hyper-v'
+  | 'developer'
+  | 'misc'
+  | 'core'
+  | 'security'
+  | 'unknown'
+
+export interface WindowsService {
+  name: string
+  displayName: string
+  description: string
+  status: ServiceStatus
+  startType: ServiceStartType
+  safety: ServiceSafety
+  category: ServiceCategory
+  isMicrosoft: boolean
+  dependsOn: string[]
+  dependents: string[]
+  selected: boolean
+  originalStartType: ServiceStartType
+}
+
+export interface ServiceScanResult {
+  services: WindowsService[]
+  totalCount: number
+  runningCount: number
+  disabledCount: number
+  safeToDisableCount: number
+}
+
+export interface ServiceApplyResult {
+  succeeded: number
+  failed: number
+  errors: { name: string; displayName: string; reason: string }[]
+}
+
+export interface ServiceScanProgress {
+  phase: 'enumerating' | 'classifying'
+  current: number
+  total: number
+  currentService: string
+}
+
+// ─── Software Updater ──────────────────────────────────────
+export type UpdateSeverity = 'major' | 'minor' | 'patch' | 'unknown'
+
+export interface UpdatableApp {
+  id: string
+  name: string
+  currentVersion: string
+  availableVersion: string
+  source: string
+  severity: UpdateSeverity
+  selected: boolean
+}
+
+export interface UpToDateApp {
+  id: string
+  name: string
+  version: string
+  source: string
+}
+
+export interface UpdateCheckResult {
+  apps: UpdatableApp[]
+  upToDate: UpToDateApp[]
+  totalCount: number
+  majorCount: number
+  minorCount: number
+  patchCount: number
+  wingetAvailable: boolean
+}
+
+export interface UpdateProgress {
+  phase: 'checking' | 'updating'
+  current: number
+  total: number
+  currentApp: string
+  percent: number
+  status: 'in-progress' | 'done' | 'failed'
+}
+
+export interface UpdateResult {
+  succeeded: number
+  failed: number
+  errors: { appId: string; name: string; reason: string }[]
 }

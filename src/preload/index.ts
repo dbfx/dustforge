@@ -31,7 +31,17 @@ import type {
   PerfSnapshot,
   PerfProcessList,
   PerfKillResult,
-  UpdateStatus
+  DiskSmartInfo,
+  UpdateStatus,
+  ServiceScanResult,
+  ServiceApplyResult,
+  ServiceScanProgress,
+  UninstallerListResult,
+  UninstallProgress,
+  UninstallResult,
+  UpdateCheckResult,
+  UpdateProgress,
+  UpdateResult,
 } from '../shared/types'
 
 const api = {
@@ -185,6 +195,8 @@ const api = {
   perfStopMonitoring: (): Promise<void> => ipcRenderer.invoke(IPC.PERF_STOP_MONITORING),
   perfKillProcess: (pid: number): Promise<PerfKillResult> =>
     ipcRenderer.invoke(IPC.PERF_KILL_PROCESS, pid),
+  perfGetDiskHealth: (): Promise<DiskSmartInfo[]> =>
+    ipcRenderer.invoke(IPC.PERF_DISK_HEALTH),
   onPerfSnapshot: (callback: (data: PerfSnapshot) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: PerfSnapshot) => callback(data)
     ipcRenderer.on(IPC.PERF_SNAPSHOT, handler)
@@ -205,6 +217,39 @@ const api = {
     const handler = (_event: Electron.IpcRendererEvent, data: UpdateStatus) => callback(data)
     ipcRenderer.on(IPC.UPDATER_STATUS, handler)
     return () => ipcRenderer.removeListener(IPC.UPDATER_STATUS, handler)
+  },
+
+  // Service Manager
+  serviceScan: (): Promise<ServiceScanResult> => ipcRenderer.invoke(IPC.SERVICE_SCAN),
+  serviceApply: (
+    changes: { name: string; targetStartType: string }[],
+    force?: boolean
+  ): Promise<ServiceApplyResult> => ipcRenderer.invoke(IPC.SERVICE_APPLY, changes, force),
+  onServiceProgress: (callback: (data: ServiceScanProgress) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: ServiceScanProgress) => callback(data)
+    ipcRenderer.on(IPC.SERVICE_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC.SERVICE_PROGRESS, handler)
+  },
+
+  // Program Uninstaller
+  uninstallerList: (): Promise<UninstallerListResult> => ipcRenderer.invoke(IPC.UNINSTALLER_LIST),
+  uninstallerUninstall: (programId: string): Promise<UninstallResult> =>
+    ipcRenderer.invoke(IPC.UNINSTALLER_UNINSTALL, programId),
+  onUninstallerProgress: (callback: (data: UninstallProgress) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: UninstallProgress) => callback(data)
+    ipcRenderer.on(IPC.UNINSTALLER_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC.UNINSTALLER_PROGRESS, handler)
+  },
+
+  // Software Updater
+  softwareUpdateCheck: (): Promise<UpdateCheckResult> =>
+    ipcRenderer.invoke(IPC.SOFTWARE_UPDATE_CHECK),
+  softwareUpdateRun: (appIds: string[]): Promise<UpdateResult> =>
+    ipcRenderer.invoke(IPC.SOFTWARE_UPDATE_RUN, appIds),
+  onSoftwareUpdateProgress: (callback: (data: UpdateProgress) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: UpdateProgress) => callback(data)
+    ipcRenderer.on(IPC.SOFTWARE_UPDATE_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC.SOFTWARE_UPDATE_PROGRESS, handler)
   },
 
   // Progress events

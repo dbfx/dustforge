@@ -92,6 +92,11 @@ export const IPC = {
   DRIVER_UPDATE_INSTALL: 'driver:update:install',
   DRIVER_UPDATE_PROGRESS: 'driver:update:progress',
 
+  // Program Uninstaller
+  UNINSTALLER_LIST: 'uninstaller:list',
+  UNINSTALLER_UNINSTALL: 'uninstaller:uninstall',
+  UNINSTALLER_PROGRESS: 'uninstaller:progress',
+
   // Onboarding
   ONBOARDING_GET: 'onboarding:get',
   ONBOARDING_SET: 'onboarding:set',
@@ -103,6 +108,7 @@ export const IPC = {
   PERF_SNAPSHOT: 'perf:snapshot',
   PERF_PROCESS_LIST: 'perf:process-list',
   PERF_KILL_PROCESS: 'perf:kill',
+  PERF_DISK_HEALTH: 'perf:disk-health',
 
   // Auto-updater
   UPDATER_CHECK: 'updater:check',
@@ -110,6 +116,16 @@ export const IPC = {
   UPDATER_INSTALL: 'updater:install',
   UPDATER_GET_STATUS: 'updater:get-status',
   UPDATER_STATUS: 'updater:status',
+
+  // Service Manager
+  SERVICE_SCAN: 'service:scan',
+  SERVICE_APPLY: 'service:apply',
+  SERVICE_PROGRESS: 'service:progress',
+
+  // Software Updater
+  SOFTWARE_UPDATE_CHECK: 'software-update:check',
+  SOFTWARE_UPDATE_RUN: 'software-update:run',
+  SOFTWARE_UPDATE_PROGRESS: 'software-update:progress',
 
   // Window controls
   WINDOW_MINIMIZE: 'window:minimize',

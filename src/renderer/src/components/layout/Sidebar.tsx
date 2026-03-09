@@ -12,7 +12,10 @@ import {
   History,
   ShieldAlert,
   Eye,
-  Activity
+  Activity,
+  Trash2,
+  Server,
+  Download
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LucideIcon } from 'lucide-react'
@@ -47,7 +50,8 @@ const navGroups: NavGroup[] = [
       { icon: Database, label: 'Registry', path: '/registry' },
       { icon: Zap, label: 'Startup', path: '/startup' },
       { icon: Wifi, label: 'Network', path: '/network' },
-      { icon: Cpu, label: 'Drivers', path: '/drivers' }
+      { icon: Cpu, label: 'Drivers', path: '/drivers' },
+      { icon: Server, label: 'Services', path: '/services' }
     ]
   },
   {
@@ -56,6 +60,8 @@ const navGroups: NavGroup[] = [
       { icon: Activity, label: 'Performance', path: '/performance' },
       { icon: HardDrive, label: 'Disk Analyzer', path: '/disk' },
       { icon: PackageMinus, label: 'Debloater', path: '/debloater' },
+      { icon: Trash2, label: 'Uninstaller', path: '/uninstaller' },
+      { icon: Download, label: 'Updater', path: '/updater' },
       { icon: History, label: 'History', path: '/history' }
     ]
   }

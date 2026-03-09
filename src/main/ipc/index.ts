@@ -15,6 +15,9 @@ import { registerPrivacyShieldIpc } from './privacy-shield.ipc'
 import { registerUninstallLeftoversIpc } from './uninstall-leftovers.ipc'
 import { registerDriverManagerIpc } from './driver-manager.ipc'
 import { registerPerfMonitorIpc } from './perf-monitor.ipc'
+import { registerProgramUninstallerIpc } from './program-uninstaller.ipc'
+import { registerServiceManagerIpc } from './service-manager.ipc'
+import { registerSoftwareUpdaterIpc } from './software-updater.ipc'
 import { getSettings, setSettings, getOnboardingComplete, setOnboardingComplete } from '../services/settings-store'
 import { isAdmin } from '../services/elevation'
 import { getHistory, addHistoryEntry, clearHistory } from '../services/history-store'
@@ -40,6 +43,9 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerPrivacyShieldIpc(getWindow)
   registerDriverManagerIpc(getWindow)
   registerPerfMonitorIpc()
+  registerProgramUninstallerIpc(getWindow)
+  registerServiceManagerIpc(getWindow)
+  registerSoftwareUpdaterIpc(getWindow)
 
   // Settings — validate shape before persisting
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettings())
