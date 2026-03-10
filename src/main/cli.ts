@@ -203,7 +203,11 @@ async function cleanRecycleBin(sizeBytes: number = 0): Promise<CleanResult> {
   const { promisify } = await import('util')
   const execFileAsync = promisify(execFile)
   try {
-    await execFileAsync('powershell.exe', ['-NoProfile', '-Command', 'Clear-RecycleBin -Force -ErrorAction SilentlyContinue'])
+    await execFileAsync('powershell.exe', [
+      '-NoProfile',
+      '-Command',
+      `$shell = New-Object -ComObject Shell.Application; $shell.NameSpace(0x0a).Items() | ForEach-Object { Remove-Item $_.Path -Recurse -Force -ErrorAction SilentlyContinue }; Clear-RecycleBin -Force -Confirm:$false -ErrorAction SilentlyContinue`
+    ])
     return { totalCleaned: sizeBytes, filesDeleted: 1, filesSkipped: 0, errors: [] }
   } catch (err: any) {
     return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [{ path: 'Recycle Bin', reason: err.message }] }

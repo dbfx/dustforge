@@ -109,38 +109,6 @@ export async function scanRegistry(): Promise<RegistryEntry[]> {
       // Skip if reg query fails
     }
 
-    // Scan for broken Uninstall entries
-    try {
-      const { stdout } = await execFileAsync('reg', [
-        'query',
-        'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
-        '/s'
-      ], { timeout: 15000 })
-
-      const blocks = stdout.split(/\r?\n\r?\n/)
-      for (const block of blocks) {
-        const installMatch = block.match(/InstallLocation\s+REG_SZ\s+(.+)/i)
-        if (installMatch) {
-          const installPath = installMatch[1].trim()
-          if (installPath && installPath.length > 3 && !existsSync(installPath)) {
-            const keyMatch = block.match(/^(HKLM\\.+?)[\r\n]/m)
-            entries.push({
-              id: randomUUID(),
-              type: 'orphaned',
-              keyPath: keyMatch?.[1]?.trim() || 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\(unknown)',
-              valueName: 'InstallLocation',
-              issue: `Install location missing: ${installPath}`,
-              risk: 'low',
-              selected: true,
-              fix: { op: 'delete-value' }
-            })
-          }
-        }
-      }
-    } catch {
-      // Skip
-    }
-
     // Scan for broken SharedDLLs references
     try {
       const { stdout } = await execFileAsync('reg', [
