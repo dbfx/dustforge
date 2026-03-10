@@ -105,7 +105,7 @@ export function Sidebar() {
       </div>
 
       {/* Nav items */}
-      <nav className="mt-2 flex-1 px-3">
+      <nav className="mt-2 min-h-0 flex-1 overflow-y-auto px-3">
         {navGroups.map((group, gi) => (
           <div key={gi} className={gi > 0 ? 'mt-4' : ''}>
             {group.heading && (
