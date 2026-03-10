@@ -8,6 +8,7 @@ import type {
   UpdateResult,
   UpdateSeverity,
 } from '../../shared/types'
+import { isAdmin } from './elevation'
 
 const execFileAsync = promisify(execFile)
 
@@ -255,6 +256,100 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
   }
 }
 
+const WINGET_UPGRADE_ARGS = [
+  '--accept-source-agreements',
+  '--accept-package-agreements',
+  '--disable-interactivity',
+  '--include-unknown',
+]
+
+const SUCCESS_PATTERNS = [
+  'successfully installed',
+  'successfully upgraded',
+  'installer succeeded',
+  'no available upgrade',
+]
+
+const FAILURE_PATTERNS = [
+  'installer failed',
+  'no package found',
+  'no applicable update',
+  'another version of this application',
+  'installer aborted',
+]
+
+const ELEVATION_HINTS = [
+  'access is denied',
+  'administrator',
+  'elevation',
+  'requires admin',
+  'run as admin',
+  '0x80070005', // E_ACCESSDENIED
+]
+
+/** Attempt a single winget upgrade and return {success, output} */
+async function attemptUpgrade(
+  appId: string,
+  extraArgs: string[] = [],
+): Promise<{ success: boolean; output: string }> {
+  let upgradeStdout = ''
+  try {
+    const result = await execFileAsync(
+      'winget',
+      ['upgrade', appId, ...WINGET_UPGRADE_ARGS, ...extraArgs],
+      { timeout: 5 * 60 * 1000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
+    )
+    upgradeStdout = result.stdout
+  } catch (err: any) {
+    if (err?.stdout) {
+      upgradeStdout = err.stdout
+    } else {
+      return { success: false, output: err?.message || 'Unknown error' }
+    }
+  }
+
+  const output = cleanOutput(upgradeStdout).toLowerCase()
+  const wasSuccessful = SUCCESS_PATTERNS.some((p) => output.includes(p))
+  const hasClearFailure = FAILURE_PATTERNS.some((p) => output.includes(p))
+
+  if (wasSuccessful || !hasClearFailure) {
+    return { success: true, output: upgradeStdout }
+  }
+  return { success: false, output: upgradeStdout }
+}
+
+/** Retry a failed upgrade with elevation using PowerShell Start-Process -Verb RunAs */
+async function attemptElevatedUpgrade(appId: string): Promise<{ success: boolean; output: string }> {
+  try {
+    const args = ['upgrade', appId, ...WINGET_UPGRADE_ARGS, '--force'].join(' ')
+    // Run winget elevated via Start-Process; -Wait blocks until done, -PassThru gives exit code
+    const { stdout } = await execFileAsync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-Command',
+        `$p = Start-Process winget -ArgumentList '${args}' -Verb RunAs -Wait -PassThru -WindowStyle Hidden; exit $p.ExitCode`,
+      ],
+      { timeout: 5 * 60 * 1000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
+    )
+    // We can't reliably capture stdout from the elevated process, so verify
+    // by checking if winget still lists this app as upgradeable
+    const checkResult = await execFileAsync(
+      'winget',
+      ['upgrade', '--accept-source-agreements', '--disable-interactivity', '--include-unknown'],
+      { timeout: 60_000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
+    )
+    const stillNeedsUpgrade = checkResult.stdout.includes(appId)
+    return {
+      success: !stillNeedsUpgrade,
+      output: stillNeedsUpgrade ? 'App still needs upgrade after elevated attempt' : stdout,
+    }
+  } catch (err: any) {
+    // UAC was likely denied by user
+    return { success: false, output: err?.message || 'Elevated upgrade failed' }
+  }
+}
+
 export async function runUpdates(
   appIds: string[],
   onProgress: (progress: UpdateProgress) => void,
@@ -262,6 +357,7 @@ export async function runUpdates(
   let succeeded = 0
   let failed = 0
   const errors: UpdateResult['errors'] = []
+  const alreadyAdmin = isAdmin()
 
   for (let i = 0; i < appIds.length; i++) {
     const appId = appIds[i]
@@ -275,48 +371,28 @@ export async function runUpdates(
     })
 
     try {
-      let upgradeStdout = ''
-      try {
-        const result = await execFileAsync(
-          'winget',
-          [
-            'upgrade',
-            appId,
-            '--accept-source-agreements',
-            '--accept-package-agreements',
-            '--disable-interactivity',
-            '--include-unknown',
-          ],
-          { timeout: 5 * 60 * 1000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
-        )
-        upgradeStdout = result.stdout
-      } catch (err: any) {
-        // winget often exits non-zero even on success — check stdout for result
-        if (err?.stdout) {
-          upgradeStdout = err.stdout
-        } else {
-          throw err
+      // First attempt: normal upgrade
+      let result = await attemptUpgrade(appId)
+
+      // If failed and not already admin, retry with elevation
+      if (!result.success && !alreadyAdmin) {
+        const lowerOutput = cleanOutput(result.output).toLowerCase()
+        const looksLikeElevationIssue =
+          ELEVATION_HINTS.some((h) => lowerOutput.includes(h)) ||
+          FAILURE_PATTERNS.some((p) => lowerOutput.includes(p))
+
+        if (looksLikeElevationIssue) {
+          result = await attemptElevatedUpgrade(appId)
         }
       }
 
-      // Check if the output indicates success despite non-zero exit code
-      const output = cleanOutput(upgradeStdout).toLowerCase()
-      const wasSuccessful =
-        output.includes('successfully installed') ||
-        output.includes('successfully upgraded') ||
-        output.includes('installer succeeded') ||
-        output.includes('no available upgrade')
+      // If still failed, retry once with --force (handles version mismatch issues)
+      if (!result.success) {
+        const retryResult = await attemptUpgrade(appId, ['--force'])
+        if (retryResult.success) result = retryResult
+      }
 
-      // If we got stdout without throwing, and it doesn't contain clear failure
-      // indicators, treat it as success (winget exit codes are unreliable)
-      const hasClearFailure =
-        output.includes('installer failed') ||
-        output.includes('no package found') ||
-        output.includes('no applicable update') ||
-        output.includes('another version of this application') ||
-        output.includes('installer aborted')
-
-      if (wasSuccessful || !hasClearFailure) {
+      if (result.success) {
         succeeded++
         onProgress({
           phase: 'updating',
@@ -327,12 +403,11 @@ export async function runUpdates(
           status: 'done',
         })
       } else {
-        throw new Error(upgradeStdout.trim().split('\n').pop() || 'Upgrade failed')
+        throw new Error(result.output.trim().split('\n').pop() || 'Upgrade failed')
       }
     } catch (err) {
       failed++
       const rawMsg = err instanceof Error ? err.message : 'Unknown error'
-      // Extract a cleaner reason from verbose winget output
       const lastLine = cleanOutput(rawMsg).trim().split('\n').pop() || rawMsg
       errors.push({
         appId,
