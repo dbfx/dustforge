@@ -128,7 +128,8 @@ export async function cleanItems(itemIds: unknown): Promise<CleanResult> {
     }
   }
 
-  return { totalCleaned, filesDeleted, filesSkipped, errors }
+  const needsElevation = errors.some((e) => e.reason === 'permission-denied')
+  return { totalCleaned, filesDeleted, filesSkipped, errors, needsElevation }
 }
 
 export async function scanDirectory(

@@ -69,7 +69,7 @@ export function registerRecycleBinIpc(): void {
 
       if (remaining === 0) {
         lastScannedSize = 0
-        return { totalCleaned: sizeBeforeClean, filesDeleted: 1, filesSkipped: 0, errors: [] }
+        return { totalCleaned: sizeBeforeClean, filesDeleted: 1, filesSkipped: 0, errors: [], needsElevation: false }
       } else {
         // Partial clean - some items couldn't be removed
         lastScannedSize = 0
@@ -77,11 +77,12 @@ export function registerRecycleBinIpc(): void {
           totalCleaned: sizeBeforeClean,
           filesDeleted: 1,
           filesSkipped: remaining,
-          errors: [{ path: 'Recycle Bin', reason: `${remaining} item(s) could not be removed (may be in use or protected)` }]
+          errors: [{ path: 'Recycle Bin', reason: `${remaining} item(s) could not be removed (may be in use or protected)` }],
+          needsElevation: false
         }
       }
     } catch (err: any) {
-      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [{ path: 'Recycle Bin', reason: err.message }] }
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [{ path: 'Recycle Bin', reason: err.message }], needsElevation: false }
     }
   })
 }

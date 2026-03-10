@@ -208,9 +208,9 @@ async function cleanRecycleBin(sizeBytes: number = 0): Promise<CleanResult> {
       '-Command',
       `$shell = New-Object -ComObject Shell.Application; $shell.NameSpace(0x0a).Items() | ForEach-Object { Remove-Item $_.Path -Recurse -Force -ErrorAction SilentlyContinue }; Clear-RecycleBin -Force -Confirm:$false -ErrorAction SilentlyContinue`
     ])
-    return { totalCleaned: sizeBytes, filesDeleted: 1, filesSkipped: 0, errors: [] }
+    return { totalCleaned: sizeBytes, filesDeleted: 1, filesSkipped: 0, errors: [], needsElevation: false }
   } catch (err: any) {
-    return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [{ path: 'Recycle Bin', reason: err.message }] }
+    return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [{ path: 'Recycle Bin', reason: err.message }], needsElevation: false }
   }
 }
 
@@ -845,8 +845,8 @@ async function runLegacyScanClean(categories: string[], doClean: boolean, json: 
     if (!json) log(`Cleaning ${totalItems} items (${formatBytes(totalSize)})...`)
     const fileItemIds = allResults.filter(r => r.category !== CleanerType.RecycleBin).flatMap(r => r.items.map(i => i.id))
     const hasRecycleBin = allResults.some(r => r.category === CleanerType.RecycleBin)
-    let fileCleaned: CleanResult = { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [] }
-    let recycleCleaned: CleanResult = { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [] }
+    let fileCleaned: CleanResult = { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+    let recycleCleaned: CleanResult = { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     if (fileItemIds.length > 0) fileCleaned = await cleanItems(fileItemIds)
     if (hasRecycleBin) {
       const rbSize = allResults.find(r => r.category === CleanerType.RecycleBin)?.totalSize || 0
@@ -857,6 +857,7 @@ async function runLegacyScanClean(categories: string[], doClean: boolean, json: 
       filesDeleted: fileCleaned.filesDeleted + recycleCleaned.filesDeleted,
       filesSkipped: fileCleaned.filesSkipped + recycleCleaned.filesSkipped,
       errors: [...fileCleaned.errors, ...recycleCleaned.errors],
+      needsElevation: fileCleaned.needsElevation || recycleCleaned.needsElevation,
     }
     if (!json) {
       log(`  Deleted: ${cleanResult.filesDeleted} items (${formatBytes(cleanResult.totalCleaned)})`)

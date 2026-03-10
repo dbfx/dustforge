@@ -56,6 +56,7 @@ export interface CleanResult {
   filesDeleted: number
   filesSkipped: number
   errors: CleanError[]
+  needsElevation: boolean
 }
 
 export interface CleanError {

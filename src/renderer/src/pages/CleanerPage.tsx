@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   ChevronRight,
   Folder,
-  AlertTriangle
+  AlertTriangle,
+  ShieldAlert
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ScanProgress } from '@/components/shared/ScanProgress'
@@ -59,13 +60,20 @@ export function CleanerPage() {
   }, [])
 
   const [failedCategories, setFailedCategories] = useState<string[]>([])
+  const [elevationSkipped, setElevationSkipped] = useState<string[]>([])
+
+  const handleRelaunch = useCallback(() => {
+    window.dustforge.elevationRelaunch()
+  }, [])
 
   const handleScan = useCallback(async () => {
     store.setStatus(ScanStatus.Scanning)
     store.setResults([])
     setExpandedGroups(new Set())
     setFailedCategories([])
+    setElevationSkipped([])
     const failed: string[] = []
+    const skippedForElevation: string[] = []
     try {
       const scanFns: Record<CleanerType, () => Promise<ScanResult[]>> = {
         [CleanerType.System]: () => window.dustforge.systemScan(),
@@ -78,12 +86,18 @@ export function CleanerPage() {
       for (const cat of categories) {
         try {
           const results = await scanFns[cat.type]()
-          store.addResults(results)
+          // Extract elevation-required markers before adding to store
+          const elevationMarker = results.find((r) => r.subcategory === '__elevation_required')
+          if (elevationMarker?.group) {
+            skippedForElevation.push(...elevationMarker.group.split(', '))
+          }
+          store.addResults(results.filter((r) => r.subcategory !== '__elevation_required'))
         } catch {
           failed.push(cat.label)
         }
       }
       if (failed.length > 0) setFailedCategories(failed)
+      if (skippedForElevation.length > 0) setElevationSkipped(skippedForElevation)
       store.setStatus(ScanStatus.Complete)
     } catch {
       store.setStatus(ScanStatus.Error)
@@ -121,7 +135,7 @@ export function CleanerPage() {
         [CleanerType.RecycleBin]: () => window.dustforge.recycleBinClean(),
         [CleanerType.UninstallLeftovers]: (ids) => window.dustforge.uninstallLeftoversClean(ids)
       }
-      let totalCleaned = 0, totalFiles = 0, totalSkipped = 0
+      let totalCleaned = 0, totalFiles = 0, totalSkipped = 0, anyNeedsElevation = false
       const allErrors: { path: string; reason: string }[] = []
       const categoryBreakdown: Record<string, { found: number; cleaned: number; space: number }> = {}
 
@@ -138,6 +152,7 @@ export function CleanerPage() {
               totalCleaned += result.totalCleaned || 0
               totalFiles += result.filesDeleted || 0
               totalSkipped += result.filesSkipped || 0
+              if (result.needsElevation) anyNeedsElevation = true
               if (result.errors?.length) allErrors.push(...result.errors)
               categoryBreakdown[cat.label] = {
                 found: catItemsAll.length,
@@ -168,7 +183,7 @@ export function CleanerPage() {
       })
       recomputeStats()
 
-      store.setCleanResult({ totalCleaned, filesDeleted: totalFiles, filesSkipped: totalSkipped, errors: allErrors })
+      store.setCleanResult({ totalCleaned, filesDeleted: totalFiles, filesSkipped: totalSkipped, errors: allErrors, needsElevation: anyNeedsElevation })
       store.setStatus(ScanStatus.Complete)
     } catch {
       store.setStatus(ScanStatus.Error)
@@ -305,6 +320,31 @@ export function CleanerPage() {
             </div>
           )}
 
+          {elevationSkipped.length > 0 && store.status === ScanStatus.Complete && !store.cleanResult && (
+            <div
+              className="mb-5 flex items-center gap-3 rounded-2xl px-4 py-3"
+              style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}
+            >
+              <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400" strokeWidth={1.8} />
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] text-zinc-300">
+                  <span className="font-medium">{elevationSkipped.length} categories</span>
+                  <span style={{ color: '#8e8e96' }}> skipped — administrator privileges required</span>
+                </p>
+                <p className="text-[11px] mt-0.5 truncate" style={{ color: '#52525e' }}>
+                  {elevationSkipped.slice(0, 4).join(', ')}{elevationSkipped.length > 4 ? ` +${elevationSkipped.length - 4} more` : ''}
+                </p>
+              </div>
+              <button
+                onClick={handleRelaunch}
+                className="shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium text-amber-400 transition-colors hover:bg-amber-500/15"
+                style={{ border: '1px solid rgba(245,158,11,0.2)' }}
+              >
+                Relaunch as Admin
+              </button>
+            </div>
+          )}
+
           {store.cleanResult && store.status === ScanStatus.Complete && (
             <div
               className="mb-5 rounded-2xl p-4"
@@ -322,6 +362,24 @@ export function CleanerPage() {
                   </p>
                 </div>
               </div>
+              {store.cleanResult.needsElevation && (
+                <div
+                  className="mt-3 ml-8 flex items-center gap-3 rounded-xl px-3 py-2.5"
+                  style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}
+                >
+                  <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400" strokeWidth={1.8} />
+                  <p className="flex-1 text-[12px]" style={{ color: '#8e8e96' }}>
+                    Some files couldn't be deleted due to insufficient permissions
+                  </p>
+                  <button
+                    onClick={handleRelaunch}
+                    className="shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium text-amber-400 transition-colors hover:bg-amber-500/15"
+                    style={{ border: '1px solid rgba(245,158,11,0.2)' }}
+                  >
+                    Relaunch as Admin
+                  </button>
+                </div>
+              )}
               {store.cleanResult.errors.length > 0 && (
                 <details className="mt-2 ml-8">
                   <summary className="text-[11px] cursor-pointer" style={{ color: '#6e6e76' }}>
@@ -330,7 +388,7 @@ export function CleanerPage() {
                   <div className="mt-1 max-h-32 overflow-y-auto space-y-0.5">
                     {store.cleanResult.errors.slice(0, 20).map((err, i) => (
                       <p key={i} className="text-[11px] font-mono truncate" style={{ color: '#52525e' }}>
-                        {err.path.split('\\').slice(-3).join('\\')} — {err.reason}
+                        {err.path.split('\\').slice(-3).join('\\')} — {err.reason === 'permission-denied' ? 'permission denied (needs admin)' : err.reason}
                       </p>
                     ))}
                     {store.cleanResult.errors.length > 20 && (

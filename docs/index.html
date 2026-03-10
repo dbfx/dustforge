@@ -106,13 +106,6 @@
       background: radial-gradient(circle, var(--amber-glow) 0%, transparent 70%);
       pointer-events: none;
     }
-    .hero-badge {
-      display: inline-flex; align-items: center; gap: 8px;
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 100px; padding: 6px 16px 6px 8px;
-      font-size: 13px; color: var(--text-muted); margin-bottom: 32px;
-    }
-    .hero-badge .dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; }
     .hero h1 {
       font-size: clamp(40px, 6vw, 72px); font-weight: 800;
       line-height: 1.1; margin-bottom: 24px;
@@ -413,12 +406,8 @@
   <!-- Hero -->
   <section class="hero">
     <div class="container">
-      <div class="hero-badge">
-        <span class="dot"></span>
-        v1.5.0 &mdash; Service Manager, Uninstaller, Software Updater & more
-      </div>
       <h1>Your Windows,<br>dust-free.</h1>
-      <p>An advanced open-source system cleaner, optimizer, and security tool built for Windows power users. 20+ specialized tools in one beautiful interface.</p>
+      <p>An advanced open-source system cleaner, optimizer, and security tool built for Windows power users. 25 specialized tools in one beautiful interface.</p>
       <div class="hero-actions">
         <a href="https://github.com/dbfx/dustforge/releases/latest" class="btn-primary">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -441,7 +430,7 @@
     <div class="container">
       <div class="stats-grid">
         <div>
-          <div class="stat-value">20+</div>
+          <div class="stat-value">25</div>
           <div class="stat-label">Specialized Tools</div>
         </div>
         <div>
@@ -517,7 +506,7 @@
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
           </div>
           <h3>Cleaning &amp; Optimization</h3>
-          <span class="feat-count">15 tools</span>
+          <span class="feat-count">16 tools</span>
         </div>
         <div class="features-list">
           <div class="feat-item">
@@ -598,24 +587,31 @@
             </div>
           </div>
           <div class="feat-item">
-            <div class="feat-dot" style="background: var(--green);"></div>
+            <div class="feat-dot" style="background: var(--amber);"></div>
             <div>
-              <h4>Program Uninstaller <span class="feat-badge feat-badge-new">New</span></h4>
+              <h4>Program Uninstaller</h4>
               <p>List all installed programs with usage data. Uninstall cleanly with automatic leftover detection and cleanup.</p>
             </div>
           </div>
           <div class="feat-item">
-            <div class="feat-dot" style="background: var(--green);"></div>
+            <div class="feat-dot" style="background: var(--amber);"></div>
             <div>
-              <h4>Service Manager <span class="feat-badge feat-badge-new">New</span></h4>
+              <h4>Service Manager</h4>
               <p>Scan and classify all Windows services with a built-in safety knowledge base. Safely disable unnecessary services to reduce resource usage.</p>
             </div>
           </div>
           <div class="feat-item">
-            <div class="feat-dot" style="background: var(--green);"></div>
+            <div class="feat-dot" style="background: var(--amber);"></div>
             <div>
-              <h4>Software Updater <span class="feat-badge feat-badge-new">New</span></h4>
+              <h4>Software Updater</h4>
               <p>Check for outdated applications via winget. See version comparisons, severity ratings, and bulk-update everything in one click.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--amber);"></div>
+            <div>
+              <h4>Recycle Bin</h4>
+              <p>Scan and empty the Windows Recycle Bin to reclaim wasted disk space.</p>
             </div>
           </div>
           <div class="feat-item">
@@ -662,7 +658,7 @@
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
           </div>
           <h3>Monitoring &amp; Tools</h3>
-          <span class="feat-count">6 tools</span>
+          <span class="feat-count">7 tools</span>
         </div>
         <div class="features-list">
           <div class="feat-item">
@@ -673,9 +669,9 @@
             </div>
           </div>
           <div class="feat-item">
-            <div class="feat-dot" style="background: var(--green);"></div>
+            <div class="feat-dot" style="background: var(--blue);"></div>
             <div>
-              <h4>Disk Health <span class="feat-badge feat-badge-new">New</span></h4>
+              <h4>Disk Health</h4>
               <p>S.M.A.R.T. monitoring for all drives. See temperature, remaining life, power-on hours, and health status at a glance.</p>
             </div>
           </div>
@@ -698,6 +694,13 @@
             <div>
               <h4>Cleaning History</h4>
               <p>Track past cleaning sessions, space recovered, and operations performed with a full timeline view.</p>
+            </div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-dot" style="background: var(--blue);"></div>
+            <div>
+              <h4>Secure Delete</h4>
+              <p>Overwrite files with random data before deletion for sensitive data that shouldn't be recoverable.</p>
             </div>
           </div>
           <div class="feat-item">

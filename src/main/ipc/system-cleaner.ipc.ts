@@ -3,6 +3,7 @@ import { IPC } from '../../shared/channels'
 import { SYSTEM_PATHS } from '../constants/paths'
 import { scanDirectory, scanFile, cleanItems } from '../services/file-utils'
 import { cacheItems } from '../services/scan-cache'
+import { isAdmin } from '../services/elevation'
 import type { ScanResult, CleanResult } from '../../shared/types'
 import { CleanerType } from '../../shared/enums'
 import type { WindowGetter } from './index'
@@ -12,43 +13,48 @@ export function registerSystemCleanerIpc(getWindow: WindowGetter): void {
     const results: ScanResult[] = []
     const category = CleanerType.System
 
-    const targets: { path: string; subcategory: string }[] = [
+    const elevated = isAdmin()
+
+    const targets: { path: string; subcategory: string; needsAdmin?: boolean }[] = [
       // Core temp files
       { path: SYSTEM_PATHS.userTemp, subcategory: 'User Temp Files' },
       { path: SYSTEM_PATHS.systemTemp, subcategory: 'System Temp Files' },
-      { path: SYSTEM_PATHS.prefetch, subcategory: 'Prefetch Data' },
-      { path: SYSTEM_PATHS.windowsLogs, subcategory: 'Windows Logs' },
-      { path: SYSTEM_PATHS.setupLogs, subcategory: 'Setup Logs' },
+      { path: SYSTEM_PATHS.prefetch, subcategory: 'Prefetch Data', needsAdmin: true },
+      { path: SYSTEM_PATHS.windowsLogs, subcategory: 'Windows Logs', needsAdmin: true },
+      { path: SYSTEM_PATHS.setupLogs, subcategory: 'Setup Logs', needsAdmin: true },
 
       // Caches
       { path: SYSTEM_PATHS.thumbnailCache, subcategory: 'Thumbnail & Icon Cache' },
-      { path: SYSTEM_PATHS.fontCache, subcategory: 'Font Cache' },
+      { path: SYSTEM_PATHS.fontCache, subcategory: 'Font Cache', needsAdmin: true },
       { path: SYSTEM_PATHS.dxShaderCache, subcategory: 'DirectX Shader Cache' },
       { path: SYSTEM_PATHS.inetCache, subcategory: 'Internet Cache' },
-      { path: SYSTEM_PATHS.searchIndex, subcategory: 'Windows Search Index Data' },
+      { path: SYSTEM_PATHS.searchIndex, subcategory: 'Windows Search Index Data', needsAdmin: true },
 
       // Windows Update & Delivery
-      { path: SYSTEM_PATHS.windowsUpdateCache, subcategory: 'Windows Update Cache' },
-      { path: SYSTEM_PATHS.deliveryOptimization, subcategory: 'Delivery Optimization Cache' },
+      { path: SYSTEM_PATHS.windowsUpdateCache, subcategory: 'Windows Update Cache', needsAdmin: true },
+      { path: SYSTEM_PATHS.deliveryOptimization, subcategory: 'Delivery Optimization Cache', needsAdmin: true },
 
       // Error reports & crash dumps
       { path: SYSTEM_PATHS.errorReports, subcategory: 'Error Reports' },
-      { path: SYSTEM_PATHS.systemErrorReports, subcategory: 'System Error Reports' },
+      { path: SYSTEM_PATHS.systemErrorReports, subcategory: 'System Error Reports', needsAdmin: true },
       { path: SYSTEM_PATHS.crashDumps, subcategory: 'Crash Dumps' },
-      { path: SYSTEM_PATHS.memoryDumps, subcategory: 'Minidump Files' },
+      { path: SYSTEM_PATHS.memoryDumps, subcategory: 'Minidump Files', needsAdmin: true },
 
       // Windows Installer & Patches
-      { path: SYSTEM_PATHS.installerPatchCache, subcategory: 'Installer Patch Cache' },
+      { path: SYSTEM_PATHS.installerPatchCache, subcategory: 'Installer Patch Cache', needsAdmin: true },
 
       // Event logs
-      { path: SYSTEM_PATHS.eventLogs, subcategory: 'Event Log Archives' },
+      { path: SYSTEM_PATHS.eventLogs, subcategory: 'Event Log Archives', needsAdmin: true },
 
       // Defender scan history
-      { path: SYSTEM_PATHS.defenderScanHistory, subcategory: 'Defender Scan History' },
+      { path: SYSTEM_PATHS.defenderScanHistory, subcategory: 'Defender Scan History', needsAdmin: true },
 
       // Old Windows installation
-      { path: SYSTEM_PATHS.windowsOld, subcategory: 'Previous Windows Installation' },
+      { path: SYSTEM_PATHS.windowsOld, subcategory: 'Previous Windows Installation', needsAdmin: true },
     ]
+
+    // Skip admin-only targets when not elevated so we can report them
+    const skippedForElevation: string[] = []
 
     // Event log files that must never be cleaned (boot trace, security audit, core OS logs, diagnostics)
     const protectedEventLogs = [
@@ -72,6 +78,12 @@ export function registerSystemCleanerIpc(getWindow: WindowGetter): void {
 
     for (let i = 0; i < targets.length; i++) {
       const target = targets[i]
+
+      if (target.needsAdmin && !elevated) {
+        skippedForElevation.push(target.subcategory)
+        continue
+      }
+
       try {
         const result = await scanDirectory(target.path, category, target.subcategory)
 
@@ -113,6 +125,19 @@ export function registerSystemCleanerIpc(getWindow: WindowGetter): void {
       }
     } catch {
       // Skip if not present
+    }
+
+    // If any targets were skipped due to missing elevation, add a marker result
+    // so the renderer can inform the user
+    if (skippedForElevation.length > 0) {
+      results.push({
+        category,
+        subcategory: '__elevation_required',
+        items: [],
+        totalSize: 0,
+        itemCount: 0,
+        group: skippedForElevation.join(', '),
+      })
     }
 
     return results
