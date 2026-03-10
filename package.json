@@ -1,6 +1,6 @@
 {
   "name": "dustforge",
-  "version": "1.8.2",
+  "version": "1.8.3",
   "description": "A modern, open-source system cleaner for Windows",
   "main": "./out/main/index.js",
   "scripts": {
