@@ -5,6 +5,7 @@ import { registerCleanerIpc } from './ipc'
 import { getSettings } from './services/settings-store'
 import { startScheduler, stopScheduler, getNextScanTime, notifyScheduledScanComplete } from './services/scheduler'
 import { initAutoUpdater } from './services/auto-updater'
+import { cloudAgent } from './services/cloud-agent'
 import { runCli } from './cli'
 
 // ─── CLI mode ────────────────────────────────────────────────
@@ -208,6 +209,11 @@ app.whenReady().then(() => {
   // Start the scheduled scan checker
   startScheduler(() => mainWindow)
 
+  // Start cloud agent if linked
+  if (settings.cloud.apiKey) {
+    cloudAgent.start()
+  }
+
   // Listen for settings changes to update auto-launch and tray
   ipcMain.on(IPC.SETTINGS_APPLY_STARTUP, (_event, enabled: boolean) => {
     applyAutoLaunch(enabled)
@@ -254,6 +260,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   stopScheduler()
+  cloudAgent.stop()
 })
 
 } // end initGui

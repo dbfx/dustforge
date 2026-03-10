@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Github, Bug, ExternalLink, Plus, X, FolderOpen, Clock, RefreshCw, Download, CheckCircle, AlertCircle, Loader } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Github, Bug, ExternalLink, Plus, X, FolderOpen, Clock, RefreshCw, Download, CheckCircle, AlertCircle, Loader, Unlink, Link } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -30,7 +30,55 @@ export function SettingsPage() {
   const [nextScan, setNextScan] = useState<string | null>(null)
   const updateStatus = useAppUpdateStore((s) => s.status)
 
+  // Cloud agent state
+  const [cloudStatus, setCloudStatus] = useState<{
+    status: string; maskedApiKey: string | null; deviceId: string | null
+    linkedAt: string | null; lastTelemetryAt: string | null; lastHealthReportAt: string | null; error: string | null
+  } | null>(null)
+  const [cloudApiKey, setCloudApiKey] = useState('')
+  const [cloudLinking, setCloudLinking] = useState(false)
+  const [cloudUnlinking, setCloudUnlinking] = useState(false)
+
+  const isLinked = !!settings.cloud.apiKey
+
+  const refreshCloudStatus = useCallback(() => {
+    window.dustforge?.cloudGetStatus?.().then(setCloudStatus).catch(() => {})
+  }, [])
+
   useEffect(() => { window.dustforge?.settingsGet?.().then(setSettings).catch(() => {}) }, [])
+
+  // Poll cloud status when linked
+  useEffect(() => {
+    if (!isLinked) { setCloudStatus(null); return }
+    refreshCloudStatus()
+    const timer = setInterval(refreshCloudStatus, 5000)
+    return () => clearInterval(timer)
+  }, [isLinked, refreshCloudStatus])
+
+  const handleCloudLink = async () => {
+    if (!cloudApiKey.trim() || cloudApiKey.length < 10) return
+    setCloudLinking(true)
+    try {
+      const result = await window.dustforge?.cloudLink?.(cloudApiKey.trim())
+      if (result?.success) {
+        setCloudApiKey('')
+        // Refresh settings to get the new cloud config
+        const fresh = await window.dustforge?.settingsGet?.()
+        if (fresh) setSettings(fresh)
+      }
+    } catch { /* ignore */ }
+    setCloudLinking(false)
+  }
+
+  const handleCloudUnlink = async () => {
+    setCloudUnlinking(true)
+    try {
+      await window.dustforge?.cloudUnlink?.()
+      const fresh = await window.dustforge?.settingsGet?.()
+      if (fresh) setSettings(fresh)
+    } catch { /* ignore */ }
+    setCloudUnlinking(false)
+  }
 
   // Fetch next scan time whenever schedule settings change
   useEffect(() => {
@@ -215,6 +263,106 @@ export function SettingsPage() {
                 </span>
               </div>
             )}
+          </>
+        )}
+      </Section>
+
+      <Section title="Cloud Dashboard">
+        {!isLinked ? (
+          <div className="space-y-4 py-1">
+            <p className="text-[13px] text-zinc-400">
+              Connect this device to your DustForge Cloud dashboard for remote monitoring, system health telemetry, and the ability to trigger scans and updates remotely.
+            </p>
+            <div className="flex items-center gap-2.5">
+              <input
+                type="text"
+                value={cloudApiKey}
+                onChange={(e) => setCloudApiKey(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCloudLink()}
+                placeholder="Paste your API key"
+                className="flex-1 rounded-xl px-4 py-2.5 text-[13px] text-zinc-300 outline-none placeholder:text-zinc-700"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+              />
+              <button
+                onClick={handleCloudLink}
+                disabled={cloudLinking || cloudApiKey.length < 10}
+                className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-200 transition-colors disabled:opacity-40"
+                style={{ background: '#f59e0b', color: '#09090b' }}
+              >
+                <Link className="h-3.5 w-3.5" strokeWidth={1.8} />
+                {cloudLinking ? 'Linking...' : 'Link Device'}
+              </button>
+            </div>
+            <p className="text-[11px]" style={{ color: '#4e4e56' }}>
+              Data shared: CPU &amp; memory usage, disk space, network stats, uptime, and periodic health reports (registry, drivers, updates, privacy, malware). No file paths or personal data.
+            </p>
+          </div>
+        ) : (
+          <>
+            <Row label="Status" desc={cloudStatus?.error || undefined}>
+              <div className="flex items-center gap-2">
+                <div
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{
+                    background:
+                      cloudStatus?.status === 'connected' ? '#22c55e' :
+                      cloudStatus?.status === 'connecting' ? '#f59e0b' :
+                      cloudStatus?.status === 'error' ? '#ef4444' : '#71717a'
+                  }}
+                />
+                <span className="text-[13px] text-zinc-400 capitalize">
+                  {cloudStatus?.status ?? 'Loading...'}
+                </span>
+              </div>
+            </Row>
+            <Row label="Device ID" desc={cloudStatus?.maskedApiKey ? `Key: ${cloudStatus.maskedApiKey}` : undefined}>
+              <span className="font-mono text-[12px] text-zinc-500">
+                {cloudStatus?.deviceId?.slice(0, 8) ?? '—'}
+              </span>
+            </Row>
+            {cloudStatus?.lastTelemetryAt && (
+              <Row label="Last telemetry" desc="System stats (CPU, memory, disk, network)">
+                <span className="text-[12px] text-zinc-500">
+                  {new Date(cloudStatus.lastTelemetryAt).toLocaleTimeString()}
+                </span>
+              </Row>
+            )}
+            {cloudStatus?.lastHealthReportAt && (
+              <Row label="Last health report" desc="Registry, drivers, updates, privacy, malware">
+                <span className="text-[12px] text-zinc-500">
+                  {new Date(cloudStatus.lastHealthReportAt).toLocaleTimeString()}
+                </span>
+              </Row>
+            )}
+            <Row label="Share disk health" desc="Include disk SMART data in telemetry">
+              <Toggle checked={settings.cloud.shareDiskHealth} onChange={(v) => save({ cloud: { ...settings.cloud, shareDiskHealth: v } })} />
+            </Row>
+            <Row label="Share process list" desc="Include running processes (off by default)">
+              <Toggle checked={settings.cloud.shareProcessList} onChange={(v) => save({ cloud: { ...settings.cloud, shareProcessList: v } })} />
+            </Row>
+            <Row label="Telemetry interval" desc="How often system stats are sent">
+              <select
+                value={settings.cloud.telemetryIntervalSec}
+                onChange={(e) => save({ cloud: { ...settings.cloud, telemetryIntervalSec: Number(e.target.value) } })}
+                className={selectStyle} style={selectBorder}
+              >
+                <option value={30}>30 seconds</option>
+                <option value={60}>1 minute</option>
+                <option value={300}>5 minutes</option>
+                <option value={900}>15 minutes</option>
+              </select>
+            </Row>
+            <div className="pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+              <button
+                onClick={handleCloudUnlink}
+                disabled={cloudUnlinking}
+                className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[12px] font-medium text-red-400 transition-colors"
+                style={{ border: '1px solid rgba(239,68,68,0.2)' }}
+              >
+                <Unlink className="h-3.5 w-3.5" strokeWidth={1.8} />
+                {cloudUnlinking ? 'Unlinking...' : 'Unlink Device'}
+              </button>
+            </div>
           </>
         )}
       </Section>

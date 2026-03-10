@@ -25,6 +25,13 @@ const defaultSettings: DustForgeSettings = {
     frequency: 'weekly',
     day: 1,
     hour: 9
+  },
+  cloud: {
+    apiKey: '',
+    deviceId: '',
+    telemetryIntervalSec: 60,
+    shareDiskHealth: true,
+    shareProcessList: false
   }
 }
 
@@ -38,7 +45,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         ...s.settings,
         ...partial,
         cleaner: { ...s.settings.cleaner, ...(partial.cleaner ?? {}) },
-        schedule: { ...s.settings.schedule, ...(partial.schedule ?? {}) }
+        schedule: { ...s.settings.schedule, ...(partial.schedule ?? {}) },
+        cloud: { ...s.settings.cloud, ...(partial.cloud ?? {}) }
       }
     }))
 }))

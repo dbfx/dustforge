@@ -256,6 +256,21 @@ const api = {
     return () => { ipcRenderer.removeListener(IPC.SOFTWARE_UPDATE_PROGRESS, handler) }
   },
 
+  // Cloud Agent
+  cloudLink: (apiKey: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.CLOUD_LINK, apiKey),
+  cloudUnlink: (): Promise<void> => ipcRenderer.invoke(IPC.CLOUD_UNLINK),
+  cloudGetStatus: (): Promise<{
+    status: string
+    maskedApiKey: string | null
+    deviceId: string | null
+    linkedAt: string | null
+    lastTelemetryAt: string | null
+    lastHealthReportAt: string | null
+    lastCommandAt: string | null
+    error: string | null
+  }> => ipcRenderer.invoke(IPC.CLOUD_GET_STATUS),
+
   // Progress events
   onScanProgress: (callback: (data: ProgressData) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: ProgressData) => callback(data)

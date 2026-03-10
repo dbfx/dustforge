@@ -33,6 +33,13 @@ function makeSettings(
       day: overrides.day ?? 1,
       hour: overrides.hour ?? 9,
     },
+    cloud: {
+      apiKey: '',
+      deviceId: '',
+      telemetryIntervalSec: 60,
+      shareDiskHealth: true,
+      shareProcessList: false,
+    },
   }
 }
 

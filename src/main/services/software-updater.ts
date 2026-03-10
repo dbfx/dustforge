@@ -320,15 +320,22 @@ async function attemptUpgrade(
 
 /** Retry a failed upgrade with elevation using PowerShell Start-Process -Verb RunAs */
 async function attemptElevatedUpgrade(appId: string): Promise<{ success: boolean; output: string }> {
+  // Validate appId format to prevent injection — winget IDs are alphanumeric with dots, dashes, underscores
+  if (!/^[\w][\w.\-]{0,200}$/.test(appId)) {
+    return { success: false, output: 'Invalid app ID format' }
+  }
+
   try {
     const args = ['upgrade', appId, ...WINGET_UPGRADE_ARGS, '--force'].join(' ')
+    // Escape single quotes for PowerShell single-quoted string ('' is the escape for ')
+    const safeArgs = args.replace(/'/g, "''")
     // Run winget elevated via Start-Process; -Wait blocks until done, -PassThru gives exit code
     const { stdout } = await execFileAsync(
       'powershell.exe',
       [
         '-NoProfile',
         '-Command',
-        `$p = Start-Process winget -ArgumentList '${args}' -Verb RunAs -Wait -PassThru -WindowStyle Hidden; exit $p.ExitCode`,
+        `$p = Start-Process winget -ArgumentList '${safeArgs}' -Verb RunAs -Wait -PassThru -WindowStyle Hidden; exit $p.ExitCode`,
       ],
       { timeout: 5 * 60 * 1000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
     )

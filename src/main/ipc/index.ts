@@ -19,6 +19,7 @@ import { registerPerfMonitorIpc } from './perf-monitor.ipc'
 import { registerProgramUninstallerIpc } from './program-uninstaller.ipc'
 import { registerServiceManagerIpc } from './service-manager.ipc'
 import { registerSoftwareUpdaterIpc } from './software-updater.ipc'
+import { registerCloudAgentIpc } from './cloud-agent.ipc'
 import { getSettings, setSettings, getOnboardingComplete, setOnboardingComplete } from '../services/settings-store'
 import { isAdmin } from '../services/elevation'
 import { getHistory, addHistoryEntry, clearHistory } from '../services/history-store'
@@ -47,6 +48,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerProgramUninstallerIpc(getWindow)
   registerServiceManagerIpc(getWindow)
   registerSoftwareUpdaterIpc(getWindow)
+  registerCloudAgentIpc()
 
   // Settings — validate shape before persisting
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettings())

@@ -129,6 +129,11 @@ export const IPC = {
   SOFTWARE_UPDATE_RUN: 'software-update:run',
   SOFTWARE_UPDATE_PROGRESS: 'software-update:progress',
 
+  // Cloud Agent
+  CLOUD_LINK: 'cloud:link',
+  CLOUD_UNLINK: 'cloud:unlink',
+  CLOUD_GET_STATUS: 'cloud:get-status',
+
   // Window controls
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_MAXIMIZE: 'window:maximize',

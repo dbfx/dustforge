@@ -47,6 +47,13 @@ const defaults: StoreData = {
       frequency: 'weekly',
       day: 1,
       hour: 9
+    },
+    cloud: {
+      apiKey: '',
+      deviceId: '',
+      telemetryIntervalSec: 60,
+      shareDiskHealth: true,
+      shareProcessList: false
     }
   },
   stats: {

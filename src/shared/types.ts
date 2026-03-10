@@ -466,6 +466,13 @@ export interface DustForgeSettings {
     day: number
     hour: number
   }
+  cloud: {
+    apiKey: string
+    deviceId: string
+    telemetryIntervalSec: number
+    shareDiskHealth: boolean
+    shareProcessList: boolean
+  }
 }
 
 // ─── Service Manager ────────────────────────────────────────

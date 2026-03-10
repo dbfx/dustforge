@@ -12,7 +12,7 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
 
   const allowedTopKeys = new Set([
     'minimizeToTray', 'showNotificationOnComplete', 'runAtStartup',
-    'autoUpdate', 'cleaner', 'exclusions', 'schedule'
+    'autoUpdate', 'cleaner', 'exclusions', 'schedule', 'cloud'
   ])
 
   for (const key of Object.keys(obj)) {
@@ -60,6 +60,21 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
     if ('secureDelete' in c && typeof c.secureDelete !== 'boolean') return null
     if ('closeBrowsersBeforeClean' in c && typeof c.closeBrowsersBeforeClean !== 'boolean') return null
     if ('createRestorePoint' in c && typeof c.createRestorePoint !== 'boolean') return null
+  }
+
+  // Validate cloud has expected shape if present
+  if ('cloud' in obj && obj.cloud !== undefined) {
+    const c = obj.cloud as Record<string, unknown>
+    if (typeof c !== 'object' || c === null || Array.isArray(c)) return null
+    const allowedCloudKeys = new Set(['apiKey', 'deviceId', 'telemetryIntervalSec', 'shareDiskHealth', 'shareProcessList'])
+    for (const key of Object.keys(c)) {
+      if (!allowedCloudKeys.has(key)) return null
+    }
+    if ('apiKey' in c && (typeof c.apiKey !== 'string' || c.apiKey.length > 200)) return null
+    if ('deviceId' in c && (typeof c.deviceId !== 'string' || c.deviceId.length > 100)) return null
+    if ('telemetryIntervalSec' in c && (typeof c.telemetryIntervalSec !== 'number' || c.telemetryIntervalSec < 10 || c.telemetryIntervalSec > 3600)) return null
+    if ('shareDiskHealth' in c && typeof c.shareDiskHealth !== 'boolean') return null
+    if ('shareProcessList' in c && typeof c.shareProcessList !== 'boolean') return null
   }
 
   return obj
