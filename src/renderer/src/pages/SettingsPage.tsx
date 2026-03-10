@@ -273,25 +273,35 @@ export function SettingsPage() {
             <p className="text-[13px] text-zinc-400">
               Connect this device to your DustForge Cloud dashboard for remote monitoring, system health telemetry, and the ability to trigger scans and updates remotely.
             </p>
-            <div className="flex items-center gap-2.5">
+            <div className="space-y-2.5">
               <input
                 type="text"
-                value={cloudApiKey}
-                onChange={(e) => setCloudApiKey(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleCloudLink()}
-                placeholder="Paste your API key"
-                className="flex-1 rounded-xl px-4 py-2.5 text-[13px] text-zinc-300 outline-none placeholder:text-zinc-700"
+                value={settings.cloud.serverUrl}
+                onChange={(e) => save({ cloud: { ...settings.cloud, serverUrl: e.target.value } })}
+                placeholder="Server URL (leave blank for default)"
+                className="w-full rounded-xl px-4 py-2.5 text-[13px] text-zinc-300 outline-none placeholder:text-zinc-700"
                 style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
               />
-              <button
-                onClick={handleCloudLink}
-                disabled={cloudLinking || cloudApiKey.length < 10}
-                className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-200 transition-colors disabled:opacity-40"
-                style={{ background: '#f59e0b', color: '#09090b' }}
-              >
-                <Link className="h-3.5 w-3.5" strokeWidth={1.8} />
-                {cloudLinking ? 'Linking...' : 'Link Device'}
-              </button>
+              <div className="flex items-center gap-2.5">
+                <input
+                  type="text"
+                  value={cloudApiKey}
+                  onChange={(e) => setCloudApiKey(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCloudLink()}
+                  placeholder="Paste your API key"
+                  className="flex-1 rounded-xl px-4 py-2.5 text-[13px] text-zinc-300 outline-none placeholder:text-zinc-700"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+                />
+                <button
+                  onClick={handleCloudLink}
+                  disabled={cloudLinking || cloudApiKey.length < 10}
+                  className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-200 transition-colors disabled:opacity-40"
+                  style={{ background: '#f59e0b', color: '#09090b' }}
+                >
+                  <Link className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  {cloudLinking ? 'Linking...' : 'Link Device'}
+                </button>
+              </div>
             </div>
             <p className="text-[11px]" style={{ color: '#4e4e56' }}>
               Data shared: CPU &amp; memory usage, disk space, network stats, uptime, and periodic health reports (registry, drivers, updates, privacy, malware). No file paths or personal data.

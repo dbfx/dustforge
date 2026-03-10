@@ -1,4 +1,5 @@
 // ─── Cloud Agent Protocol Types ─────────────────────────────
+// Hybrid architecture: Reverb (Pusher) for server→agent, HTTP for agent→server
 
 export type CloudAgentStatus = 'dormant' | 'connecting' | 'connected' | 'disconnected' | 'error'
 
@@ -13,7 +14,7 @@ export interface CloudAgentState {
   error: string | null
 }
 
-// ─── Commands (cloud → agent) ───────────────────────────────
+// ─── Commands (received via Reverb channel events) ──────────
 
 export type AllowedScanType =
   | 'system'
@@ -34,18 +35,7 @@ export type CloudCommand =
   | { type: 'get-status'; requestId: string }
   | { type: 'get-system-info'; requestId: string }
   | { type: 'get-health-report'; requestId: string }
-  | { type: 'ping' }
-  | { type: 'auth-ok' }
-  | { type: 'auth-error'; error?: string }
-
-// ─── Messages (agent → cloud) ───────────────────────────────
-
-export type CloudMessage =
-  | { type: 'auth'; apiKey: string; deviceId: string; appVersion: string; hostname: string }
-  | { type: 'telemetry'; deviceId: string; timestamp: number; snapshot: TelemetrySnapshot }
-  | { type: 'health-report'; deviceId: string; timestamp: number; report: HealthReport }
-  | { type: 'command-result'; requestId: string; success: boolean; data?: unknown; error?: string }
-  | { type: 'pong' }
+  | { type: 'ping'; requestId: string }
 
 // ─── Telemetry (frequent, lightweight) ──────────────────────
 

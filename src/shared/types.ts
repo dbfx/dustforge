@@ -469,6 +469,7 @@ export interface DustForgeSettings {
   cloud: {
     apiKey: string
     deviceId: string
+    serverUrl: string
     telemetryIntervalSec: number
     shareDiskHealth: boolean
     shareProcessList: boolean

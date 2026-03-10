@@ -66,12 +66,13 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
   if ('cloud' in obj && obj.cloud !== undefined) {
     const c = obj.cloud as Record<string, unknown>
     if (typeof c !== 'object' || c === null || Array.isArray(c)) return null
-    const allowedCloudKeys = new Set(['apiKey', 'deviceId', 'telemetryIntervalSec', 'shareDiskHealth', 'shareProcessList'])
+    const allowedCloudKeys = new Set(['apiKey', 'deviceId', 'serverUrl', 'telemetryIntervalSec', 'shareDiskHealth', 'shareProcessList'])
     for (const key of Object.keys(c)) {
       if (!allowedCloudKeys.has(key)) return null
     }
     if ('apiKey' in c && (typeof c.apiKey !== 'string' || c.apiKey.length > 200)) return null
     if ('deviceId' in c && (typeof c.deviceId !== 'string' || c.deviceId.length > 100)) return null
+    if ('serverUrl' in c && (typeof c.serverUrl !== 'string' || c.serverUrl.length > 500)) return null
     if ('telemetryIntervalSec' in c && (typeof c.telemetryIntervalSec !== 'number' || c.telemetryIntervalSec < 10 || c.telemetryIntervalSec > 3600)) return null
     if ('shareDiskHealth' in c && typeof c.shareDiskHealth !== 'boolean') return null
     if ('shareProcessList' in c && typeof c.shareProcessList !== 'boolean') return null

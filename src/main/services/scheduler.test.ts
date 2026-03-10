@@ -36,6 +36,7 @@ function makeSettings(
     cloud: {
       apiKey: '',
       deviceId: '',
+      serverUrl: '',
       telemetryIntervalSec: 60,
       shareDiskHealth: true,
       shareProcessList: false,

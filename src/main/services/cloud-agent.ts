@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto'
 import { hostname } from 'os'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import Pusher from 'pusher-js'
 
 const execFileAsync = promisify(execFile)
 import { getSettings, setSettings } from './settings-store'
@@ -19,33 +20,56 @@ import { scanServices } from '../ipc/service-manager.ipc'
 import { scanDriverUpdates } from '../ipc/driver-manager.ipc'
 import { scanNetwork } from '../ipc/network-cleanup.ipc'
 import { logInfo, logError } from './logger'
+import { join } from 'path'
+import { appendFileSync, mkdirSync } from 'fs'
+import { tmpdir } from 'os'
 import type {
   CloudAgentStatus,
   CloudAgentState,
   CloudCommand,
-  CloudMessage,
   TelemetrySnapshot,
   HealthReport,
   AllowedScanType,
 } from './cloud-agent-types'
 import type { ScanResult } from '../../shared/types'
 
-const CLOUD_WS_URL = 'wss://api.dustforge.net/agent/ws'
+const DEFAULT_SERVER_URL = app.isPackaged ? 'https://cloud.dustforge.com' : 'http://localhost:8000'
+
+// ─── Cloud Agent Debug Log ──────────────────────────────────
+const CLOUD_LOG_DIR = join(tmpdir(), 'dustforge-cloud')
+const CLOUD_LOG_FILE = join(CLOUD_LOG_DIR, 'cloud-agent.log')
+try { mkdirSync(CLOUD_LOG_DIR, { recursive: true }) } catch { /* ignore */ }
+
+function cloudLog(level: 'INFO' | 'ERROR' | 'DEBUG', msg: string, data?: unknown): void {
+  const ts = new Date().toISOString()
+  const extra = data !== undefined ? ` ${JSON.stringify(data)}` : ''
+  const line = `[${ts}] ${level}: ${msg}${extra}\n`
+  try { appendFileSync(CLOUD_LOG_FILE, line) } catch { /* ignore */ }
+  // Also write to main log for INFO/ERROR
+  if (level === 'ERROR') logError(msg)
+  else if (level === 'INFO') logInfo(msg)
+}
 const COMMAND_TIMEOUT_MS = 5 * 60 * 1000
-const MAX_RECONNECT_DELAY_MS = 60_000
 const HEALTH_REPORT_INTERVAL_MS = 30 * 60 * 1000 // 30 minutes
 
+/** Connection config returned by GET {serverUrl}/api/connect */
+interface ConnectConfig {
+  ws: { host: string; port: number; key: string; tls: boolean }
+  api: string
+  broadcasting: string
+}
+
 class CloudAgentService {
-  private ws: WebSocket | null = null
+  private pusher: Pusher | null = null
+  private channel: ReturnType<Pusher['subscribe']> | null = null
   private status: CloudAgentStatus = 'dormant'
   private apiKey: string = ''
   private deviceId: string = ''
+  private serverUrl: string = ''
+  private connectConfig: ConnectConfig | null = null
   private telemetryTimer: ReturnType<typeof setInterval> | null = null
   private healthReportTimer: ReturnType<typeof setInterval> | null = null
   private healthReportInitTimer: ReturnType<typeof setTimeout> | null = null
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  private authTimeoutTimer: ReturnType<typeof setTimeout> | null = null
-  private reconnectDelay: number = 1000
   private telemetryTick: number = 0
   private lastTelemetryAt: string | null = null
   private lastHealthReportAt: string | null = null
@@ -80,20 +104,30 @@ class CloudAgentService {
 
       const settings = getSettings()
       const deviceId = settings.cloud.deviceId || randomUUID()
-
-      setSettings({ cloud: { ...settings.cloud, apiKey, deviceId } })
+      this.serverUrl = settings.cloud.serverUrl || DEFAULT_SERVER_URL
 
       this.apiKey = apiKey
       this.deviceId = deviceId
+
+      // Discover server config and register device before persisting
+      await this.discover()
+      await this.postApi(`/devices/${this.deviceId}/register`, {
+        appVersion: app.getVersion(),
+        hostname: hostname(),
+      })
+
+      setSettings({ cloud: { ...settings.cloud, apiKey, deviceId } })
       this.linkedAt = new Date().toISOString()
       this.error = null
 
       this.start()
-      logInfo('Cloud agent linked')
+      cloudLog('INFO', `Linked device ${deviceId} to ${this.serverUrl}`)
       return { success: true }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      logError(`Cloud agent link failed: ${msg}`)
+      cloudLog('ERROR', `Link failed: ${msg}`)
+      this.error = msg.slice(0, 200)
+      this.status = 'error'
       return { success: false, error: msg }
     }
   }
@@ -106,20 +140,29 @@ class CloudAgentService {
     this.deviceId = ''
     this.linkedAt = null
     this.error = null
-    logInfo('Cloud agent unlinked')
+    cloudLog('INFO', 'Unlinked device')
   }
 
-  start(): void {
+  async start(): Promise<void> {
     const settings = getSettings()
     this.apiKey = settings.cloud.apiKey
     this.deviceId = settings.cloud.deviceId
+    this.serverUrl = settings.cloud.serverUrl || DEFAULT_SERVER_URL
 
     if (!this.apiKey) {
       this.status = 'dormant'
       return
     }
 
-    this.connect()
+    try {
+      await this.discover()
+      this.connect()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      this.error = `Discovery failed: ${msg.slice(0, 180)}`
+      this.status = 'error'
+      cloudLog('ERROR', `Discovery failed: ${msg}`)
+    }
   }
 
   stop(): void {
@@ -135,142 +178,121 @@ class CloudAgentService {
       clearTimeout(this.healthReportInitTimer)
       this.healthReportInitTimer = null
     }
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer)
-      this.reconnectTimer = null
+
+    if (this.channel) {
+      this.channel.unbind_all()
+      this.pusher?.unsubscribe(`private-device.${this.deviceId}`)
+      this.channel = null
     }
-    if (this.authTimeoutTimer) {
-      clearTimeout(this.authTimeoutTimer)
-      this.authTimeoutTimer = null
+    if (this.pusher) {
+      this.pusher.disconnect()
+      this.pusher = null
     }
-    if (this.ws) {
-      this.ws.close()
-      this.ws = null
-    }
+
     this.status = 'dormant'
-    this.reconnectDelay = 1000
   }
 
-  // ─── WebSocket ──────────────────────────────────────────
+  // ─── Reverb Connection (via pusher-js) ────────────────
 
   private connect(): void {
+    if (!this.connectConfig) {
+      this.error = 'No server config — call discover() first'
+      this.status = 'error'
+      return
+    }
+
+    const { ws, broadcasting } = this.connectConfig
     this.status = 'connecting'
     this.error = null
 
     try {
-      this.ws = new WebSocket(CLOUD_WS_URL)
-    } catch (err) {
-      this.error = err instanceof Error ? err.message : 'WebSocket creation failed'
-      this.status = 'error'
-      this.scheduleReconnect()
-      return
-    }
-
-    this.ws.onopen = () => {
-      this.reconnectDelay = 1000
-      this.send({
-        type: 'auth',
-        apiKey: this.apiKey,
-        deviceId: this.deviceId,
-        appVersion: app.getVersion(),
-        hostname: hostname(),
+      this.pusher = new Pusher(ws.key, {
+        wsHost: ws.host,
+        wsPort: ws.port,
+        wssPort: ws.port,
+        forceTLS: ws.tls,
+        disableStats: true,
+        enabledTransports: ['ws', 'wss'],
+        cluster: '',
+        // Auth endpoint — Reverb validates API key + device ownership
+        channelAuthorization: {
+          endpoint: broadcasting,
+          transport: 'ajax',
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            'X-Device-Id': this.deviceId,
+          },
+        },
       })
-      // Stay in 'connecting' until server confirms auth — don't accept
-      // commands or start telemetry until we receive an 'auth-ok' message
-      logInfo('Cloud agent sent auth, waiting for confirmation')
 
-      // Timeout if server doesn't respond to auth within 30 seconds
-      this.authTimeoutTimer = setTimeout(() => {
-        this.authTimeoutTimer = null
-        if (this.status === 'connecting') {
-          this.error = 'Auth timeout — server did not respond'
-          this.status = 'error'
-          logError('Cloud agent auth timeout')
-          this.ws?.close()
-        }
-      }, 30_000)
-    }
+      this.pusher.connection.bind('connected', () => {
+        cloudLog('INFO', 'Reverb connected, subscribing to channel')
+        this.subscribeToChannel()
+      })
 
-    this.ws.onmessage = (event) => {
-      try {
-        const data = typeof event.data === 'string' ? event.data : ''
-        this.onMessage(data)
-      } catch {
-        // Ignore malformed messages
-      }
-    }
+      this.pusher.connection.bind('disconnected', () => {
+        this.onDisconnected()
+      })
 
-    this.ws.onclose = () => {
-      this.onClose()
-    }
+      this.pusher.connection.bind('error', (err: unknown) => {
+        const msg = err instanceof Error ? err.message : typeof err === 'object' && err !== null && 'error' in err
+          ? String((err as { error: { data?: { message?: string } } }).error?.data?.message || 'Connection error')
+          : 'Connection error'
+        cloudLog('ERROR', `Reverb error: ${msg}`)
+        // Don't set error status here — pusher-js will retry automatically
+        // Only set error if we get a fatal auth failure from the channel
+      })
 
-    this.ws.onerror = () => {
-      // onclose will fire after this
-    }
-  }
-
-  private onMessage(raw: string): void {
-    // Reject oversized messages to prevent memory exhaustion
-    if (raw.length > 64 * 1024) return
-
-    let cmd: CloudCommand
-    try {
-      cmd = JSON.parse(raw)
-    } catch {
-      return
-    }
-
-    // Ensure parsed result is a non-null object
-    if (cmd === null || typeof cmd !== 'object' || Array.isArray(cmd)) return
-
-    if (cmd.type === 'ping') {
-      this.send({ type: 'pong' })
-      return
-    }
-
-    // Server must confirm auth before we accept commands or start telemetry
-    if (cmd.type === 'auth-ok') {
-      if (this.status === 'connecting') {
-        if (this.authTimeoutTimer) {
-          clearTimeout(this.authTimeoutTimer)
-          this.authTimeoutTimer = null
-        }
-        this.status = 'connected'
-        this.error = null
-        this.startTelemetry()
-        this.startHealthReports()
-        logInfo('Cloud agent authenticated and connected')
-      }
-      return
-    }
-
-    if (cmd.type === 'auth-error') {
-      const reason = 'error' in cmd && typeof cmd.error === 'string' ? cmd.error : 'Authentication failed'
-      this.error = reason.slice(0, 200)
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : 'Pusher creation failed'
       this.status = 'error'
-      logError(`Cloud agent auth rejected: ${this.error}`)
-      this.ws?.close()
-      return
+      cloudLog('ERROR', `Connect failed: ${this.error}`)
     }
-
-    // Reject all commands until authenticated
-    if (this.status !== 'connected') return
-
-    if (!('requestId' in cmd) || typeof cmd.requestId !== 'string' || cmd.requestId.length > 200) return
-
-    const allowedTypes = new Set([
-      'scan', 'clean', 'software-update-check', 'software-update-run',
-      'get-status', 'get-system-info', 'get-health-report',
-    ])
-    if (!allowedTypes.has(cmd.type)) return
-
-    this.lastCommandAt = new Date().toISOString()
-    this.executeCommand(cmd)
   }
 
-  private onClose(): void {
+  private subscribeToChannel(): void {
+    if (!this.pusher) return
+
+    const channelName = `private-device.${this.deviceId}`
+    this.channel = this.pusher.subscribe(channelName)
+
+    this.channel.bind('pusher:subscription_succeeded', () => {
+      this.status = 'connected'
+      this.error = null
+      cloudLog('INFO', `Subscribed to private-device.${this.deviceId}, starting telemetry`)
+      this.startTelemetry()
+      this.startHealthReports()
+    })
+
+    this.channel.bind('pusher:subscription_error', (err: unknown) => {
+      const msg = typeof err === 'object' && err !== null && 'error' in err
+        ? String((err as Record<string, unknown>).error)
+        : 'Channel subscription failed'
+      this.error = msg.slice(0, 200)
+      this.status = 'error'
+      cloudLog('ERROR', `Channel auth failed: ${this.error}`)
+      // Fatal — bad API key or device not authorized. Stop retrying.
+      this.pusher?.disconnect()
+    })
+
+    // Listen for commands from the server
+    this.channel.bind('DeviceCommand', (data: unknown) => {
+      cloudLog('DEBUG', 'Received DeviceCommand', data)
+      this.onCommand(data)
+    })
+
+    this.channel.bind('DevicePing', (data: unknown) => {
+      cloudLog('DEBUG', 'Received DevicePing')
+      const cmd = data as { requestId?: string }
+      if (cmd.requestId && typeof cmd.requestId === 'string' && cmd.requestId.length <= 200) {
+        this.postCommandResult(cmd.requestId, true, { pong: true }).catch(() => {})
+      }
+    })
+  }
+
+  private onDisconnected(): void {
     if (this.status === 'dormant') return
-    this.ws = null
+
     this.status = 'disconnected'
 
     if (this.telemetryTimer) {
@@ -285,36 +307,102 @@ class CloudAgentService {
       clearTimeout(this.healthReportInitTimer)
       this.healthReportInitTimer = null
     }
-    if (this.authTimeoutTimer) {
-      clearTimeout(this.authTimeoutTimer)
-      this.authTimeoutTimer = null
+
+    cloudLog('INFO', 'Reverb disconnected, pusher-js will auto-reconnect')
+    // pusher-js handles reconnect with exponential backoff automatically
+  }
+
+  // ─── HTTP API Helpers ─────────────────────────────────
+
+  /** Discover server config from GET {serverUrl}/api/connect */
+  private async discover(): Promise<void> {
+    cloudLog('DEBUG', `Discovery: GET ${this.serverUrl}/api/connect`)
+    const res = await fetch(`${this.serverUrl}/api/connect`, {
+      headers: { Authorization: `Bearer ${this.apiKey}` },
+    })
+    if (!res.ok) {
+      cloudLog('ERROR', `Discovery failed: HTTP ${res.status}`)
+      throw new Error(`Discovery returned HTTP ${res.status}`)
+    }
+    const data = await res.json() as ConnectConfig
+    if (!data?.ws?.host || !data?.ws?.key || !data?.api || !data?.broadcasting) {
+      cloudLog('ERROR', 'Discovery response missing required fields', data)
+      throw new Error('Invalid discovery response')
+    }
+    this.connectConfig = data
+    cloudLog('INFO', 'Discovery complete', { wsHost: data.ws.host, wsPort: data.ws.port, tls: data.ws.tls, api: data.api, broadcasting: data.broadcasting })
+  }
+
+  private async postApi(path: string, body: unknown): Promise<unknown> {
+    if (!this.connectConfig) throw new Error('Not connected — no server config')
+    const url = `${this.connectConfig.api}${path}`
+    cloudLog('DEBUG', `POST ${url}`)
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      cloudLog('ERROR', `POST ${url} → ${res.status}`, text.slice(0, 300))
+      throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`)
     }
 
-    logInfo('Cloud agent disconnected, scheduling reconnect')
-    this.scheduleReconnect()
-  }
-
-  private scheduleReconnect(): void {
-    if (this.reconnectTimer) return
-    if (this.status === 'dormant') return
-
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null
-      if (this.status !== 'dormant' && this.apiKey) {
-        this.connect()
-      }
-    }, this.reconnectDelay)
-
-    this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY_MS)
-  }
-
-  private send(msg: CloudMessage): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(msg))
+    cloudLog('DEBUG', `POST ${url} → ${res.status}`)
+    const contentType = res.headers.get('content-type')
+    if (contentType?.includes('application/json')) {
+      return res.json()
     }
+    return null
   }
 
-  // ─── Telemetry (frequent, lightweight) ──────────────────
+  private async postTelemetry(snapshot: TelemetrySnapshot): Promise<void> {
+    await this.postApi(`/devices/${this.deviceId}/telemetry`, {
+      timestamp: Date.now(),
+      snapshot,
+    })
+  }
+
+  private async postHealthReport(report: HealthReport): Promise<void> {
+    await this.postApi(`/devices/${this.deviceId}/health-report`, {
+      timestamp: Date.now(),
+      report,
+    })
+  }
+
+  private async postCommandResult(requestId: string, success: boolean, data?: unknown, error?: string): Promise<void> {
+    await this.postApi(`/devices/${this.deviceId}/command-result`, {
+      requestId,
+      success,
+      data,
+      error,
+    })
+  }
+
+  // ─── Command Handling ─────────────────────────────────
+
+  private onCommand(raw: unknown): void {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return
+    if (this.status !== 'connected') return
+
+    const cmd = raw as CloudCommand
+
+    const allowedTypes = new Set([
+      'scan', 'clean', 'software-update-check', 'software-update-run',
+      'get-status', 'get-system-info', 'get-health-report',
+    ])
+    if (!('type' in cmd) || !allowedTypes.has(cmd.type)) return
+    if (!('requestId' in cmd) || typeof cmd.requestId !== 'string' || cmd.requestId.length > 200) return
+
+    this.lastCommandAt = new Date().toISOString()
+    this.executeCommand(cmd)
+  }
+
+  // ─── Telemetry (frequent, lightweight) ────────────────
 
   private startTelemetry(): void {
     if (this.telemetryTimer) return
@@ -349,8 +437,8 @@ class CloudAgentService {
         memoryPercent: (mem.active / mem.total) * 100,
         memoryUsedBytes: mem.active,
         memoryTotalBytes: mem.total,
-        diskReadBps: diskIO.rIO_sec ?? 0,
-        diskWriteBps: diskIO.wIO_sec ?? 0,
+        diskReadBps: diskIO?.rIO_sec ?? 0,
+        diskWriteBps: diskIO?.wIO_sec ?? 0,
         networkRxBps: netStats.reduce((s, n) => s + n.rx_sec, 0),
         networkTxBps: netStats.reduce((s, n) => s + n.tx_sec, 0),
         uptime: time.uptime ?? 0,
@@ -395,20 +483,15 @@ class CloudAgentService {
         }
       }
 
-      this.send({
-        type: 'telemetry',
-        deviceId: this.deviceId,
-        timestamp: Date.now(),
-        snapshot,
-      })
-
+      await this.postTelemetry(snapshot)
       this.lastTelemetryAt = new Date().toISOString()
+      cloudLog('DEBUG', `Telemetry sent (tick ${this.telemetryTick}, cpu=${snapshot.cpu.toFixed(1)}%, mem=${snapshot.memoryPercent.toFixed(1)}%)`)
     } catch (err) {
-      logError(`Cloud telemetry collection failed: ${err}`)
+      cloudLog('ERROR', `Telemetry failed: ${err}`)
     }
   }
 
-  // ─── Health Reports (infrequent, comprehensive) ─────────
+  // ─── Health Reports (infrequent, comprehensive) ───────
 
   private startHealthReports(): void {
     if (this.healthReportTimer) return
@@ -434,7 +517,7 @@ class CloudAgentService {
     this.healthReportRunning = true
 
     try {
-      logInfo('Cloud agent: collecting health report')
+      cloudLog('DEBUG', 'Collecting health report')
 
       const report: HealthReport = {
         registry: { totalIssues: 0, byType: {}, byRisk: {} },
@@ -470,17 +553,11 @@ class CloudAgentService {
       if (results[5].status === 'fulfilled') report.malware = results[5].value
       if (results[6].status === 'fulfilled') report.securityPosture = results[6].value
 
-      this.send({
-        type: 'health-report',
-        deviceId: this.deviceId,
-        timestamp: Date.now(),
-        report,
-      })
-
+      await this.postHealthReport(report)
       this.lastHealthReportAt = new Date().toISOString()
-      logInfo('Cloud agent: health report sent')
+      cloudLog('INFO', 'Health report sent')
     } catch (err) {
-      logError(`Cloud health report failed: ${err}`)
+      cloudLog('ERROR', `Health report failed: ${err}`)
     } finally {
       this.healthReportRunning = false
     }
@@ -586,7 +663,7 @@ class CloudAgentService {
     }
   }
 
-  // ─── Security Posture (native Windows checks) ──────────
+  // ─── Security Posture (native Windows checks) ────────
 
   private async collectSecurityPosture(): Promise<HealthReport['securityPosture']> {
     const [av, fw, bl, wu] = await Promise.allSettled([
@@ -605,7 +682,6 @@ class CloudAgentService {
   }
 
   private async collectAntivirusStatus(): Promise<HealthReport['securityPosture']['antivirus']> {
-    // Use Get-MpComputerStatus for Defender-specific rich detail
     const { stdout } = await execFileAsync('powershell.exe', [
       '-NoProfile', '-NonInteractive', '-Command',
       'Get-MpComputerStatus | Select-Object AntivirusEnabled,RealTimeProtectionEnabled,AntivirusSignatureLastUpdated,AntivirusSignatureAge | ConvertTo-Json -Compress',
@@ -627,7 +703,6 @@ class CloudAgentService {
     ], { timeout: 15_000, windowsHide: true })
 
     const profiles: Array<{ Name: string; Enabled: boolean }> = JSON.parse(stdout.trim())
-    // Normalize — profiles is always an array (3 profiles: Domain, Private, Public)
     const list = Array.isArray(profiles) ? profiles : [profiles]
     const lookup = Object.fromEntries(list.map((p) => [p.Name?.toLowerCase(), p.Enabled === true]))
 
@@ -639,7 +714,6 @@ class CloudAgentService {
   }
 
   private async collectBitLockerStatus(): Promise<HealthReport['securityPosture']['bitlocker']> {
-    // BitLocker requires admin — gracefully return empty if unavailable
     try {
       const { stdout } = await execFileAsync('powershell.exe', [
         '-NoProfile', '-NonInteractive', '-Command',
@@ -650,7 +724,6 @@ class CloudAgentService {
       const vols: Array<{ MountPoint: string; VolumeStatus: number; ProtectionStatus: number }> =
         Array.isArray(raw) ? raw : [raw]
 
-      // VolumeStatus: 0=FullyDecrypted, 1=FullyEncrypted, 2=EncryptionInProgress, 3=DecryptionInProgress
       const statusMap: Record<number, HealthReport['securityPosture']['bitlocker']['volumes'][0]['status']> = {
         0: 'FullyDecrypted', 1: 'FullyEncrypted', 2: 'EncryptionInProgress', 3: 'DecryptionInProgress',
       }
@@ -663,7 +736,6 @@ class CloudAgentService {
         })),
       }
     } catch {
-      // BitLocker cmdlet not available (Home edition) or not admin
       return { volumes: [] }
     }
   }
@@ -678,7 +750,6 @@ class CloudAgentService {
     const patches: Array<{ HotFixID: string; InstalledOn: string; Description: string }> =
       Array.isArray(raw) ? raw : [raw]
 
-    // InstalledOn comes as a .NET DateTime string — parse to ISO date
     const recentPatches = patches
       .filter((p) => p.HotFixID && p.InstalledOn)
       .map((p) => {
@@ -703,12 +774,12 @@ class CloudAgentService {
     return { recentPatches, lastPatchDate, daysSinceLastPatch }
   }
 
-  // ─── Command Execution ──────────────────────────────────
+  // ─── Command Execution ────────────────────────────────
 
   private async executeCommand(cmd: CloudCommand): Promise<void> {
     if (this.commandRunning) {
       if ('requestId' in cmd) {
-        this.sendResult(cmd.requestId, false, undefined, 'Another command is already running')
+        this.postCommandResult(cmd.requestId, false, undefined, 'Another command is already running').catch(() => {})
       }
       return
     }
@@ -717,7 +788,7 @@ class CloudAgentService {
     const elapsed = Date.now() - this.lastCommandFinishedAt
     if (elapsed < 5_000) {
       if ('requestId' in cmd) {
-        this.sendResult(cmd.requestId, false, undefined, 'Rate limited — try again shortly')
+        this.postCommandResult(cmd.requestId, false, undefined, 'Rate limited — try again shortly').catch(() => {})
       }
       return
     }
@@ -729,7 +800,7 @@ class CloudAgentService {
       timedOut = true
       this.commandRunning = false
       if ('requestId' in cmd) {
-        this.sendResult(cmd.requestId, false, undefined, 'Command timed out')
+        this.postCommandResult(cmd.requestId, false, undefined, 'Command timed out').catch(() => {})
       }
     }, COMMAND_TIMEOUT_MS)
 
@@ -755,16 +826,15 @@ class CloudAgentService {
           break
         case 'get-health-report':
           await this.collectAndSendHealthReport()
-          this.sendResult(cmd.requestId, true, { sent: true })
+          await this.postCommandResult(cmd.requestId, true, { sent: true })
           break
       }
     } catch (err) {
       if (!timedOut) {
-        // Truncate error messages to avoid leaking local paths or sensitive info
         const raw = err instanceof Error ? err.message : String(err)
         const msg = raw.length > 200 ? raw.slice(0, 200) : raw
         if ('requestId' in cmd) {
-          this.sendResult(cmd.requestId, false, undefined, msg)
+          this.postCommandResult(cmd.requestId, false, undefined, msg).catch(() => {})
         }
       }
     } finally {
@@ -776,11 +846,7 @@ class CloudAgentService {
     }
   }
 
-  private sendResult(requestId: string, success: boolean, data?: unknown, error?: string): void {
-    this.send({ type: 'command-result', requestId, success, data, error })
-  }
-
-  // ─── Command Handlers ──────────────────────────────────
+  // ─── Command Handlers ────────────────────────────────
 
   private async handleScan(requestId: string, scanType: AllowedScanType): Promise<void> {
     const validScanTypes = new Set<string>([
@@ -788,7 +854,7 @@ class CloudAgentService {
       'malware', 'network', 'recycle-bin', 'uninstall-leftovers',
     ])
     if (typeof scanType !== 'string' || !validScanTypes.has(scanType)) {
-      this.sendResult(requestId, false, undefined, 'Invalid scan type')
+      await this.postCommandResult(requestId, false, undefined, 'Invalid scan type')
       return
     }
 
@@ -811,7 +877,7 @@ class CloudAgentService {
           } catch { /* skip */ }
         }
         // Strip local file paths — only send IDs, sizes, and categories to cloud
-        this.sendResult(requestId, true, {
+        await this.postCommandResult(requestId, true, {
           scanType,
           results: results.map((r) => ({
             category: r.category,
@@ -829,7 +895,7 @@ class CloudAgentService {
       case 'registry': {
         const entries = await scanRegistry()
         // Strip registry key paths and issue text (contains local file paths)
-        this.sendResult(requestId, true, {
+        await this.postCommandResult(requestId, true, {
           scanType,
           entries: entries.map((e) => ({ id: e.id, type: e.type, risk: e.risk })),
           totalIssues: entries.length,
@@ -840,7 +906,7 @@ class CloudAgentService {
       case 'malware': {
         const result = await scanMalware()
         // Strip full file paths — only send filename, detection info, and severity
-        this.sendResult(requestId, true, {
+        await this.postCommandResult(requestId, true, {
           scanType,
           filesScanned: result.filesScanned,
           duration: result.duration,
@@ -858,7 +924,7 @@ class CloudAgentService {
       case 'network': {
         const items = await scanNetwork()
         // Only send IDs and types — labels may contain wifi network names or other sensitive info
-        this.sendResult(requestId, true, {
+        await this.postCommandResult(requestId, true, {
           scanType,
           items: items.map((i) => ({ id: i.id, type: i.type })),
           totalItems: items.length,
@@ -867,23 +933,23 @@ class CloudAgentService {
       }
 
       default:
-        this.sendResult(requestId, false, undefined, 'Scan type not yet supported via cloud')
+        await this.postCommandResult(requestId, false, undefined, 'Scan type not yet supported via cloud')
         return
     }
   }
 
   private async handleClean(requestId: string, itemIds: string[]): Promise<void> {
     if (!Array.isArray(itemIds) || itemIds.length === 0 || itemIds.length > 1000) {
-      this.sendResult(requestId, false, undefined, 'Invalid itemIds')
+      await this.postCommandResult(requestId, false, undefined, 'Invalid itemIds')
       return
     }
     if (itemIds.some((id) => typeof id !== 'string' || id.length > 200)) {
-      this.sendResult(requestId, false, undefined, 'Invalid itemIds')
+      await this.postCommandResult(requestId, false, undefined, 'Invalid itemIds')
       return
     }
     const result = await cleanItems(itemIds)
     // Strip local file paths from error details before sending to cloud
-    this.sendResult(requestId, true, {
+    await this.postCommandResult(requestId, true, {
       totalCleaned: result.totalCleaned,
       filesDeleted: result.filesDeleted,
       filesSkipped: result.filesSkipped,
@@ -895,7 +961,7 @@ class CloudAgentService {
   private async handleUpdateCheck(requestId: string): Promise<void> {
     const result = await checkForUpdates()
     // Only send apps that need updates — don't expose full installed software inventory
-    this.sendResult(requestId, true, {
+    await this.postCommandResult(requestId, true, {
       apps: result.apps.map((a) => ({
         id: a.id,
         name: a.name,
@@ -913,16 +979,16 @@ class CloudAgentService {
 
   private async handleUpdateRun(requestId: string, appIds: string[]): Promise<void> {
     if (!Array.isArray(appIds) || appIds.length === 0 || appIds.length > 100) {
-      this.sendResult(requestId, false, undefined, 'Invalid appIds')
+      await this.postCommandResult(requestId, false, undefined, 'Invalid appIds')
       return
     }
     if (appIds.some((id) => typeof id !== 'string' || id.length > 200)) {
-      this.sendResult(requestId, false, undefined, 'Invalid appIds')
+      await this.postCommandResult(requestId, false, undefined, 'Invalid appIds')
       return
     }
     const result = await runUpdates(appIds, () => {})
     // Strip raw error reasons which may contain local paths or system info
-    this.sendResult(requestId, true, {
+    await this.postCommandResult(requestId, true, {
       succeeded: result.succeeded,
       failed: result.failed,
       errors: result.errors.map((e) => ({ appId: e.appId, name: e.name })),
@@ -939,13 +1005,13 @@ class CloudAgentService {
       si.fsSize(),
     ])
 
-    this.sendResult(requestId, true, {
+    await this.postCommandResult(requestId, true, {
       cpu: load.currentLoad,
       memoryPercent: (mem.active / mem.total) * 100,
       memoryUsedBytes: mem.active,
       memoryTotalBytes: mem.total,
-      diskReadBps: diskIO.rIO_sec ?? 0,
-      diskWriteBps: diskIO.wIO_sec ?? 0,
+      diskReadBps: diskIO?.rIO_sec ?? 0,
+      diskWriteBps: diskIO?.wIO_sec ?? 0,
       networkRxBps: netStats.reduce((s, n) => s + n.rx_sec, 0),
       networkTxBps: netStats.reduce((s, n) => s + n.tx_sec, 0),
       uptime: time.uptime ?? 0,
@@ -963,7 +1029,7 @@ class CloudAgentService {
       si.diskLayout(),
     ])
 
-    this.sendResult(requestId, true, {
+    await this.postCommandResult(requestId, true, {
       cpu: { model: `${cpu.manufacturer} ${cpu.brand}`, cores: cpu.physicalCores, threads: cpu.cores },
       os: { distro: osInfo.distro, release: osInfo.release, hostname: osInfo.hostname },
       memory: { total: mem.total, available: mem.available },
