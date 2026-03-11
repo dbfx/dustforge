@@ -309,14 +309,15 @@ export function SettingsPage() {
           </div>
         ) : (
           <>
-            <Row label="Status" desc={cloudStatus?.error || undefined}>
+            <Row label="Status">
               <div className="flex items-center gap-2">
                 <div
-                  className="h-2.5 w-2.5 rounded-full"
+                  className={cn('h-2.5 w-2.5 rounded-full', cloudStatus?.status === 'connecting' && 'animate-pulse')}
                   style={{
                     background:
                       cloudStatus?.status === 'connected' ? '#22c55e' :
                       cloudStatus?.status === 'connecting' ? '#f59e0b' :
+                      cloudStatus?.status === 'disconnected' ? '#f59e0b' :
                       cloudStatus?.status === 'error' ? '#ef4444' : '#71717a'
                   }}
                 />
@@ -325,6 +326,16 @@ export function SettingsPage() {
                 </span>
               </div>
             </Row>
+            {cloudStatus?.error && (
+              <div className="flex items-start gap-2 py-2 px-0.5 -mt-2 mb-1">
+                <span
+                  className="text-[12px] leading-snug"
+                  style={{ color: cloudStatus.status === 'error' ? '#ef4444' : '#f59e0b' }}
+                >
+                  {cloudStatus.error}
+                </span>
+              </div>
+            )}
             <Row label="Device ID" desc={cloudStatus?.maskedApiKey ? `Key: ${cloudStatus.maskedApiKey}` : undefined}>
               <span className="font-mono text-[12px] text-zinc-500">
                 {cloudStatus?.deviceId?.slice(0, 8) ?? '—'}
