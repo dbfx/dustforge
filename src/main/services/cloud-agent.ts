@@ -39,7 +39,7 @@ import type {
 } from './cloud-agent-types'
 import type { ScanResult } from '../../shared/types'
 
-const DEFAULT_SERVER_URL = app.isPackaged ? 'https://cloud.dustforge.com' : 'http://localhost:8000'
+const DEFAULT_SERVER_URL = app.isPackaged ? 'https://cloud.dustforge.net' : 'http://localhost:8000'
 
 // ─── Cloud Agent Debug Log ──────────────────────────────────
 const CLOUD_LOG_DIR = join(tmpdir(), 'dustforge-cloud')
