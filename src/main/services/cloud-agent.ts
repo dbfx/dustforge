@@ -151,6 +151,19 @@ class CloudAgentService {
     cloudLog('INFO', 'Unlinked device')
   }
 
+  async reconnect(): Promise<void> {
+    cloudLog('INFO', 'Manual reconnect requested')
+    // Tear down any existing connection/timers cleanly
+    this.clearReconnectTimer()
+    this.reconnectAttempts = 0
+    if (this.channel) { this.channel.unbind_all(); this.channel = null }
+    if (this.pusher) { this.pusher.disconnect(); this.pusher = null }
+    if (this.telemetryTimer) { clearInterval(this.telemetryTimer); this.telemetryTimer = null }
+    if (this.healthReportTimer) { clearInterval(this.healthReportTimer); this.healthReportTimer = null }
+    if (this.healthReportInitTimer) { clearTimeout(this.healthReportInitTimer); this.healthReportInitTimer = null }
+    await this.start()
+  }
+
   async start(): Promise<void> {
     const settings = getSettings()
     this.apiKey = settings.cloud.apiKey
@@ -282,8 +295,8 @@ class CloudAgentService {
           ? String((err as { error: { data?: { message?: string } } }).error?.data?.message || 'Connection error')
           : 'Connection error'
         cloudLog('ERROR', `Reverb error: ${msg}`)
-        // Don't set error status here — pusher-js will retry automatically
-        // Only set error if we get a fatal auth failure from the channel
+        // Surface the error so the UI can show it — onDisconnected will handle reconnect
+        this.error = msg.slice(0, 200)
       })
 
     } catch (err) {
@@ -353,6 +366,10 @@ class CloudAgentService {
     if (this.status === 'dormant') return
 
     this.status = 'disconnected'
+    // Preserve existing error if set (e.g. from connection.error), otherwise set a generic one
+    if (!this.error) {
+      this.error = 'Connection lost'
+    }
 
     if (this.telemetryTimer) {
       clearInterval(this.telemetryTimer)

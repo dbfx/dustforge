@@ -260,6 +260,7 @@ const api = {
   cloudLink: (apiKey: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.CLOUD_LINK, apiKey),
   cloudUnlink: (): Promise<void> => ipcRenderer.invoke(IPC.CLOUD_UNLINK),
+  cloudReconnect: (): Promise<void> => ipcRenderer.invoke(IPC.CLOUD_RECONNECT),
   cloudGetStatus: (): Promise<{
     status: string
     maskedApiKey: string | null

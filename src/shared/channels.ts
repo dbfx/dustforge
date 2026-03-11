@@ -133,6 +133,7 @@ export const IPC = {
   CLOUD_LINK: 'cloud:link',
   CLOUD_UNLINK: 'cloud:unlink',
   CLOUD_GET_STATUS: 'cloud:get-status',
+  CLOUD_RECONNECT: 'cloud:reconnect',
 
   // Window controls
   WINDOW_MINIMIZE: 'window:minimize',

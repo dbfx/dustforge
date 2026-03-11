@@ -17,4 +17,8 @@ export function registerCloudAgentIpc(): void {
   ipcMain.handle(IPC.CLOUD_GET_STATUS, () => {
     return cloudAgent.getStatus()
   })
+
+  ipcMain.handle(IPC.CLOUD_RECONNECT, async () => {
+    return cloudAgent.reconnect()
+  })
 }

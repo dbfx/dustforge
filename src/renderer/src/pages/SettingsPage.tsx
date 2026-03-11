@@ -38,6 +38,7 @@ export function SettingsPage() {
   const [cloudApiKey, setCloudApiKey] = useState('')
   const [cloudLinking, setCloudLinking] = useState(false)
   const [cloudUnlinking, setCloudUnlinking] = useState(false)
+  const [cloudReconnecting, setCloudReconnecting] = useState(false)
 
   const isLinked = !!settings.cloud.apiKey
 
@@ -78,6 +79,15 @@ export function SettingsPage() {
       if (fresh) setSettings(fresh)
     } catch { /* ignore */ }
     setCloudUnlinking(false)
+  }
+
+  const handleCloudReconnect = async () => {
+    setCloudReconnecting(true)
+    try {
+      await window.dustforge?.cloudReconnect?.()
+      refreshCloudStatus()
+    } catch { /* ignore */ }
+    setCloudReconnecting(false)
   }
 
   // Fetch next scan time whenever schedule settings change
@@ -324,6 +334,17 @@ export function SettingsPage() {
                 <span className="text-[13px] text-zinc-400 capitalize">
                   {cloudStatus?.status ?? 'Loading...'}
                 </span>
+                {(cloudStatus?.status === 'disconnected' || cloudStatus?.status === 'error') && (
+                  <button
+                    onClick={handleCloudReconnect}
+                    disabled={cloudReconnecting}
+                    className="ml-1 flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium text-zinc-300 transition-colors hover:text-white"
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
+                  >
+                    <RefreshCw className={cn('h-3 w-3', cloudReconnecting && 'animate-spin')} strokeWidth={2} />
+                    {cloudReconnecting ? 'Connecting...' : 'Reconnect'}
+                  </button>
+                )}
               </div>
             </Row>
             {cloudStatus?.error && (
