@@ -64,7 +64,7 @@ const FILTER_LABELS: Record<string, string> = {
   patch: 'Patch',
 }
 
-export function SoftwareUpdaterPage() {
+export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
   const apps = useUpdaterStore((s) => s.apps)
   const loading = useUpdaterStore((s) => s.loading)
   const updating = useUpdaterStore((s) => s.updating)
@@ -255,11 +255,13 @@ export function SoftwareUpdaterPage() {
   const patchCount = apps.filter((a) => a.severity === 'patch').length
 
   return (
-    <div className="animate-fade-in">
-      <PageHeader
-        title="Software Updater"
-        description="Check for outdated software and install updates via winget"
-      />
+    <div className={embedded ? '' : 'animate-fade-in'}>
+      {!embedded && (
+        <PageHeader
+          title="Software Updater"
+          description="Check for outdated software and install updates via winget"
+        />
+      )}
 
       {/* Actions */}
       <div className="mb-5 flex items-center gap-2.5">

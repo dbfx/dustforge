@@ -13,6 +13,7 @@ import {
   Circle,
   Link2
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -54,7 +55,7 @@ const CATEGORY_LABELS: Record<ServiceCategory | 'all', string> = {
   unknown: 'Other'
 }
 
-export function ServiceManagerPage() {
+export function ServiceManagerPage({ embedded }: { embedded?: boolean }) {
   const services = useServiceStore((s) => s.services)
   const scanning = useServiceStore((s) => s.scanning)
   const applying = useServiceStore((s) => s.applying)
@@ -93,6 +94,7 @@ export function ServiceManagerPage() {
       s.setServices(result.services)
       s.setHasScanned(true)
     } catch (err) {
+      toast.error('Service scan failed')
       useServiceStore
         .getState()
         .setError(err instanceof Error ? err.message : 'Failed to scan services')
@@ -125,6 +127,8 @@ export function ServiceManagerPage() {
     try {
       const result = await window.dustforge.serviceApply(changes)
       useServiceStore.getState().setApplyResult(result)
+      if (result.succeeded > 0) toast.success(`${result.succeeded} service${result.succeeded > 1 ? 's' : ''} disabled`)
+      if (result.failed > 0) toast.error(`${result.failed} service${result.failed > 1 ? 's' : ''} failed`)
 
       // Re-scan to refresh state
       const scanResult = await window.dustforge.serviceScan()
@@ -153,6 +157,7 @@ export function ServiceManagerPage() {
         errorCount: result.failed
       })
     } catch (err) {
+      toast.error('Failed to apply service changes')
       useServiceStore
         .getState()
         .setError(err instanceof Error ? err.message : 'Failed to apply changes')
@@ -221,11 +226,13 @@ export function ServiceManagerPage() {
   }, [filteredServices])
 
   return (
-    <div className="mx-auto max-w-5xl px-8 py-8">
-      <PageHeader
-        title="Services Manager"
-        description="View, manage, and disable unnecessary Windows services to improve performance"
-      />
+    <div className={embedded ? '' : 'mx-auto max-w-5xl px-8 py-8'}>
+      {!embedded && (
+        <PageHeader
+          title="Services Manager"
+          description="View, manage, and disable unnecessary Windows services to improve performance"
+        />
+      )}
 
       {/* ── Action bar ───────────────────────────────────────── */}
       <div className="mb-5 flex items-center gap-3">

@@ -6,15 +6,12 @@ import {
   Zap,
   HardDrive,
   Settings,
-  PackageMinus,
   Wifi,
-  Cpu,
   History,
   ShieldAlert,
-  Eye,
+  Shield,
   Activity,
   Trash2,
-  Server,
   Download
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -43,7 +40,7 @@ const navGroups: NavGroup[] = [
     heading: 'SECURITY',
     items: [
       { icon: ShieldAlert, label: 'Malware Scanner', path: '/malware' },
-      { icon: Eye, label: 'Privacy Shield', path: '/privacy' }
+      { icon: Shield, label: 'System Hardening', path: '/hardening' }
     ]
   },
   {
@@ -53,8 +50,8 @@ const navGroups: NavGroup[] = [
       { icon: Database, label: 'Registry', path: '/registry' },
       { icon: Zap, label: 'Startup', path: '/startup' },
       { icon: Wifi, label: 'Network', path: '/network' },
-      { icon: Cpu, label: 'Drivers', path: '/drivers' },
-      { icon: Server, label: 'Services', path: '/services' }
+      { icon: Trash2, label: 'Uninstaller', path: '/uninstaller' },
+      { icon: Download, label: 'Updates', path: '/updates' }
     ]
   },
   {
@@ -62,9 +59,6 @@ const navGroups: NavGroup[] = [
     items: [
       { icon: Activity, label: 'Performance', path: '/performance' },
       { icon: HardDrive, label: 'Disk Analyzer', path: '/disk' },
-      { icon: PackageMinus, label: 'Debloater', path: '/debloater' },
-      { icon: Trash2, label: 'Uninstaller', path: '/uninstaller' },
-      { icon: Download, label: 'Updater', path: '/updater' },
       { icon: History, label: 'History', path: '/history' }
     ]
   }
@@ -80,8 +74,7 @@ function useBadgeCounts(): Record<string, number> {
   const driverUpdates = useDriverStore((s) => s.updates)
 
   return {
-    '/updater': updaterApps.length,
-    '/drivers': driverUpdates.length
+    '/updates': updaterApps.length + driverUpdates.length
   }
 }
 

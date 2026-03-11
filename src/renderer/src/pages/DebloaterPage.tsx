@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { PackageMinus, Search, Trash2, Shield, CheckCircle2, Package, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -21,7 +22,7 @@ const categoryColors: Record<BloatwareApp['category'], { bg: string; text: strin
   utility: { bg: 'rgba(245,158,11,0.1)', text: '#f59e0b', label: 'Utility' }
 }
 
-export function DebloaterPage() {
+export function DebloaterPage({ embedded }: { embedded?: boolean }) {
   const apps = useDebloaterStore((s) => s.apps)
   const scanning = useDebloaterStore((s) => s.scanning)
   const filter = useDebloaterStore((s) => s.filter)
@@ -54,6 +55,7 @@ export function DebloaterPage() {
       store.getState().setHasScanned(true)
     } catch (err) {
       console.error('Debloater scan failed:', err)
+      toast.error('Bloatware scan failed', { description: 'Make sure PowerShell is available' })
       store.getState().setError('Failed to scan for bloatware. Make sure PowerShell is available.')
     }
     store.getState().setScanning(false)
@@ -112,6 +114,7 @@ export function DebloaterPage() {
       }
     } catch (err) {
       console.error('Debloater remove failed:', err)
+      toast.error('Failed to remove apps', { description: 'Administrator privileges may be required' })
       store.getState().setError('Failed to remove some apps. Administrator privileges may be required.')
     } finally {
       store.getState().setRemoving(false)
@@ -132,27 +135,36 @@ export function DebloaterPage() {
     { label: 'Utility', value: 'utility' }
   ]
 
+  const headerAction = (
+    <div className="flex items-center gap-2.5">
+      <button onClick={handleScan} disabled={scanning || removing}
+        className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-medium text-zinc-300 transition-all disabled:opacity-40"
+        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <Search className="h-4 w-4" strokeWidth={1.8} /> Scan
+      </button>
+      <button onClick={() => setShowConfirm(true)} disabled={selectedCount === 0 || scanning || removing}
+        className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-30"
+        style={{ background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', color: '#fff' }}>
+        {removing ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} /> : <Trash2 className="h-4 w-4" strokeWidth={2} />}
+        {removing ? 'Removing...' : `Remove (${selectedCount})`}
+      </button>
+    </div>
+  )
+
   return (
-    <div className="animate-fade-in">
-      <PageHeader
-        title="Debloater"
-        description="Remove pre-installed Windows apps and OEM bloatware"
-        action={
-          <div className="flex items-center gap-2.5">
-            <button onClick={handleScan} disabled={scanning || removing}
-              className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-medium text-zinc-300 transition-all disabled:opacity-40"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <Search className="h-4 w-4" strokeWidth={1.8} /> Scan
-            </button>
-            <button onClick={() => setShowConfirm(true)} disabled={selectedCount === 0 || scanning || removing}
-              className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-30"
-              style={{ background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', color: '#fff' }}>
-              {removing ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} /> : <Trash2 className="h-4 w-4" strokeWidth={2} />}
-              {removing ? 'Removing...' : `Remove (${selectedCount})`}
-            </button>
-          </div>
-        }
-      />
+    <div className={embedded ? '' : 'animate-fade-in'}>
+      {!embedded && (
+        <PageHeader
+          title="Debloater"
+          description="Remove pre-installed Windows apps and OEM bloatware"
+          action={headerAction}
+        />
+      )}
+      {embedded && (
+        <div className="mb-5 flex justify-end">
+          {headerAction}
+        </div>
+      )}
 
       {/* Warning */}
       <div className="mb-5 flex items-center gap-3 rounded-2xl px-5 py-4"

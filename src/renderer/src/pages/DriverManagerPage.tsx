@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Sparkles
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -33,7 +34,7 @@ function formatSize(bytes: number): string {
   return `${value.toFixed(i > 1 ? 1 : 0)} ${units[i]}`
 }
 
-export function DriverManagerPage() {
+export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
   const packages = useDriverStore((s) => s.packages)
   const scanning = useDriverStore((s) => s.scanning)
   const scanProgress = useDriverStore((s) => s.scanProgress)
@@ -101,6 +102,7 @@ export function DriverManagerPage() {
       useDriverStore.getState().selectAllStale()
     } else {
       console.error('Driver scan failed:', staleResult.reason)
+      toast.error('Driver scan failed', { description: 'Make sure the app is running as Administrator' })
       s.setError('Failed to scan driver packages. Make sure the app is running as Administrator.')
     }
 
@@ -108,6 +110,7 @@ export function DriverManagerPage() {
       s.setUpdates(updateResult.value.updates)
     } else {
       console.error('Driver update scan failed:', updateResult.reason)
+      toast.error('Driver update check failed', { description: 'Make sure Windows Update service is running' })
       s.setUpdateError('Failed to check for driver updates. Make sure Windows Update service is running.')
     }
 
@@ -141,6 +144,7 @@ export function DriverManagerPage() {
         useDriverStore.getState().setInstallResult(result)
       } catch (err) {
         console.error('Driver install failed:', err)
+        toast.error('Driver install failed', { description: 'Administrator privileges are required' })
         useDriverStore.getState().setUpdateError('Failed to install driver updates. Administrator privileges are required.')
       } finally {
         const s = useDriverStore.getState()
@@ -190,6 +194,7 @@ export function DriverManagerPage() {
         recomputeStats()
       } catch (err) {
         console.error('Driver clean failed:', err)
+        toast.error('Driver cleanup failed', { description: 'Administrator privileges are required' })
         useDriverStore.getState().setError('Failed to remove driver packages. Administrator privileges are required.')
       } finally {
         useDriverStore.getState().setCleaning(false)
@@ -243,11 +248,13 @@ export function DriverManagerPage() {
   const confirmDesc = `This will ${confirmParts.join(' and ')}. ${selectedUpdateCount > 0 ? 'A system restart may be required after installing updates. ' : ''}Currently active drivers will not be affected.`
 
   return (
-    <div className="animate-fade-in">
-      <PageHeader
-        title="Driver Manager"
-        description="Scan for outdated drivers, install updates, and clean stale packages — all in one step"
-      />
+    <div className={embedded ? '' : 'animate-fade-in'}>
+      {!embedded && (
+        <PageHeader
+          title="Driver Manager"
+          description="Scan for outdated drivers, install updates, and clean stale packages — all in one step"
+        />
+      )}
 
       {/* Actions */}
       <div className="mb-5 flex items-center gap-2.5">

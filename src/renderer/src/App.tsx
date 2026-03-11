@@ -8,6 +8,8 @@ import { CleanerPage } from './pages/CleanerPage'
 import { RegistryPage } from './pages/RegistryPage'
 import { StartupPage } from './pages/StartupPage'
 import { DebloaterPage } from './pages/DebloaterPage'
+import { SystemHardeningPage } from './pages/SystemHardeningPage'
+import { UpdatesPage } from './pages/UpdatesPage'
 import { DiskAnalyzerPage } from './pages/DiskAnalyzerPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { NetworkCleanupPage } from './pages/NetworkCleanupPage'
@@ -75,18 +77,22 @@ export function App() {
           <Route path="/cleaner" element={<CleanerPage />} />
           <Route path="/registry" element={<RegistryPage />} />
           <Route path="/startup" element={<StartupPage />} />
-          <Route path="/debloater" element={<DebloaterPage />} />
           <Route path="/disk" element={<DiskAnalyzerPage />} />
           <Route path="/network" element={<NetworkCleanupPage />} />
           <Route path="/malware" element={<MalwareScannerPage />} />
-          <Route path="/privacy" element={<PrivacyShieldPage />} />
-          <Route path="/drivers" element={<DriverManagerPage />} />
           <Route path="/performance" element={<PerformanceMonitorPage />} />
           <Route path="/uninstaller" element={<UninstallerPage />} />
-          <Route path="/services" element={<ServiceManagerPage />} />
-          <Route path="/updater" element={<SoftwareUpdaterPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          {/* Consolidated pages */}
+          <Route path="/hardening" element={<SystemHardeningPage />} />
+          <Route path="/updates" element={<UpdatesPage />} />
+          {/* Legacy routes — redirect to consolidated pages */}
+          <Route path="/privacy" element={<SystemHardeningPage />} />
+          <Route path="/debloater" element={<SystemHardeningPage />} />
+          <Route path="/services" element={<SystemHardeningPage />} />
+          <Route path="/updater" element={<UpdatesPage />} />
+          <Route path="/drivers" element={<UpdatesPage />} />
         </Routes>
       </AppShell>
       <Toaster

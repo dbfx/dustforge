@@ -5,7 +5,6 @@ import {
   AppWindow,
   Gamepad2,
   Trash2,
-  PackageX,
   Search,
   Sparkles,
   CheckCircle2,
@@ -40,8 +39,7 @@ const categories: CategoryDef[] = [
   { type: CleanerType.Browser, label: 'Browsers', icon: Globe, description: 'Cache, cookies, history' },
   { type: CleanerType.App, label: 'Applications', icon: AppWindow, description: 'App caches and dev tools' },
   { type: CleanerType.Gaming, label: 'Gaming', icon: Gamepad2, description: 'Launcher caches, redistributables' },
-  { type: CleanerType.RecycleBin, label: 'Recycle Bin', icon: Trash2, description: 'Deleted files' },
-  { type: CleanerType.UninstallLeftovers, label: 'Leftovers', icon: PackageX, description: 'Orphaned files from removed programs' }
+  { type: CleanerType.RecycleBin, label: 'Recycle Bin', icon: Trash2, description: 'Deleted files' }
 ]
 
 export function CleanerPage() {
@@ -75,17 +73,18 @@ export function CleanerPage() {
     const failed: string[] = []
     const skippedForElevation: string[] = []
     try {
-      const scanFns: Record<CleanerType, () => Promise<ScanResult[]>> = {
+      const scanFns: Partial<Record<CleanerType, () => Promise<ScanResult[]>>> = {
         [CleanerType.System]: () => window.dustforge.systemScan(),
         [CleanerType.Browser]: () => window.dustforge.browserScan(),
         [CleanerType.App]: () => window.dustforge.appScan(),
         [CleanerType.Gaming]: () => window.dustforge.gamingScan(),
-        [CleanerType.RecycleBin]: () => window.dustforge.recycleBinScan(),
-        [CleanerType.UninstallLeftovers]: () => window.dustforge.uninstallLeftoversScan()
+        [CleanerType.RecycleBin]: () => window.dustforge.recycleBinScan()
       }
       for (const cat of categories) {
         try {
-          const results = await scanFns[cat.type]()
+          const scanFn = scanFns[cat.type]
+          if (!scanFn) continue
+          const results = await scanFn()
           // Extract elevation-required markers before adding to store
           const elevationMarker = results.find((r) => r.subcategory === '__elevation_required')
           if (elevationMarker?.group) {
@@ -127,13 +126,12 @@ export function CleanerPage() {
       }
 
       const selectedIds = store.getSelectedIds()
-      const cleanFns: Record<CleanerType, (ids: string[]) => Promise<any>> = {
+      const cleanFns: Partial<Record<CleanerType, (ids: string[]) => Promise<any>>> = {
         [CleanerType.System]: (ids) => window.dustforge.systemClean(ids),
         [CleanerType.Browser]: (ids) => window.dustforge.browserClean(ids),
         [CleanerType.App]: (ids) => window.dustforge.appClean(ids),
         [CleanerType.Gaming]: (ids) => window.dustforge.gamingClean(ids),
-        [CleanerType.RecycleBin]: () => window.dustforge.recycleBinClean(),
-        [CleanerType.UninstallLeftovers]: (ids) => window.dustforge.uninstallLeftoversClean(ids)
+        [CleanerType.RecycleBin]: () => window.dustforge.recycleBinClean()
       }
       let totalCleaned = 0, totalFiles = 0, totalSkipped = 0, anyNeedsElevation = false
       const allErrors: { path: string; reason: string }[] = []
@@ -147,7 +145,9 @@ export function CleanerPage() {
           .map((item) => item.id)
         if (catItemIds.length > 0) {
           try {
-            const result = await cleanFns[cat.type](catItemIds)
+            const cleanFn = cleanFns[cat.type]
+            if (!cleanFn) continue
+            const result = await cleanFn(catItemIds)
             if (result) {
               totalCleaned += result.totalCleaned || 0
               totalFiles += result.filesDeleted || 0
@@ -423,20 +423,6 @@ export function CleanerPage() {
 
           {hasResults && (
             <div key={activeCategory} className="space-y-2">
-              {activeCategory === CleanerType.UninstallLeftovers && (
-                <div
-                  className="mb-3 flex items-start gap-3 rounded-xl px-4 py-3"
-                  style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.12)' }}
-                >
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-400" strokeWidth={1.8} />
-                  <div>
-                    <p className="text-[12px] font-medium text-amber-300">Review before cleaning</p>
-                    <p className="text-[11px] mt-0.5" style={{ color: '#8e8e76' }}>
-                      These folders may be leftovers from uninstalled programs. Review the list and deselect any folders you still need before cleaning.
-                    </p>
-                  </div>
-                </div>
-              )}
               <div className="mb-3 flex items-center justify-between px-1">
                 <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>
                   {categories.find((c) => c.type === activeCategory)?.label} Items

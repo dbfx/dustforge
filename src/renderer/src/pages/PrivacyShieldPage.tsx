@@ -12,6 +12,7 @@ import {
   Loader2,
   AlertTriangle
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { cn } from '@/lib/utils'
@@ -111,7 +112,7 @@ function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
   )
 }
 
-export function PrivacyShieldPage() {
+export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
   const state = usePrivacyStore(s => s.state)
   const status = usePrivacyStore(s => s.status)
   const applyResult = usePrivacyStore(s => s.applyResult)
@@ -155,6 +156,7 @@ export function PrivacyShieldPage() {
       usePrivacyStore.getState().setStatus('done')
     } catch (err) {
       console.error('Privacy scan failed:', err)
+      toast.error('Privacy scan failed')
       usePrivacyStore.getState().setStatus('idle')
     } finally {
       progressCleanupRef.current?.()
@@ -233,6 +235,8 @@ export function PrivacyShieldPage() {
       const updated = await window.dustforge.privacyScan()
       usePrivacyStore.getState().setState(updated)
       usePrivacyStore.getState().setStatus('done')
+      if (result.succeeded > 0) toast.success(`${result.succeeded} privacy setting${result.succeeded > 1 ? 's' : ''} applied`)
+      if (result.failed > 0) toast.error(`${result.failed} setting${result.failed > 1 ? 's' : ''} failed to apply`)
 
       await useHistoryStore.getState().addEntry({
         id: Date.now().toString(),
@@ -248,6 +252,7 @@ export function PrivacyShieldPage() {
       })
     } catch (err) {
       console.error('Privacy apply failed:', err)
+      toast.error('Failed to apply privacy settings', { description: 'Try running as administrator' })
       usePrivacyStore.getState().setApplyResult({ succeeded: 0, failed: ids.length, errors: [{ id: '', label: categoryId, reason: 'IPC call failed — try running as administrator' }] })
       usePrivacyStore.getState().setStatus('done')
     }
@@ -266,6 +271,7 @@ export function PrivacyShieldPage() {
       usePrivacyStore.getState().setState(updated)
       usePrivacyStore.getState().setStatus('done')
     } catch {
+      toast.error('Failed to apply privacy setting')
       usePrivacyStore.getState().setStatus('done')
     }
   }, [])
@@ -275,40 +281,49 @@ export function PrivacyShieldPage() {
   const busy = isScanning || isApplying
   const unprotectedCount = state ? state.total - state.protected : 0
 
+  const headerAction = (
+    <div className="flex items-center gap-2.5">
+      <button
+        onClick={handleScan}
+        disabled={busy}
+        className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-medium text-zinc-300 transition-all disabled:opacity-40"
+        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)' }}
+      >
+        <Eye className="h-4 w-4" strokeWidth={1.8} />
+        Scan
+      </button>
+      {state && unprotectedCount > 0 && (
+        <button
+          onClick={handleApplyAll}
+          disabled={busy}
+          className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-30"
+          style={{
+            background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+            color: '#fff',
+            boxShadow: '0 4px 20px rgba(34,197,94,0.2)'
+          }}
+        >
+          <ShieldCheck className="h-4 w-4" strokeWidth={2} />
+          Protect All ({unprotectedCount})
+        </button>
+      )}
+    </div>
+  )
+
   return (
-    <div className="animate-fade-in">
-      <PageHeader
-        title="Privacy Shield"
-        description="Control telemetry, ads, tracking, and data collection across Windows"
-        action={
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={handleScan}
-              disabled={busy}
-              className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-medium text-zinc-300 transition-all disabled:opacity-40"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)' }}
-            >
-              <Eye className="h-4 w-4" strokeWidth={1.8} />
-              Scan
-            </button>
-            {state && unprotectedCount > 0 && (
-              <button
-                onClick={handleApplyAll}
-                disabled={busy}
-                className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-30"
-                style={{
-                  background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-                  color: '#fff',
-                  boxShadow: '0 4px 20px rgba(34,197,94,0.2)'
-                }}
-              >
-                <ShieldCheck className="h-4 w-4" strokeWidth={2} />
-                Protect All ({unprotectedCount})
-              </button>
-            )}
-          </div>
-        }
-      />
+    <div className={embedded ? '' : 'animate-fade-in'}>
+      {!embedded && (
+        <PageHeader
+          title="Privacy Shield"
+          description="Control telemetry, ads, tracking, and data collection across Windows"
+          action={headerAction}
+        />
+      )}
+      {embedded && (
+        <div className="mb-5 flex justify-end">
+          {headerAction}
+        </div>
+      )}
 
       {/* Score + stats cards */}
       {state && !isScanning && (
