@@ -2,7 +2,7 @@ import { app, ipcMain } from 'electron'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'fs'
-import { join, basename, extname } from 'path'
+import { join, basename, extname, resolve, normalize } from 'path'
 import { createHash } from 'crypto'
 import { IPC } from '../../shared/channels'
 import type { StartupItem, StartupBootTrace, StartupBootEntry } from '../../shared/types'
@@ -389,17 +389,25 @@ export async function toggleStartupItem(
           writeDisabledEntries(disabled)
         })
       } else {
+        // When re-enabling, use the stored command from the disabled entries file
+        // to prevent a compromised renderer from writing arbitrary autorun commands
+        const disabled = readDisabledEntries()
+        const stored = disabled.find((e) => e.name === name && e.source === source)
+        const safeCommand = stored ? stored.command : command
+        // Reject if no stored entry exists and the command looks suspicious
+        if (!stored && !command) return false
+
         try {
           await execFileAsync('reg', [
-            'add', location, '/v', name, '/t', 'REG_SZ', '/d', command, '/f'
+            'add', location, '/v', name, '/t', 'REG_SZ', '/d', safeCommand, '/f'
           ], { timeout: 10000 })
         } catch {
           // Registry op may fail for permissions — still persist state
         }
 
         await withDisabledFileLock(() => {
-          const disabled = readDisabledEntries()
-          writeDisabledEntries(disabled.filter((e) => !(e.name === name && e.source === source)))
+          const current = readDisabledEntries()
+          writeDisabledEntries(current.filter((e) => !(e.name === name && e.source === source)))
         })
       }
       return true
@@ -419,9 +427,15 @@ export async function deleteStartupItem(
           ], { timeout: 10000 })
           deletedSource = true
         } else if (source === 'startup-folder') {
-          // `location` receives the file path from the renderer (which passes item.command for startup-folder)
+          // Validate that the path is actually within the Startup folder to prevent arbitrary file deletion
+          const startupDir = join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
+          const resolvedLocation = resolve(location)
+          const resolvedStartupDir = resolve(startupDir)
+          if (!resolvedLocation.toLowerCase().startsWith(resolvedStartupDir.toLowerCase() + '\\')) {
+            return false
+          }
           try {
-            unlinkSync(location)
+            unlinkSync(resolvedLocation)
             deletedSource = true
           } catch (err: any) {
             // File already gone — treat as success

@@ -181,6 +181,16 @@ export async function applyServiceChanges(
         return { succeeded: 0, failed: 0, errors: [] }
       }
 
+      // Validate service names — only allow safe characters
+      for (const c of changes) {
+        if (typeof c.name !== 'string' || typeof c.targetStartType !== 'string') {
+          return { succeeded: 0, failed: 0, errors: [{ name: '', displayName: '', reason: 'Invalid change entry' }] }
+        }
+        if (!/^[A-Za-z0-9_.\-]{1,256}$/.test(c.name)) {
+          return { succeeded: 0, failed: 0, errors: [{ name: c.name, displayName: c.name, reason: 'Invalid service name' }] }
+        }
+      }
+
       // Validate — reject unsafe services unless forced
       const validChanges = changes.filter((c) => {
         const kb = lookupServiceSafety(c.name)
@@ -252,6 +262,7 @@ export function registerServiceManagerIpc(getWindow: WindowGetter): void {
   }))
 
   ipcMain.handle(IPC.SERVICE_APPLY, async (_event, changes: { name: string; targetStartType: string }[], force?: boolean) => {
-    return applyServiceChanges(changes, force)
+    if (!Array.isArray(changes)) return { succeeded: 0, failed: 0, errors: [] }
+    return applyServiceChanges(changes, force === true)
   })
 }

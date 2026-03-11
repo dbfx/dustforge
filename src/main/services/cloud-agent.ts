@@ -25,7 +25,7 @@ import { applyServiceChanges } from '../ipc/service-manager.ipc'
 import { quarantineMalware, deleteMalware } from '../ipc/malware-scanner.ipc'
 import { PerfMonitorService } from './perf-monitor'
 import { logInfo, logError } from './logger'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { appendFileSync, mkdirSync } from 'fs'
 import { tmpdir } from 'os'
 import type {
@@ -64,6 +64,22 @@ interface ConnectConfig {
   broadcasting: string
 }
 
+/** Validates that a file path is within directories allowed for malware operations */
+function isAllowedMalwarePath(filePath: string): boolean {
+  // Resolve to absolute path to prevent traversal attacks (e.g. Downloads\..\..\Windows\...)
+  const resolved = resolve(filePath).toLowerCase()
+  const userProfile = (process.env.USERPROFILE || 'C:\\Users\\User').toLowerCase()
+  const allowedPrefixes = [
+    `${userProfile}\\downloads\\`,
+    `${userProfile}\\desktop\\`,
+    `${userProfile}\\documents\\`,
+    `${userProfile}\\appdata\\`,
+    (process.env.TEMP || `${userProfile}\\appdata\\local\\temp`).toLowerCase() + '\\',
+    'c:\\programdata\\',
+  ]
+  return allowedPrefixes.some((prefix) => resolved.startsWith(prefix))
+}
+
 class CloudAgentService {
   private pusher: Pusher | null = null
   private channel: ReturnType<Pusher['subscribe']> | null = null
@@ -86,6 +102,7 @@ class CloudAgentService {
   private lastCommandFinishedAt: number = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private reconnectAttempts: number = 0
+  private lastErrorReason: string | null = null
 
   // ─── Public API ─────────────────────────────────────────
 
@@ -129,7 +146,7 @@ class CloudAgentService {
       this.error = null
 
       this.start()
-      cloudLog('INFO', `Linked device ${deviceId} to ${this.serverUrl}`)
+      cloudLog('INFO', `Linked device ${this.deviceId} to ${this.serverUrl}`)
       return { success: true }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -156,6 +173,7 @@ class CloudAgentService {
     // Tear down any existing connection/timers cleanly
     this.clearReconnectTimer()
     this.reconnectAttempts = 0
+    this.lastErrorReason = null
     if (this.channel) { this.channel.unbind_all(); this.channel = null }
     if (this.pusher) { this.pusher.disconnect(); this.pusher = null }
     if (this.telemetryTimer) { clearInterval(this.telemetryTimer); this.telemetryTimer = null }
@@ -186,6 +204,7 @@ class CloudAgentService {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       this.error = `Discovery failed: ${msg.slice(0, 180)}`
+      this.lastErrorReason = this.error
       this.status = 'disconnected'
       cloudLog('ERROR', `Discovery failed: ${msg}`)
       this.scheduleReconnect()
@@ -196,12 +215,17 @@ class CloudAgentService {
     if (this.status === 'dormant') return
     this.clearReconnectTimer()
 
-    // Exponential backoff: 10s, 20s, 30s, 30s, 30s...
+    // Linear backoff: 10s, 20s, 30s, 30s, 30s...
     this.reconnectAttempts++
     const delaySec = Math.min(10 * this.reconnectAttempts, 30)
 
     cloudLog('INFO', `Scheduling reconnect in ${delaySec}s (attempt ${this.reconnectAttempts})`)
-    this.error = `Reconnecting in ${delaySec}s...`
+    // Preserve the actual error reason, append reconnect info
+    if (this.error && this.error !== 'Connection lost' && !this.error.startsWith('Reconnecting')) {
+      this.lastErrorReason = this.error
+    }
+    const reason = this.lastErrorReason ? ` (${this.lastErrorReason})` : ''
+    this.error = `Reconnecting in ${delaySec}s...${reason}`
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
@@ -221,6 +245,7 @@ class CloudAgentService {
   stop(): void {
     this.clearReconnectTimer()
     this.reconnectAttempts = 0
+    this.lastErrorReason = null
 
     if (this.telemetryTimer) {
       clearInterval(this.telemetryTimer)
@@ -316,6 +341,7 @@ class CloudAgentService {
     this.channel.bind('pusher:subscription_succeeded', () => {
       this.status = 'connected'
       this.error = null
+      this.lastErrorReason = null
       this.reconnectAttempts = 0
       cloudLog('INFO', `Subscribed to private-device.${this.deviceId}, starting telemetry`)
       this.startTelemetry()
@@ -484,6 +510,14 @@ class CloudAgentService {
       'get-status', 'get-system-info', 'get-health-report',
       'shutdown', 'restart', 'windows-update-check', 'windows-update-install',
       'run-sfc', 'run-dism', 'get-network-config', 'get-event-log', 'get-installed-apps',
+      // Phase 1: Fleet essentials
+      'driver-update-scan', 'driver-update-install', 'driver-clean',
+      'startup-list', 'startup-toggle', 'disk-health',
+      // Phase 2: Compliance & security
+      'privacy-scan', 'privacy-apply', 'debloater-scan', 'debloater-remove',
+      'service-scan', 'service-apply',
+      // Phase 3: Maintenance
+      'malware-quarantine', 'malware-delete', 'registry-scan', 'registry-fix',
     ])
     if (!('type' in cmd) || !allowedTypes.has(cmd.type)) return
     if (!('requestId' in cmd) || typeof cmd.requestId !== 'string' || cmd.requestId.length > 200) return
@@ -1292,6 +1326,11 @@ class CloudAgentService {
       await this.postCommandResult(requestId, false, undefined, 'Invalid appIds')
       return
     }
+    // Validate appId format to prevent argument injection into winget
+    if (appIds.some((id) => !/^[\w][\w.\-]{0,200}$/.test(id))) {
+      await this.postCommandResult(requestId, false, undefined, 'Invalid appId format')
+      return
+    }
     const result = await runUpdates(appIds, () => {})
     // Strip raw error reasons which may contain local paths or system info
     await this.postCommandResult(requestId, true, {
@@ -1655,8 +1694,6 @@ class CloudAgentService {
         id: i.id,
         name: i.name,
         displayName: i.displayName,
-        command: i.command,
-        location: i.location,
         source: i.source,
         enabled: i.enabled,
         publisher: i.publisher,
@@ -1674,6 +1711,10 @@ class CloudAgentService {
       await this.postCommandResult(requestId, false, undefined, 'Invalid parameters')
       return
     }
+    if (name.length > 500 || location.length > 500 || command.length > 2000) {
+      await this.postCommandResult(requestId, false, undefined, 'Parameter too long')
+      return
+    }
     const validSources = new Set(['registry-hkcu', 'registry-hklm', 'startup-folder', 'task-scheduler'])
     if (!validSources.has(source)) {
       await this.postCommandResult(requestId, false, undefined, 'Invalid source')
@@ -1684,20 +1725,25 @@ class CloudAgentService {
     await this.postCommandResult(requestId, success, { name, enabled }, success ? undefined : 'Failed to toggle startup item')
   }
 
+  private perfMonitor: PerfMonitorService | null = null
+  private getPerfMonitor(): PerfMonitorService {
+    if (!this.perfMonitor) this.perfMonitor = new PerfMonitorService()
+    return this.perfMonitor
+  }
+
   private async handleDiskHealth(requestId: string): Promise<void> {
-    const perfService = new PerfMonitorService()
-    const health = await perfService.getDiskHealth()
+    const health = await this.getPerfMonitor().getDiskHealth()
     await this.postCommandResult(requestId, true, {
       disks: health.map((d) => ({
         device: d.device,
-        name: d.name,
+        name: d.model,
         type: d.type,
-        size: d.size,
+        size: d.sizeBytes,
         healthStatus: d.healthStatus,
         temperature: d.temperature,
         powerOnHours: d.powerOnHours,
-        powerCycles: d.powerCycles,
-        wearLevel: d.wearLevel,
+        powerCycles: null,
+        wearLevel: d.remainingLife != null ? 100 - d.remainingLife : null,
       })),
     })
   }
@@ -1804,6 +1850,11 @@ class CloudAgentService {
       await this.postCommandResult(requestId, false, undefined, 'Invalid changes — targetStartType must be Disabled or Manual')
       return
     }
+    // Validate service names against safe character set
+    if (changes.some((c) => !/^[A-Za-z0-9_.\-]{1,256}$/.test(c.name))) {
+      await this.postCommandResult(requestId, false, undefined, 'Invalid service name')
+      return
+    }
     cloudLog('INFO', `Applying ${changes.length} service changes`)
     const result = await applyServiceChanges(changes)
     await this.postCommandResult(requestId, true, {
@@ -1824,6 +1875,10 @@ class CloudAgentService {
       await this.postCommandResult(requestId, false, undefined, 'Invalid paths')
       return
     }
+    if (!paths.every((p) => isAllowedMalwarePath(p))) {
+      await this.postCommandResult(requestId, false, undefined, 'One or more paths are outside allowed directories')
+      return
+    }
     cloudLog('INFO', `Quarantining ${paths.length} files`)
     const result = await quarantineMalware(paths)
     await this.postCommandResult(requestId, true, {
@@ -1840,6 +1895,10 @@ class CloudAgentService {
     }
     if (paths.some((p) => typeof p !== 'string' || p.length > 500)) {
       await this.postCommandResult(requestId, false, undefined, 'Invalid paths')
+      return
+    }
+    if (!paths.every((p) => isAllowedMalwarePath(p))) {
+      await this.postCommandResult(requestId, false, undefined, 'One or more paths are outside allowed directories')
       return
     }
     cloudLog('INFO', `Deleting ${paths.length} malware files`)
@@ -1862,8 +1921,6 @@ class CloudAgentService {
       entries: entries.map((e) => ({
         id: e.id,
         type: e.type,
-        keyPath: e.keyPath,
-        valueName: e.valueName,
         issue: e.issue,
         risk: e.risk,
       })),

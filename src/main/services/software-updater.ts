@@ -292,6 +292,10 @@ async function attemptUpgrade(
   appId: string,
   extraArgs: string[] = [],
 ): Promise<{ success: boolean; output: string }> {
+  // Validate appId format to prevent argument injection (e.g. --source flags)
+  if (!/^[\w][\w.\-]{0,200}$/.test(appId)) {
+    return { success: false, output: 'Invalid app ID format' }
+  }
   let upgradeStdout = ''
   try {
     const result = await execFileAsync(

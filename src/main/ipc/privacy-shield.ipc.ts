@@ -561,6 +561,9 @@ export function registerPrivacyShieldIpc(getWindow: WindowGetter): void {
   }))
 
   ipcMain.handle(IPC.PRIVACY_APPLY, async (_event, ids: string[]) => {
+    if (!Array.isArray(ids) || !ids.every((id) => typeof id === 'string')) {
+      return { succeeded: 0, failed: 0, errors: [] }
+    }
     return applyPrivacySettings(ids)
   })
 }

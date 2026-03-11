@@ -78,6 +78,8 @@ function ensureDir(): void {
 export function deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>): T {
   const result = { ...target }
   for (const key of Object.keys(source) as Array<keyof T>) {
+    // Guard against prototype pollution
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue
     const srcVal = source[key]
     const tgtVal = target[key]
     if (
@@ -115,10 +117,22 @@ export function getSettings(): DustForgeSettings {
   return readStore().settings
 }
 
+// Simple mutex to prevent TOCTOU race on concurrent read-modify-write
+let writeLock: Promise<void> = Promise.resolve()
+
 export function setSettings(partial: Partial<DustForgeSettings>): void {
-  const data = readStore()
-  data.settings = deepMerge(data.settings, partial)
-  writeStore(data)
+  const prev = writeLock
+  let unlock: () => void
+  writeLock = new Promise<void>((r) => { unlock = r })
+  prev.then(() => {
+    try {
+      const data = readStore()
+      data.settings = deepMerge(data.settings, partial)
+      writeStore(data)
+    } finally {
+      unlock!()
+    }
+  })
 }
 
 export function getOnboardingComplete(): boolean {

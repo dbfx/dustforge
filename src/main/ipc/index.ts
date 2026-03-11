@@ -54,12 +54,12 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettings())
   ipcMain.handle(IPC.SETTINGS_SET, (_event, settings) => {
     const validated = validateSettingsPartial(settings)
-    if (validated) {
-      setSettings(validated)
-      if (typeof validated.autoUpdate === 'boolean') {
-        setAutoDownload(validated.autoUpdate)
-      }
+    if (!validated) return { success: false, error: 'Invalid settings' }
+    setSettings(validated)
+    if (typeof validated.autoUpdate === 'boolean') {
+      setAutoDownload(validated.autoUpdate)
     }
+    return { success: true }
   })
 
   // Onboarding
@@ -73,7 +73,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.ELEVATION_CHECK, () => isAdmin())
   ipcMain.handle(IPC.ELEVATION_RELAUNCH, () => {
     const exePath = app.getPath('exe')
-    spawn('powershell.exe', ['-Command', `Start-Process '${exePath}' -Verb RunAs`], {
+    spawn('powershell.exe', ['-Command', `Start-Process '${exePath.replace(/'/g, "''")}' -Verb RunAs`], {
       detached: true,
       stdio: 'ignore'
     }).unref()
@@ -83,7 +83,11 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   // System Restore Point
   ipcMain.handle(IPC.RESTORE_POINT_CREATE, (_event, description: string) => {
     if (typeof description !== 'string') description = ''
-    return createRestorePoint(description || 'DustForge pre-clean restore point')
+    // Sanitize: restrict to safe characters and cap length
+    const sanitized = (description || 'DustForge pre-clean restore point')
+      .replace(/[^A-Za-z0-9 ._\-()]/g, '')
+      .slice(0, 200)
+    return createRestorePoint(sanitized)
   })
 
   // Scan history — validate entry shape before persisting

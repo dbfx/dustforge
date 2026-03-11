@@ -16,6 +16,10 @@ export function registerPerfMonitorIpc(): void {
   })
 
   ipcMain.handle(IPC.PERF_KILL_PROCESS, (_event, pid: number) => {
+    // Validate pid is a positive integer to prevent killing arbitrary/system processes
+    if (!Number.isInteger(pid) || pid <= 0) {
+      return { success: false, error: 'Invalid process ID' }
+    }
     return service.killProcess(pid)
   })
 

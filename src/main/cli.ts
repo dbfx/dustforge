@@ -335,7 +335,7 @@ async function handleRegistry(args: string[], json: boolean): Promise<void> {
       out({ entries, count: entries.length }, true)
     } else {
       log(`Found ${entries.length} registry issues`)
-      for (const e of entries) log(`  [${e.severity}] ${e.key} — ${e.issue}`)
+      for (const e of entries) log(`  [${e.risk}] ${e.keyPath} — ${e.issue}`)
     }
   } else if (sub === 'fix') {
     if (!json) log('Scanning registry...')
@@ -344,7 +344,7 @@ async function handleRegistry(args: string[], json: boolean): Promise<void> {
       out(json ? { message: 'No issues found' } : 'No registry issues found.', json)
       return
     }
-    const toFix = args.includes('--all') ? entries : entries.filter(e => e.severity === 'high')
+    const toFix = args.includes('--all') ? entries : entries.filter(e => e.risk === 'high')
     if (!json) log(`Fixing ${toFix.length} of ${entries.length} issues...`)
     const result = await fixRegistryEntries(toFix, (current, total) => {
       if (!json) process.stdout.write(`\r  Progress: ${current}/${total}`)
@@ -445,7 +445,7 @@ async function handleDisk(args: string[], json: boolean): Promise<void> {
     if (json) {
       out(drives, true)
     } else {
-      for (const d of drives) log(`  ${d.letter}: ${d.label || 'Local Disk'} — ${formatBytes(d.usedBytes)} / ${formatBytes(d.totalBytes)} (${d.usagePercent.toFixed(1)}% used)`)
+      for (const d of drives) log(`  ${d.letter}: ${d.label || 'Local Disk'} — ${formatBytes(d.usedSpace)} / ${formatBytes(d.totalSize)} (${(d.usedSpace / d.totalSize * 100).toFixed(1)}% used)`)
     }
   } else if (sub === 'analyze') {
     const drive = args[1]?.replace(':', '')
@@ -470,7 +470,7 @@ async function handleDisk(args: string[], json: boolean): Promise<void> {
     if (json) {
       out(types, true)
     } else {
-      for (const t of types) log(`  ${t.extension}: ${t.count} files, ${formatBytes(t.totalSize)}`)
+      for (const t of types) log(`  ${t.extension}: ${t.fileCount} files, ${formatBytes(t.totalSize)}`)
     }
   } else {
     log('Usage: dustforge --cli disk <drives|analyze|file-types> [drive-letter]')
@@ -509,15 +509,15 @@ async function handleMalware(args: string[], json: boolean): Promise<void> {
 
   if (sub === 'scan') {
     if (!json) log('Scanning for malware...')
-    const threats = await scanMalware((progress) => {
+    const result = await scanMalware((progress) => {
       if (!json) process.stdout.write(`\r  Scanning: ${progress.currentPath || '...'}`)
     })
     if (!json) log('')
     if (json) {
-      out({ threats, count: threats.length }, true)
+      out({ threats: result.threats, count: result.threats.length }, true)
     } else {
-      log(`Found ${threats.length} threats`)
-      for (const t of threats) log(`  [${t.severity}] ${t.name} — ${t.path}`)
+      log(`Found ${result.threats.length} threats`)
+      for (const t of result.threats) log(`  [${t.severity}] ${t.fileName} — ${t.path}`)
     }
   } else if (sub === 'quarantine') {
     const path = args.slice(1).filter(a => !a.startsWith('--')).join(' ')
@@ -540,26 +540,26 @@ async function handlePrivacy(args: string[], json: boolean): Promise<void> {
 
   if (sub === 'scan') {
     if (!json) log('Scanning privacy settings...')
-    const settings = await scanPrivacy()
+    const result = await scanPrivacy()
     if (json) {
-      out({ settings, count: settings.length }, true)
+      out({ settings: result.settings, count: result.settings.length }, true)
     } else {
-      log(`Found ${settings.length} privacy settings`)
-      for (const s of settings) {
-        const status = s.currentlyEnabled ? 'ON' : 'OFF'
-        log(`  [${status}] ${s.name} — ${s.description}`)
+      log(`Found ${result.settings.length} privacy settings`)
+      for (const s of result.settings) {
+        const status = s.enabled ? 'ON' : 'OFF'
+        log(`  [${status}] ${s.label} — ${s.description}`)
       }
     }
   } else if (sub === 'apply') {
     if (!json) log('Scanning privacy settings...')
-    const settings = await scanPrivacy()
+    const scanResult = await scanPrivacy()
     const toApply = args.includes('--all')
-      ? settings.map(s => s.id)
-      : settings.filter(s => s.recommended && !s.currentlyEnabled).map(s => s.id)
+      ? scanResult.settings.map(s => s.id)
+      : scanResult.settings.filter(s => !s.enabled).map(s => s.id)
     if (toApply.length === 0) { out(json ? { message: 'Nothing to apply' } : 'All recommended settings already applied.', json); return }
     if (!json) log(`Applying ${toApply.length} privacy settings...`)
-    const result = await applyPrivacySettings(toApply)
-    out(result, json)
+    const applyResult = await applyPrivacySettings(toApply)
+    out(applyResult, json)
   } else {
     log('Usage: dustforge --cli privacy <scan|apply> [--all]')
   }
@@ -571,15 +571,15 @@ async function handleDrivers(args: string[], json: boolean): Promise<void> {
 
   if (sub === 'scan') {
     if (!json) log('Scanning driver packages...')
-    const packages = await scanDrivers((progress) => {
+    const result = await scanDrivers((progress) => {
       if (!json) process.stdout.write(`\r  ${progress}`)
     })
     if (!json) log('')
     if (json) {
-      out({ packages, count: packages.length }, true)
+      out({ packages: result.packages, count: result.packages.length }, true)
     } else {
-      log(`Found ${packages.length} driver packages`)
-      for (const p of packages) log(`  ${p.publishedName} — ${p.driverDescription || p.className} — ${p.version}`)
+      log(`Found ${result.packages.length} driver packages`)
+      for (const p of result.packages) log(`  ${p.publishedName} — ${p.className} — ${p.version}`)
     }
   } else if (sub === 'clean') {
     const nameArg = args.find(a => a !== 'clean' && !a.startsWith('--'))
@@ -590,22 +590,22 @@ async function handleDrivers(args: string[], json: boolean): Promise<void> {
     out(result, json)
   } else if (sub === 'check-updates') {
     if (!json) log('Checking for driver updates...')
-    const updates = await scanDriverUpdates((progress) => {
+    const updateResult = await scanDriverUpdates((progress) => {
       if (!json) process.stdout.write(`\r  ${progress}`)
     })
     if (!json) log('')
     if (json) {
-      out({ updates, count: updates.length }, true)
+      out({ updates: updateResult.updates, count: updateResult.updates.length }, true)
     } else {
-      log(`Found ${updates.length} driver updates`)
-      for (const u of updates) log(`  ${u.title}`)
+      log(`Found ${updateResult.updates.length} driver updates`)
+      for (const u of updateResult.updates) log(`  ${u.updateTitle}`)
     }
   } else if (sub === 'update') {
     if (!json) log('Checking for driver updates...')
-    const updates = await scanDriverUpdates()
-    if (updates.length === 0) { out(json ? { message: 'No updates available' } : 'Drivers are up to date.', json); return }
+    const updateResult = await scanDriverUpdates()
+    if (updateResult.updates.length === 0) { out(json ? { message: 'No updates available' } : 'Drivers are up to date.', json); return }
     const toInstall = args.includes('--all')
-      ? updates.map((u: any) => u.updateId)
+      ? updateResult.updates.map(u => u.updateId)
       : (() => {
           const idArg = args.find(a => a !== 'update' && !a.startsWith('--'))
           return idArg ? idArg.split(',').map(s => s.trim()).filter(Boolean) : []
@@ -628,12 +628,12 @@ async function handleServices(args: string[], json: boolean): Promise<void> {
 
   if (sub === 'scan') {
     if (!json) log('Scanning services...')
-    const services = await scanServices()
+    const result = await scanServices()
     if (json) {
-      out({ services, count: services.length }, true)
+      out({ services: result.services, count: result.services.length }, true)
     } else {
-      log(`Found ${services.length} optimizable services`)
-      for (const s of services) log(`  [${s.startType}] ${s.displayName} (${s.name}) — ${s.description || ''}`)
+      log(`Found ${result.services.length} optimizable services`)
+      for (const s of result.services) log(`  [${s.startType}] ${s.displayName} (${s.name}) — ${s.description || ''}`)
     }
   } else if (sub === 'disable' || sub === 'manual') {
     const name = args.slice(1).filter(a => !a.startsWith('--')).join(' ')
@@ -658,7 +658,7 @@ async function handlePrograms(args: string[], json: boolean): Promise<void> {
       out({ programs, count: programs.length }, true)
     } else {
       log(`Found ${programs.length} installed programs`)
-      for (const p of programs) log(`  ${p.name} ${p.version || ''} — ${p.publisher || 'Unknown publisher'} — ${p.size || ''}`)
+      for (const p of programs) log(`  ${p.displayName} ${p.displayVersion || ''} — ${p.publisher || 'Unknown publisher'} — ${p.estimatedSize ? formatBytes(p.estimatedSize * 1024) : ''}`)
     }
   } else {
     log('Usage: dustforge --cli programs list')
@@ -677,7 +677,7 @@ async function handleUpdates(args: string[], json: boolean): Promise<void> {
     } else {
       if (!result.wingetAvailable) { log('  winget is not available on this system'); return }
       log(`Found ${result.apps.length} available updates, ${result.upToDate.length} up to date`)
-      for (const a of result.apps) log(`  ${a.name}: ${a.currentVersion} → ${a.availableVersion} (${a.updateType})`)
+      for (const a of result.apps) log(`  ${a.name}: ${a.currentVersion} → ${a.availableVersion} (${a.severity})`)
     }
   } else if (sub === 'run') {
     if (!json) log('Checking for software updates...')
@@ -693,7 +693,7 @@ async function handleUpdates(args: string[], json: boolean): Promise<void> {
     if (toUpdate.length === 0) { log('Usage: dustforge --cli updates run <id,...> or --all'); return }
     if (!json) log(`Updating ${toUpdate.length} apps...`)
     const result = await runUpdates(toUpdate, (progress) => {
-      if (!json) log(`  [${progress.current}/${progress.total}] ${progress.appName}: ${progress.status}`)
+      if (!json) log(`  [${progress.current}/${progress.total}] ${progress.currentApp}: ${progress.status}`)
     })
     out(result, json)
   } else {
