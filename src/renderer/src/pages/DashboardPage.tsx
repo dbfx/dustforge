@@ -19,6 +19,7 @@ import {
   Server
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { StatCard } from '@/components/shared/StatCard'
@@ -165,7 +166,9 @@ export function DashboardPage() {
           totalSpace += res.totalCleaned || 0
           totalFiles += res.filesDeleted || 0
         }
-      } catch { /* skip category */ }
+      } catch {
+        toast.error(`Failed to clean ${type}`)
+      }
     }
     return { space: totalSpace, files: totalFiles }
   }, [scanStore.excludedSubcategories])
@@ -182,6 +185,7 @@ export function DashboardPage() {
       const res = await window.dustforge.registryFix(selectedIds)
       return res?.fixed ?? 0
     } catch {
+      toast.error('Registry scan failed')
       return 0
     }
   }, [])
@@ -198,6 +202,7 @@ export function DashboardPage() {
       const res = await window.dustforge.networkClean(selectedIds)
       return res?.cleaned ?? 0
     } catch {
+      toast.error('Network cleanup failed')
       return 0
     }
   }, [])
@@ -213,6 +218,7 @@ export function DashboardPage() {
       const cleanResult = await window.dustforge.driverClean(stalePackages.map((p) => p.publishedName))
       return { removed: cleanResult.removed, space: cleanResult.spaceRecovered }
     } catch {
+      toast.error('Driver cleanup failed')
       return { removed: 0, space: 0 }
     }
   }, [])

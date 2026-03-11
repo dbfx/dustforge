@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Zap, Shield, RefreshCw, Clock, Activity, TrendingDown, ChevronDown, ChevronUp, BarChart3, Trash2 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -294,6 +295,7 @@ export function StartupPage() {
       const success = await window.dustforge.startupToggle(item.name, item.location, item.command, item.source, enabled)
       if (!success) {
         store.getState().updateItem(item.id, { enabled: !enabled })
+        toast.error(`Failed to ${enabled ? 'enable' : 'disable'} ${item.displayName}`, { description: 'This may require administrator privileges' })
         store.getState().setError(`Failed to ${enabled ? 'enable' : 'disable'} ${item.displayName}. This may require administrator privileges.`)
         return
       }
@@ -311,6 +313,7 @@ export function StartupPage() {
       })
     } catch {
       store.getState().updateItem(item.id, { enabled: !enabled })
+      toast.error(`Failed to ${enabled ? 'enable' : 'disable'} ${item.displayName}`, { description: 'This may require administrator privileges' })
       store.getState().setError(`Failed to ${enabled ? 'enable' : 'disable'} ${item.displayName}. This may require administrator privileges.`)
     }
   }
@@ -334,9 +337,11 @@ export function StartupPage() {
           errorCount: 0
         })
       } else {
+        toast.error(`Failed to remove ${item.displayName}`, { description: 'This may require administrator privileges' })
         store.getState().setError(`Failed to remove ${item.displayName}. This may require administrator privileges.`)
       }
     } catch {
+      toast.error(`Failed to remove ${item.displayName}`, { description: 'This may require administrator privileges' })
       store.getState().setError(`Failed to remove ${item.displayName}. This may require administrator privileges.`)
     }
     store.getState().setDeleteTarget(null)

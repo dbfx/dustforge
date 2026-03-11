@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { HardDrive, ChevronRight, Folder, File, RefreshCw, FileType2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -115,6 +116,7 @@ export function DiskAnalyzerPage() {
       store.setData(result); store.setBreadcrumb([result])
     } catch (err) {
       console.error('Disk analysis failed:', err)
+      toast.error(`Failed to analyze drive ${selectedDrive}:`, { description: 'Make sure the drive is accessible' })
       store.setError(`Failed to analyze drive ${selectedDrive}:. Make sure the drive is accessible.`)
     }
     store.setAnalyzing(false)

@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useState } from 'react'
 import { Pause, Play } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { GaugeCard } from '@/components/perf/GaugeCard'
 import { SystemInfoHeader } from '@/components/perf/SystemInfoHeader'
@@ -53,7 +54,7 @@ export function PerformanceMonitorPage() {
         await window.dustforge.perfStartMonitoring()
         setMonitoring(true)
       } catch {
-        // Failed to start monitoring
+        toast.error('Failed to start performance monitoring')
       }
     }
 

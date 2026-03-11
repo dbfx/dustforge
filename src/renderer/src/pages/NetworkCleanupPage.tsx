@@ -8,6 +8,7 @@ import {
   Network,
   History
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -61,6 +62,7 @@ export function NetworkCleanupPage() {
       s.setSelectedIds(preSelected)
       s.setStatus('complete')
     } catch {
+      toast.error('Network scan failed')
       useNetworkStore.getState().setStatus('idle')
     }
   }, [])
@@ -107,6 +109,7 @@ export function NetworkCleanupPage() {
 
       useNetworkStore.getState().setStatus('complete')
     } catch {
+      toast.error('Network cleanup failed')
       useNetworkStore.getState().setStatus('idle')
     }
   }, [historyStore, recomputeStats])

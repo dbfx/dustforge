@@ -3,6 +3,7 @@ import {
   Database, Search, Wrench, Shield, CheckCircle2, ChevronDown,
   ShieldAlert, Gauge, Wifi, Server, CalendarClock, Trash2, Loader2, Check
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -153,6 +154,7 @@ export function RegistryPage() {
       useRegistryStore.getState().setScanned(true)
     } catch (err) {
       console.error('Registry scan failed:', err)
+      toast.error('Registry scan failed', { description: 'Make sure the app has sufficient permissions' })
       useRegistryStore.getState().setError('Failed to scan registry. Make sure the app is running with sufficient permissions.')
     }
     useRegistryStore.getState().setScanning(false)
@@ -204,6 +206,7 @@ export function RegistryPage() {
       recomputeStats()
     } catch (err) {
       console.error('Registry fix failed:', err)
+      toast.error('Registry fix failed', { description: 'Some entries may require administrator privileges' })
       useRegistryStore.getState().setError('Failed to fix registry entries. Some entries may require administrator privileges.')
     }
     useRegistryStore.getState().setFixing(false)

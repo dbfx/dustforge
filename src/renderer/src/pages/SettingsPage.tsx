@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Github, Bug, ExternalLink, Plus, X, FolderOpen, Clock, RefreshCw, Download, CheckCircle, AlertCircle, Loader, Unlink, Link } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -63,11 +64,16 @@ export function SettingsPage() {
       const result = await window.dustforge?.cloudLink?.(cloudApiKey.trim())
       if (result?.success) {
         setCloudApiKey('')
+        toast.success('Device linked to cloud dashboard')
         // Refresh settings to get the new cloud config
         const fresh = await window.dustforge?.settingsGet?.()
         if (fresh) setSettings(fresh)
+      } else {
+        toast.error('Failed to link device', { description: result?.error || 'Check your API key and try again' })
       }
-    } catch { /* ignore */ }
+    } catch {
+      toast.error('Failed to link device', { description: 'Could not connect to cloud server' })
+    }
     setCloudLinking(false)
   }
 
@@ -75,9 +81,12 @@ export function SettingsPage() {
     setCloudUnlinking(true)
     try {
       await window.dustforge?.cloudUnlink?.()
+      toast.success('Device unlinked from cloud dashboard')
       const fresh = await window.dustforge?.settingsGet?.()
       if (fresh) setSettings(fresh)
-    } catch { /* ignore */ }
+    } catch {
+      toast.error('Failed to unlink device')
+    }
     setCloudUnlinking(false)
   }
 
@@ -86,7 +95,9 @@ export function SettingsPage() {
     try {
       await window.dustforge?.cloudReconnect?.()
       refreshCloudStatus()
-    } catch { /* ignore */ }
+    } catch {
+      toast.error('Failed to reconnect', { description: 'Check your network connection and try again' })
+    }
     setCloudReconnecting(false)
   }
 

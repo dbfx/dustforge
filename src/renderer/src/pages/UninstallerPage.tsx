@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Clock,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -123,6 +124,7 @@ export function UninstallerPage() {
       s.setHasLoaded(true)
     } catch (err) {
       console.error('Failed to list programs:', err)
+      toast.error('Failed to load installed programs')
       useUninstallerStore.getState().setError('Failed to load installed programs.')
     } finally {
       useUninstallerStore.getState().setLoading(false)
@@ -178,6 +180,7 @@ export function UninstallerPage() {
       }
     } catch (err) {
       console.error('Uninstall failed:', err)
+      toast.error('Uninstall failed unexpectedly')
       useUninstallerStore.getState().setError('Uninstall operation failed unexpectedly.')
     } finally {
       useUninstallerStore.getState().setUninstalling(false)
