@@ -85,6 +85,8 @@ class CloudAgentService {
   private commandRunning: boolean = false
   private healthReportRunning: boolean = false
   private lastCommandFinishedAt: number = 0
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private reconnectAttempts: number = 0
 
   // ─── Public API ─────────────────────────────────────────
 
@@ -160,18 +162,53 @@ class CloudAgentService {
       return
     }
 
+    this.clearReconnectTimer()
+
     try {
+      this.status = 'connecting'
+      this.error = null
       await this.discover()
       this.connect()
+      this.reconnectAttempts = 0
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       this.error = `Discovery failed: ${msg.slice(0, 180)}`
-      this.status = 'error'
+      this.status = 'disconnected'
       cloudLog('ERROR', `Discovery failed: ${msg}`)
+      this.scheduleReconnect()
+    }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.status === 'dormant') return
+    this.clearReconnectTimer()
+
+    // Exponential backoff: 10s, 20s, 30s, 30s, 30s...
+    this.reconnectAttempts++
+    const delaySec = Math.min(10 * this.reconnectAttempts, 30)
+
+    cloudLog('INFO', `Scheduling reconnect in ${delaySec}s (attempt ${this.reconnectAttempts})`)
+    this.error = `Reconnecting in ${delaySec}s...`
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
+      if (this.status === 'dormant') return
+      cloudLog('INFO', `Reconnect attempt ${this.reconnectAttempts}`)
+      this.start()
+    }, delaySec * 1000)
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
     }
   }
 
   stop(): void {
+    this.clearReconnectTimer()
+    this.reconnectAttempts = 0
+
     if (this.telemetryTimer) {
       clearInterval(this.telemetryTimer)
       this.telemetryTimer = null
@@ -251,8 +288,9 @@ class CloudAgentService {
 
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Pusher creation failed'
-      this.status = 'error'
+      this.status = 'disconnected'
       cloudLog('ERROR', `Connect failed: ${this.error}`)
+      this.scheduleReconnect()
     }
   }
 
@@ -265,20 +303,35 @@ class CloudAgentService {
     this.channel.bind('pusher:subscription_succeeded', () => {
       this.status = 'connected'
       this.error = null
+      this.reconnectAttempts = 0
       cloudLog('INFO', `Subscribed to private-device.${this.deviceId}, starting telemetry`)
       this.startTelemetry()
       this.startHealthReports()
     })
 
     this.channel.bind('pusher:subscription_error', (err: unknown) => {
+      const statusCode = typeof err === 'object' && err !== null && 'status' in err
+        ? (err as Record<string, unknown>).status
+        : null
       const msg = typeof err === 'object' && err !== null && 'error' in err
         ? String((err as Record<string, unknown>).error)
         : 'Channel subscription failed'
       this.error = msg.slice(0, 200)
-      this.status = 'error'
-      cloudLog('ERROR', `Channel auth failed: ${this.error}`)
-      // Fatal — bad API key or device not authorized. Stop retrying.
+      cloudLog('ERROR', `Channel auth failed (status ${statusCode}): ${this.error}`)
+
+      // 401/403 = bad API key — don't retry, user needs to re-link
+      if (statusCode === 401 || statusCode === 403) {
+        this.status = 'error'
+        this.pusher?.disconnect()
+        return
+      }
+
+      // Transient failure (500, network, etc) — teardown and retry
+      this.status = 'disconnected'
       this.pusher?.disconnect()
+      this.pusher = null
+      this.channel = null
+      this.scheduleReconnect()
     })
 
     // Listen for commands from the server
@@ -314,8 +367,20 @@ class CloudAgentService {
       this.healthReportInitTimer = null
     }
 
-    cloudLog('INFO', 'Reverb disconnected, pusher-js will auto-reconnect')
-    // pusher-js handles reconnect with exponential backoff automatically
+    cloudLog('INFO', 'Reverb disconnected')
+
+    // Clean up pusher instance and do a full reconnect (discover + connect)
+    // This is more robust than relying on pusher-js auto-reconnect which
+    // doesn't re-discover the server config or handle auth endpoint changes
+    if (this.channel) {
+      this.channel.unbind_all()
+      this.channel = null
+    }
+    if (this.pusher) {
+      this.pusher.disconnect()
+      this.pusher = null
+    }
+    this.scheduleReconnect()
   }
 
   // ─── HTTP API Helpers ─────────────────────────────────
