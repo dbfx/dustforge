@@ -1,13 +1,12 @@
 import { app } from 'electron'
 import * as si from 'systeminformation'
-import { randomUUID } from 'crypto'
 import { hostname } from 'os'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import Pusher from 'pusher-js'
 
 const execFileAsync = promisify(execFile)
-import { getSettings, setSettings } from './settings-store'
+import { getSettings, setSettings, getMachineId } from './settings-store'
 import { scanDirectory, cleanItems } from './file-utils'
 import { cacheItems } from './scan-cache'
 import { SYSTEM_PATHS } from '../constants/paths'
@@ -96,7 +95,7 @@ class CloudAgentService {
     return {
       status: this.status,
       maskedApiKey: key ? (key.length > 8 ? `${key.slice(0, 4)}...${key.slice(-4)}` : '****') : null,
-      deviceId: this.deviceId || null,
+      deviceId: this.deviceId || getMachineId() || null,
       linkedAt: this.linkedAt,
       lastTelemetryAt: this.lastTelemetryAt,
       lastHealthReportAt: this.lastHealthReportAt,
@@ -111,20 +110,21 @@ class CloudAgentService {
       this.stop()
 
       const settings = getSettings()
-      const deviceId = settings.cloud.deviceId || randomUUID()
+      const machineId = getMachineId()
       this.serverUrl = settings.cloud.serverUrl || DEFAULT_SERVER_URL
 
       this.apiKey = apiKey
-      this.deviceId = deviceId
+      this.deviceId = machineId
 
       // Discover server config and register device before persisting
       await this.discover()
       await this.postApi(`/devices/${this.deviceId}/register`, {
+        machineId,
         appVersion: app.getVersion(),
         hostname: hostname(),
       })
 
-      setSettings({ cloud: { ...settings.cloud, apiKey, deviceId } })
+      setSettings({ cloud: { ...settings.cloud, apiKey } })
       this.linkedAt = new Date().toISOString()
       this.error = null
 
@@ -143,7 +143,7 @@ class CloudAgentService {
   async unlink(): Promise<void> {
     this.stop()
     const settings = getSettings()
-    setSettings({ cloud: { ...settings.cloud, apiKey: '', deviceId: '' } })
+    setSettings({ cloud: { ...settings.cloud, apiKey: '' } })
     this.apiKey = ''
     this.deviceId = ''
     this.linkedAt = null
@@ -167,7 +167,7 @@ class CloudAgentService {
   async start(): Promise<void> {
     const settings = getSettings()
     this.apiKey = settings.cloud.apiKey
-    this.deviceId = settings.cloud.deviceId
+    this.deviceId = getMachineId()
     this.serverUrl = settings.cloud.serverUrl || DEFAULT_SERVER_URL
 
     if (!this.apiKey) {

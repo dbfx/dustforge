@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
+import { randomUUID } from 'crypto'
 import type { DustForgeSettings, AppStats } from '../../shared/types'
 
 let _dataDir: string | null = null
@@ -26,9 +27,11 @@ interface StoreData {
   settings: DustForgeSettings
   stats: AppStats
   onboardingComplete: boolean
+  machineId: string
 }
 
 const defaults: StoreData = {
+  machineId: '',
   onboardingComplete: false,
   settings: {
     minimizeToTray: false,
@@ -50,7 +53,6 @@ const defaults: StoreData = {
     },
     cloud: {
       apiKey: '',
-      deviceId: '',
       serverUrl: '',
       telemetryIntervalSec: 60,
       shareDiskHealth: true,
@@ -127,5 +129,15 @@ export function setOnboardingComplete(value: boolean): void {
   const data = readStore()
   data.onboardingComplete = value
   writeStore(data)
+}
+
+/** Permanent machine identifier — generated once, persists across unlink/relink/updates */
+export function getMachineId(): string {
+  const data = readStore()
+  if (data.machineId) return data.machineId
+  // First call ever — generate and persist
+  data.machineId = randomUUID()
+  writeStore(data)
+  return data.machineId
 }
 
