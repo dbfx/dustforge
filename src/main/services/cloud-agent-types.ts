@@ -36,6 +36,39 @@ export type CloudCommand =
   | { type: 'get-system-info'; requestId: string }
   | { type: 'get-health-report'; requestId: string }
   | { type: 'ping'; requestId: string }
+  // Power management
+  | { type: 'shutdown'; requestId: string; delaySec?: number }
+  | { type: 'restart'; requestId: string; delaySec?: number }
+  // Windows maintenance
+  | { type: 'windows-update-check'; requestId: string }
+  | { type: 'windows-update-install'; requestId: string }
+  | { type: 'run-sfc'; requestId: string }
+  | { type: 'run-dism'; requestId: string }
+  // Network
+  | { type: 'get-network-config'; requestId: string }
+  // Security
+  | { type: 'get-event-log'; requestId: string; logName?: string; maxEntries?: number }
+  // App inventory
+  | { type: 'get-installed-apps'; requestId: string }
+  // Phase 1: Fleet essentials
+  | { type: 'driver-update-scan'; requestId: string }
+  | { type: 'driver-update-install'; requestId: string; updateIds: string[] }
+  | { type: 'driver-clean'; requestId: string; publishedNames: string[] }
+  | { type: 'startup-list'; requestId: string }
+  | { type: 'startup-toggle'; requestId: string; name: string; location: string; command: string; source: string; enabled: boolean }
+  | { type: 'disk-health'; requestId: string }
+  // Phase 2: Compliance & security
+  | { type: 'privacy-scan'; requestId: string }
+  | { type: 'privacy-apply'; requestId: string; settingIds: string[] }
+  | { type: 'debloater-scan'; requestId: string }
+  | { type: 'debloater-remove'; requestId: string; packageNames: string[] }
+  | { type: 'service-scan'; requestId: string }
+  | { type: 'service-apply'; requestId: string; changes: Array<{ name: string; targetStartType: string }> }
+  // Phase 3: Maintenance
+  | { type: 'malware-quarantine'; requestId: string; paths: string[] }
+  | { type: 'malware-delete'; requestId: string; paths: string[] }
+  | { type: 'registry-scan'; requestId: string }
+  | { type: 'registry-fix'; requestId: string; entryIds: string[] }
 
 // ─── Telemetry (frequent, lightweight) ──────────────────────
 
@@ -118,15 +151,18 @@ export interface HealthReport {
   // Security posture (native Windows checks)
   securityPosture: {
     antivirus: {
-      enabled: boolean
-      realTimeProtection: boolean
-      signatureAge: number | null       // days since last signature update
-      productName: string | null
+      products: Array<{
+        name: string
+        enabled: boolean
+        realTimeProtection: boolean
+        signatureUpToDate: boolean
+      }>
+      primary: string | null            // name of the active AV product
     }
     firewall: {
-      domain: boolean
-      private: boolean
-      public: boolean
+      enabled: boolean
+      products: Array<{ name: string; enabled: boolean }>
+      windowsProfiles: { domain: boolean; private: boolean; public: boolean }
     }
     bitlocker: {
       volumes: Array<{
@@ -143,6 +179,22 @@ export interface HealthReport {
       }>
       lastPatchDate: string | null       // ISO date of most recent patch
       daysSinceLastPatch: number | null
+    }
+    screenLock: {
+      screenSaverEnabled: boolean
+      lockOnResume: boolean              // requires password after screensaver
+      timeoutSec: number | null          // screensaver timeout in seconds
+      inactivityLockSec: number | null   // GPO/policy inactivity lock (separate from screensaver)
+    }
+    passwordPolicy: {
+      minLength: number
+      maxAgeDays: number                 // 0 = never expires
+      minAgeDays: number
+      historyCount: number               // 0 = no history enforced
+      complexityRequired: boolean        // whether GPO complexity is enabled
+      lockoutThreshold: number           // 0 = no lockout
+      lockoutDurationMin: number
+      lockoutObservationMin: number
     }
   }
 }
