@@ -28,7 +28,6 @@ export function registerSystemCleanerIpc(getWindow: WindowGetter): void {
       { path: SYSTEM_PATHS.fontCache, subcategory: 'Font Cache', needsAdmin: true },
       { path: SYSTEM_PATHS.dxShaderCache, subcategory: 'DirectX Shader Cache' },
       { path: SYSTEM_PATHS.inetCache, subcategory: 'Internet Cache' },
-      { path: SYSTEM_PATHS.searchIndex, subcategory: 'Windows Search Index Data', needsAdmin: true },
 
       // Windows Update & Delivery
       { path: SYSTEM_PATHS.windowsUpdateCache, subcategory: 'Windows Update Cache', needsAdmin: true },

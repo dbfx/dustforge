@@ -22,7 +22,6 @@ export const SYSTEM_PATHS = {
   fontCache: join(WINDIR, 'ServiceProfiles', 'LocalService', 'AppData', 'Local', 'FontCache'),
   dxShaderCache: join(LOCALAPPDATA, 'D3DSCache'),
   inetCache: join(LOCALAPPDATA, 'Microsoft', 'Windows', 'INetCache'),
-  searchIndex: join(PROGRAMDATA, 'Microsoft', 'Search', 'Data'),
 
   // Windows Update & Delivery
   windowsUpdateCache: join(WINDIR, 'SoftwareDistribution', 'Download'),
