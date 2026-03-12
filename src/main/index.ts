@@ -31,9 +31,10 @@ let tray: Tray | null = null
 let ipcRegistered = false
 
 function getIconPath(): string {
+  const ext = process.platform === 'darwin' ? 'icns' : process.platform === 'linux' ? 'png' : 'ico'
   return app.isPackaged
-    ? join(process.resourcesPath, 'icon.ico')
-    : join(__dirname, '../../resources/icon.ico')
+    ? join(process.resourcesPath, `icon.${ext}`)
+    : join(__dirname, `../../resources/icon.${ext}`)
 }
 
 function applyAutoLaunch(enabled: boolean): void {

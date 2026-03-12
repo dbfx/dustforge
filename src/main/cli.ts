@@ -6,7 +6,7 @@ import { scanDirectory, scanFile, scanMultipleDirectories, scanDirectoriesAsItem
 import { cacheItems } from './services/scan-cache'
 import { CleanerType } from '../shared/enums'
 import type { ScanResult, CleanResult } from '../shared/types'
-import { SYSTEM_PATHS, BROWSER_PATHS, APP_PATHS, GAMING_PATHS, GPU_CACHE_PATHS } from './constants/paths'
+import { getPlatform } from './platform'
 import { randomUUID } from 'crypto'
 
 // ─── Output helpers ──────────────────────────────────────────
@@ -44,36 +44,15 @@ function out(data: unknown, json: boolean): void {
 async function scanSystem(): Promise<ScanResult[]> {
   const results: ScanResult[] = []
   const category = CleanerType.System
-  const targets = [
-    { path: SYSTEM_PATHS.userTemp, subcategory: 'User Temp Files' },
-    { path: SYSTEM_PATHS.systemTemp, subcategory: 'System Temp Files' },
-    { path: SYSTEM_PATHS.prefetch, subcategory: 'Prefetch Data' },
-    { path: SYSTEM_PATHS.windowsLogs, subcategory: 'Windows Logs' },
-    { path: SYSTEM_PATHS.setupLogs, subcategory: 'Setup Logs' },
-    { path: SYSTEM_PATHS.thumbnailCache, subcategory: 'Thumbnail & Icon Cache' },
-    { path: SYSTEM_PATHS.fontCache, subcategory: 'Font Cache' },
-    { path: SYSTEM_PATHS.dxShaderCache, subcategory: 'DirectX Shader Cache' },
-    { path: SYSTEM_PATHS.inetCache, subcategory: 'Internet Cache' },
-    { path: SYSTEM_PATHS.windowsUpdateCache, subcategory: 'Windows Update Cache' },
-    { path: SYSTEM_PATHS.deliveryOptimization, subcategory: 'Delivery Optimization Cache' },
-    { path: SYSTEM_PATHS.errorReports, subcategory: 'Error Reports' },
-    { path: SYSTEM_PATHS.systemErrorReports, subcategory: 'System Error Reports' },
-    { path: SYSTEM_PATHS.crashDumps, subcategory: 'Crash Dumps' },
-    { path: SYSTEM_PATHS.memoryDumps, subcategory: 'Minidump Files' },
-    { path: SYSTEM_PATHS.installerPatchCache, subcategory: 'Installer Patch Cache' },
-    { path: SYSTEM_PATHS.eventLogs, subcategory: 'Event Log Archives' },
-    { path: SYSTEM_PATHS.defenderScanHistory, subcategory: 'Defender Scan History' },
-    { path: SYSTEM_PATHS.windowsOld, subcategory: 'Previous Windows Installation' },
-  ]
-  const protectedEventLogs = [
-    'microsoft-windows-diagnostics-performance%4operational.evtx',
-    'security.evtx', 'system.evtx', 'application.evtx', 'setup.evtx',
-    'microsoft-windows-windows defender%4operational.evtx',
-  ]
+  const platform = getPlatform()
+  const targets = platform.paths.systemCleanTargets()
+  const protectedEventLogs = platform.paths.protectedEventLogs()
+  const eventLogsTarget = targets.find((t) => t.subcategory === 'Event Log Archives')
+
   for (const target of targets) {
     try {
       const result = await scanDirectory(target.path, category, target.subcategory)
-      if (target.path === SYSTEM_PATHS.eventLogs) {
+      if (eventLogsTarget && target.path === eventLogsTarget.path) {
         result.items = result.items.filter((item) => {
           const fileName = item.path.split(/[\\/]/).pop()?.toLowerCase() || ''
           return !protectedEventLogs.some((p) => fileName === p)
@@ -84,23 +63,26 @@ async function scanSystem(): Promise<ScanResult[]> {
       if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
     } catch { /* skip */ }
   }
-  try {
-    const dumpResult = await scanFile(SYSTEM_PATHS.fullMemoryDump, category, 'Full Memory Dump')
-    if (dumpResult.items.length > 0) { cacheItems(dumpResult.items); results.push(dumpResult) }
-  } catch { /* skip */ }
+  for (const filePath of platform.paths.singleFileCleanTargets()) {
+    try {
+      const dumpResult = await scanFile(filePath, category, 'Full Memory Dump')
+      if (dumpResult.items.length > 0) { cacheItems(dumpResult.items); results.push(dumpResult) }
+    } catch { /* skip */ }
+  }
   return results
 }
 
 async function scanBrowserCli(): Promise<ScanResult[]> {
   const results: ScanResult[] = []
   const category = CleanerType.Browser
+  const browserPaths = getPlatform().paths.browserPaths()
   const chromiumBrowsers = [
-    { label: 'Chrome', ...BROWSER_PATHS.chrome, hasProfiles: true },
-    { label: 'Edge', ...BROWSER_PATHS.edge, hasProfiles: true },
-    { label: 'Brave', ...BROWSER_PATHS.brave, hasProfiles: true },
-    { label: 'Vivaldi', ...BROWSER_PATHS.vivaldi, hasProfiles: true },
-    { label: 'Opera', ...BROWSER_PATHS.opera, hasProfiles: false },
-    { label: 'Opera GX', ...BROWSER_PATHS.operaGX, hasProfiles: false },
+    { label: 'Chrome', ...browserPaths.chrome, hasProfiles: true },
+    { label: 'Edge', ...browserPaths.edge, hasProfiles: true },
+    { label: 'Brave', ...browserPaths.brave, hasProfiles: true },
+    { label: 'Vivaldi', ...browserPaths.vivaldi, hasProfiles: true },
+    { label: 'Opera', ...browserPaths.opera, hasProfiles: false },
+    { label: 'Opera GX', ...browserPaths.operaGX, hasProfiles: false },
   ]
   for (const browser of chromiumBrowsers) {
     if (!existsSync(browser.base)) continue
@@ -131,12 +113,12 @@ async function scanBrowserCli(): Promise<ScanResult[]> {
       }
     }
   }
-  if (existsSync(BROWSER_PATHS.firefox.cache)) {
+  if (existsSync(browserPaths.firefox.cache)) {
     try {
-      const profileDirs = await readdir(BROWSER_PATHS.firefox.cache, { withFileTypes: true })
+      const profileDirs = await readdir(browserPaths.firefox.cache, { withFileTypes: true })
       for (const dir of profileDirs) {
         if (dir.isDirectory()) {
-          const cachePath = join(BROWSER_PATHS.firefox.cache, dir.name, 'cache2', 'entries')
+          const cachePath = join(browserPaths.firefox.cache, dir.name, 'cache2', 'entries')
           if (existsSync(cachePath)) {
             const result = await scanDirectory(cachePath, category, `Firefox - ${dir.name} Cache`)
             if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
@@ -151,7 +133,7 @@ async function scanBrowserCli(): Promise<ScanResult[]> {
 async function scanApp(): Promise<ScanResult[]> {
   const results: ScanResult[] = []
   const category = CleanerType.App
-  for (const appDef of APP_PATHS) {
+  for (const appDef of getPlatform().paths.appPaths()) {
     try {
       const result = await scanMultipleDirectories(appDef.paths, category, appDef.name)
       if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
@@ -163,13 +145,13 @@ async function scanApp(): Promise<ScanResult[]> {
 async function scanGaming(): Promise<ScanResult[]> {
   const results: ScanResult[] = []
   const category = CleanerType.Gaming
-  for (const launcher of GAMING_PATHS) {
+  for (const launcher of getPlatform().paths.gamingPaths()) {
     try {
       const result = await scanDirectoriesAsItems(launcher.paths, category, launcher.name, 'Launcher Caches')
       if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
     } catch { /* skip */ }
   }
-  for (const gpu of GPU_CACHE_PATHS) {
+  for (const gpu of getPlatform().paths.gpuCachePaths()) {
     try {
       const result = await scanDirectoriesAsItems(gpu.paths, category, gpu.name, 'GPU Shader Caches')
       if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
@@ -179,6 +161,15 @@ async function scanGaming(): Promise<ScanResult[]> {
 }
 
 async function scanRecycleBin(): Promise<ScanResult[]> {
+  const trashPath = getPlatform().paths.trashPath()
+  if (trashPath) {
+    // macOS / Linux: scan trash directory
+    if (!existsSync(trashPath)) return []
+    const result = await scanDirectory(trashPath, CleanerType.RecycleBin, 'Trash')
+    if (result.items.length > 0) { cacheItems(result.items); return [result] }
+    return []
+  }
+  // Windows: COM-based recycle bin
   const { execFile } = await import('child_process')
   const { promisify } = await import('util')
   const execFileAsync = promisify(execFile)
@@ -198,6 +189,8 @@ async function scanRecycleBin(): Promise<ScanResult[]> {
 }
 
 async function cleanRecycleBin(sizeBytes: number = 0): Promise<CleanResult> {
+  // On macOS/Linux, trash items are real files cleaned via cleanItems() in the main flow.
+  // This function is only called for Windows COM-based recycle bin.
   const { execFile } = await import('child_process')
   const { promisify } = await import('util')
   const execFileAsync = promisify(execFile)
@@ -842,8 +835,13 @@ async function runLegacyScanClean(categories: string[], doClean: boolean, json: 
   let cleanResult: CleanResult | null = null
   if (doClean && totalItems > 0) {
     if (!json) log(`Cleaning ${totalItems} items (${formatBytes(totalSize)})...`)
-    const fileItemIds = allResults.filter(r => r.category !== CleanerType.RecycleBin).flatMap(r => r.items.map(i => i.id))
-    const hasRecycleBin = allResults.some(r => r.category === CleanerType.RecycleBin)
+    const hasTrashPath = getPlatform().paths.trashPath() !== null
+    // On macOS/Linux, trash items are real files scanned via scanDirectory — clean them with cleanItems
+    // On Windows, recycle bin items are virtual (COM-based) and need special handling
+    const fileItemIds = allResults
+      .filter(r => r.category !== CleanerType.RecycleBin || hasTrashPath)
+      .flatMap(r => r.items.map(i => i.id))
+    const hasRecycleBin = !hasTrashPath && allResults.some(r => r.category === CleanerType.RecycleBin)
     let fileCleaned: CleanResult = { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     let recycleCleaned: CleanResult = { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     if (fileItemIds.length > 0) fileCleaned = await cleanItems(fileItemIds)

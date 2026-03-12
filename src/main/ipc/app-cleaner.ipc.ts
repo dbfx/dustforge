@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { IPC } from '../../shared/channels'
-import { APP_PATHS } from '../constants/paths'
+import { getPlatform } from '../platform'
 import { scanMultipleDirectories, cleanItems } from '../services/file-utils'
 import { cacheItems } from '../services/scan-cache'
 import { CleanerType } from '../../shared/enums'
@@ -12,7 +12,7 @@ export function registerAppCleanerIpc(getWindow: WindowGetter): void {
     const results: ScanResult[] = []
     const category = CleanerType.App
 
-    for (const app of APP_PATHS) {
+    for (const app of getPlatform().paths.appPaths()) {
       try {
         const result = await scanMultipleDirectories(app.paths, category, app.name)
         if (result.items.length > 0) {

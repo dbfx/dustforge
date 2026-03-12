@@ -1,15 +1,11 @@
 import { app } from 'electron'
 import * as si from 'systeminformation'
 import { hostname } from 'os'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
 import Pusher from 'pusher-js'
-
-const execFileAsync = promisify(execFile)
 import { getSettings, setSettings, getMachineId } from './settings-store'
 import { scanDirectory, cleanItems } from './file-utils'
 import { cacheItems } from './scan-cache'
-import { SYSTEM_PATHS } from '../constants/paths'
+import { getPlatform } from '../platform'
 import { CleanerType } from '../../shared/enums'
 import { checkForUpdates, runUpdates } from './software-updater'
 import { scanRegistry, fixRegistryEntries } from '../ipc/registry-cleaner.ipc'
@@ -25,7 +21,7 @@ import { applyServiceChanges } from '../ipc/service-manager.ipc'
 import { quarantineMalware, deleteMalware } from '../ipc/malware-scanner.ipc'
 import { PerfMonitorService } from './perf-monitor'
 import { logInfo, logError } from './logger'
-import { join, resolve } from 'path'
+import { join } from 'path'
 import { appendFileSync, mkdirSync } from 'fs'
 import { tmpdir } from 'os'
 import type {
@@ -36,7 +32,8 @@ import type {
   HealthReport,
   AllowedScanType,
 } from './cloud-agent-types'
-import type { ScanResult } from '../../shared/types'
+import type { ScanResult, CloudActionEntry } from '../../shared/types'
+import { addCloudHistoryEntry } from './cloud-history-store'
 
 const DEFAULT_SERVER_URL = app.isPackaged ? 'https://cloud.dustforge.net' : 'http://localhost:8000'
 
@@ -66,18 +63,7 @@ interface ConnectConfig {
 
 /** Validates that a file path is within directories allowed for malware operations */
 function isAllowedMalwarePath(filePath: string): boolean {
-  // Resolve to absolute path to prevent traversal attacks (e.g. Downloads\..\..\Windows\...)
-  const resolved = resolve(filePath).toLowerCase()
-  const userProfile = (process.env.USERPROFILE || 'C:\\Users\\User').toLowerCase()
-  const allowedPrefixes = [
-    `${userProfile}\\downloads\\`,
-    `${userProfile}\\desktop\\`,
-    `${userProfile}\\documents\\`,
-    `${userProfile}\\appdata\\`,
-    (process.env.TEMP || `${userProfile}\\appdata\\local\\temp`).toLowerCase() + '\\',
-    'c:\\programdata\\',
-  ]
-  return allowedPrefixes.some((prefix) => resolved.startsWith(prefix))
+  return getPlatform().malwarePaths.isAllowedMalwarePath(filePath)
 }
 
 class CloudAgentService {
@@ -656,7 +642,7 @@ class CloudAgentService {
           bitlocker: { volumes: [] },
           windowsUpdate: { recentPatches: [], lastPatchDate: null, daysSinceLastPatch: null },
           screenLock: { screenSaverEnabled: false, lockOnResume: false, timeoutSec: null, inactivityLockSec: null },
-          passwordPolicy: { minLength: 0, maxAgeDays: 0, minAgeDays: 0, historyCount: 0, complexityRequired: false, lockoutThreshold: 0, lockoutDurationMin: 0, lockoutObservationMin: 0 },
+          passwordPolicy: { minLength: 0, maxAgeDays: 0, minAgeDays: 0, historyCount: 0, complexityRequired: false, lockoutThreshold: 0, lockoutDurationMin: 0, lockoutObservationMin: 0, windowsHello: { enrolled: false, faceEnabled: false, fingerprintEnabled: false, pinEnabled: false } },
         },
       }
 
@@ -792,13 +778,14 @@ class CloudAgentService {
   // ─── Security Posture (native Windows checks) ────────
 
   private async collectSecurityPosture(): Promise<HealthReport['securityPosture']> {
+    const security = getPlatform().security
     const [av, fw, bl, wu, sl, pp] = await Promise.allSettled([
-      this.collectAntivirusStatus(),
-      this.collectFirewallStatus(),
-      this.collectBitLockerStatus(),
-      this.collectWindowsUpdateStatus(),
-      this.collectScreenLockStatus(),
-      this.collectPasswordPolicy(),
+      security.collectAntivirusStatus(),
+      security.collectFirewallStatus(),
+      security.collectDiskEncryptionStatus(),
+      security.collectUpdateStatus(),
+      security.collectScreenLockStatus(),
+      security.collectPasswordPolicy(),
     ])
 
     return {
@@ -807,229 +794,10 @@ class CloudAgentService {
       bitlocker: bl.status === 'fulfilled' ? bl.value : { volumes: [] },
       windowsUpdate: wu.status === 'fulfilled' ? wu.value : { recentPatches: [], lastPatchDate: null, daysSinceLastPatch: null },
       screenLock: sl.status === 'fulfilled' ? sl.value : { screenSaverEnabled: false, lockOnResume: false, timeoutSec: null, inactivityLockSec: null },
-      passwordPolicy: pp.status === 'fulfilled' ? pp.value : { minLength: 0, maxAgeDays: 0, minAgeDays: 0, historyCount: 0, complexityRequired: false, lockoutThreshold: 0, lockoutDurationMin: 0, lockoutObservationMin: 0 },
+      passwordPolicy: pp.status === 'fulfilled' ? pp.value : { minLength: 0, maxAgeDays: 0, minAgeDays: 0, historyCount: 0, complexityRequired: false, lockoutThreshold: 0, lockoutDurationMin: 0, lockoutObservationMin: 0, windowsHello: { enrolled: false, faceEnabled: false, fingerprintEnabled: false, pinEnabled: false } },
     }
   }
 
-  /**
-   * Query WMI SecurityCenter2 for all registered AV products.
-   * productState is a bitmask: bits 12-15 = enabled/disabled, bit 4 = out-of-date sigs,
-   * bits 8-11 = real-time scanning state.
-   */
-  private async collectAntivirusStatus(): Promise<HealthReport['securityPosture']['antivirus']> {
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      'Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct | Select-Object displayName,productState | ConvertTo-Json -Compress',
-    ], { timeout: 15_000, windowsHide: true })
-
-    const raw = JSON.parse(stdout.trim())
-    const items: Array<{ displayName: string; productState: number }> =
-      Array.isArray(raw) ? raw : [raw]
-
-    const products = items.map((item) => {
-      const state = item.productState
-      // Byte 1 (bits 8-15): scanner status. 0x10 = enabled, 0x00/0x01 = disabled
-      const enabled = ((state >> 12) & 0xF) >= 1
-      // Bit 4: signature out of date
-      const signatureUpToDate = ((state >> 4) & 0x1) === 0
-      // Byte 1 lower nibble (bits 8-11): 0x00 = real-time on, 0x01 = off, 0x10 = snoozed
-      const realTimeProtection = ((state >> 8) & 0xF) === 0
-      return {
-        name: item.displayName ?? 'Unknown',
-        enabled,
-        realTimeProtection: enabled && realTimeProtection,
-        signatureUpToDate,
-      }
-    })
-
-    // Primary = first product that is enabled with real-time protection, excluding Defender if a third-party is active
-    const thirdParty = products.filter(
-      (p) => p.enabled && p.realTimeProtection && p.name !== 'Windows Defender'
-    )
-    const primary = thirdParty[0]?.name ?? products.find((p) => p.enabled && p.realTimeProtection)?.name ?? null
-
-    return { products, primary }
-  }
-
-  /**
-   * Query both WMI SecurityCenter2 (third-party firewalls) and Windows Firewall profiles.
-   */
-  private async collectFirewallStatus(): Promise<HealthReport['securityPosture']['firewall']> {
-    const [fwProducts, fwProfiles] = await Promise.allSettled([
-      execFileAsync('powershell.exe', [
-        '-NoProfile', '-NonInteractive', '-Command',
-        'Get-CimInstance -Namespace root/SecurityCenter2 -ClassName FirewallProduct | Select-Object displayName,productState | ConvertTo-Json -Compress',
-      ], { timeout: 15_000, windowsHide: true }),
-      execFileAsync('powershell.exe', [
-        '-NoProfile', '-NonInteractive', '-Command',
-        'Get-NetFirewallProfile | Select-Object Name,Enabled | ConvertTo-Json -Compress',
-      ], { timeout: 15_000, windowsHide: true }),
-    ])
-
-    // Parse third-party firewall products
-    const products: Array<{ name: string; enabled: boolean }> = []
-    if (fwProducts.status === 'fulfilled') {
-      try {
-        const raw = JSON.parse(fwProducts.value.stdout.trim())
-        const items: Array<{ displayName: string; productState: number }> =
-          Array.isArray(raw) ? raw : [raw]
-        for (const item of items) {
-          const enabled = ((item.productState >> 12) & 0xF) >= 1
-          products.push({ name: item.displayName ?? 'Unknown', enabled })
-        }
-      } catch { /* ignore parse errors */ }
-    }
-
-    // Parse Windows Firewall profiles
-    const windowsProfiles = { domain: false, private: false, public: false }
-    if (fwProfiles.status === 'fulfilled') {
-      try {
-        const raw = JSON.parse(fwProfiles.value.stdout.trim())
-        const profiles: Array<{ Name: string; Enabled: number | boolean }> =
-          Array.isArray(raw) ? raw : [raw]
-        // Enabled is a GpoBoolean enum that serializes as 1/0, not true/false
-        const lookup = Object.fromEntries(profiles.map((p) => [p.Name?.toLowerCase(), !!p.Enabled]))
-        windowsProfiles.domain = lookup['domain'] ?? false
-        windowsProfiles.private = lookup['private'] ?? false
-        windowsProfiles.public = lookup['public'] ?? false
-      } catch { /* ignore parse errors */ }
-    }
-
-    // Firewall is considered enabled if any third-party firewall is on OR all Windows profiles are on
-    const thirdPartyEnabled = products.some((p) => p.enabled)
-    const windowsEnabled = windowsProfiles.domain && windowsProfiles.private && windowsProfiles.public
-    const enabled = thirdPartyEnabled || windowsEnabled
-
-    return { enabled, products, windowsProfiles }
-  }
-
-  private async collectBitLockerStatus(): Promise<HealthReport['securityPosture']['bitlocker']> {
-    try {
-      const { stdout } = await execFileAsync('powershell.exe', [
-        '-NoProfile', '-NonInteractive', '-Command',
-        'Get-BitLockerVolume | Select-Object MountPoint,VolumeStatus,ProtectionStatus | ConvertTo-Json -Compress',
-      ], { timeout: 15_000, windowsHide: true })
-
-      const raw = JSON.parse(stdout.trim())
-      const vols: Array<{ MountPoint: string; VolumeStatus: number; ProtectionStatus: number }> =
-        Array.isArray(raw) ? raw : [raw]
-
-      const statusMap: Record<number, HealthReport['securityPosture']['bitlocker']['volumes'][0]['status']> = {
-        0: 'FullyDecrypted', 1: 'FullyEncrypted', 2: 'EncryptionInProgress', 3: 'DecryptionInProgress',
-      }
-
-      return {
-        volumes: vols.map((v) => ({
-          mount: v.MountPoint ?? '',
-          status: statusMap[v.VolumeStatus] ?? 'Unknown',
-          protectionOn: v.ProtectionStatus === 1,
-        })),
-      }
-    } catch {
-      return { volumes: [] }
-    }
-  }
-
-  private async collectWindowsUpdateStatus(): Promise<HealthReport['securityPosture']['windowsUpdate']> {
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      'Get-HotFix | Sort-Object InstalledOn -Descending -ErrorAction SilentlyContinue | Select-Object -First 10 HotFixID,InstalledOn,Description | ConvertTo-Json -Compress',
-    ], { timeout: 15_000, windowsHide: true })
-
-    const raw = JSON.parse(stdout.trim())
-    const patches: Array<{ HotFixID: string; InstalledOn: string; Description: string }> =
-      Array.isArray(raw) ? raw : [raw]
-
-    const recentPatches = patches
-      .filter((p) => p.HotFixID && p.InstalledOn)
-      .map((p) => {
-        const date = new Date(p.InstalledOn)
-        return {
-          id: p.HotFixID,
-          installedOn: isNaN(date.getTime()) ? p.InstalledOn : date.toISOString().split('T')[0],
-          description: (p.Description || '').slice(0, 100),
-        }
-      })
-
-    let lastPatchDate: string | null = null
-    let daysSinceLastPatch: number | null = null
-    if (recentPatches.length > 0) {
-      lastPatchDate = recentPatches[0].installedOn
-      const lastDate = new Date(lastPatchDate)
-      if (!isNaN(lastDate.getTime())) {
-        daysSinceLastPatch = Math.floor((Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24))
-      }
-    }
-
-    return { recentPatches, lastPatchDate, daysSinceLastPatch }
-  }
-
-  private async collectScreenLockStatus(): Promise<HealthReport['securityPosture']['screenLock']> {
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      // Screensaver settings from HKCU + GPO inactivity lock from HKLM
-      `$ss = Get-ItemProperty 'HKCU:\\Control Panel\\Desktop' -Name 'ScreenSaveActive','ScreenSaverIsSecure','ScreenSaveTimeOut' -ErrorAction SilentlyContinue; ` +
-      `$gpo = Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System' -Name 'InactivityTimeoutSecs' -ErrorAction SilentlyContinue; ` +
-      `[PSCustomObject]@{ ` +
-      `  ssActive = $ss.ScreenSaveActive; ` +
-      `  ssSecure = $ss.ScreenSaverIsSecure; ` +
-      `  ssTimeout = $ss.ScreenSaveTimeOut; ` +
-      `  gpoTimeout = $gpo.InactivityTimeoutSecs ` +
-      `} | ConvertTo-Json -Compress`,
-    ], { timeout: 15_000, windowsHide: true })
-
-    const data = JSON.parse(stdout.trim())
-    const screenSaverEnabled = data.ssActive === '1' || data.ssActive === 1
-    const lockOnResume = data.ssSecure === '1' || data.ssSecure === 1
-    const timeoutSec = data.ssTimeout ? parseInt(String(data.ssTimeout), 10) : null
-    const inactivityLockSec = typeof data.gpoTimeout === 'number' && data.gpoTimeout > 0 ? data.gpoTimeout : null
-
-    return {
-      screenSaverEnabled,
-      lockOnResume,
-      timeoutSec: timeoutSec && !isNaN(timeoutSec) ? timeoutSec : null,
-      inactivityLockSec,
-    }
-  }
-
-  private async collectPasswordPolicy(): Promise<HealthReport['securityPosture']['passwordPolicy']> {
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      // net accounts outputs localized text, so parse with regex on the numbers
-      `$out = net accounts 2>&1; ` +
-      `$lines = $out -split '\\r?\\n'; ` +
-      `function val($pattern) { foreach ($l in $lines) { if ($l -match $pattern) { if ($l -match '(\\d+)') { return [int]$Matches[1] } } }; return 0 } ` +
-      `$complexity = $false; ` +
-      `try { $tmp = [System.IO.Path]::GetTempFileName(); ` +
-      `  secedit /export /cfg $tmp /quiet 2>&1 | Out-Null; ` +
-      `  $sec = Get-Content $tmp -Raw -ErrorAction SilentlyContinue; ` +
-      `  Remove-Item $tmp -ErrorAction SilentlyContinue; ` +
-      `  if ($sec -match 'PasswordComplexity\\s*=\\s*1') { $complexity = $true } ` +
-      `} catch {} ` +
-      `[PSCustomObject]@{ ` +
-      `  minLength = val 'Minimum password length'; ` +
-      `  maxAge = val 'Maximum password age'; ` +
-      `  minAge = val 'Minimum password age'; ` +
-      `  history = val 'password history'; ` +
-      `  complexity = $complexity; ` +
-      `  lockoutThreshold = val 'Lockout threshold'; ` +
-      `  lockoutDuration = val 'Lockout duration'; ` +
-      `  lockoutWindow = val 'Lockout observation' ` +
-      `} | ConvertTo-Json -Compress`,
-    ], { timeout: 15_000, windowsHide: true })
-
-    const data = JSON.parse(stdout.trim())
-    return {
-      minLength: typeof data.minLength === 'number' ? data.minLength : 0,
-      maxAgeDays: typeof data.maxAge === 'number' ? data.maxAge : 0,
-      minAgeDays: typeof data.minAge === 'number' ? data.minAge : 0,
-      historyCount: typeof data.history === 'number' ? data.history : 0,
-      complexityRequired: data.complexity === true,
-      lockoutThreshold: typeof data.lockoutThreshold === 'number' ? data.lockoutThreshold : 0,
-      lockoutDurationMin: typeof data.lockoutDuration === 'number' ? data.lockoutDuration : 0,
-      lockoutObservationMin: typeof data.lockoutWindow === 'number' ? data.lockoutWindow : 0,
-    }
-  }
 
   // ─── Command Execution ────────────────────────────────
 
@@ -1052,6 +820,7 @@ class CloudAgentService {
 
     this.commandRunning = true
     let timedOut = false
+    const startedAt = Date.now()
 
     const timeout = setTimeout(() => {
       timedOut = true
@@ -1059,6 +828,7 @@ class CloudAgentService {
       if ('requestId' in cmd) {
         this.postCommandResult(cmd.requestId, false, undefined, 'Command timed out').catch(() => {})
       }
+      this.logCloudAction(cmd, startedAt, false, 'Command timed out')
     }, COMMAND_TIMEOUT_MS)
 
     try {
@@ -1117,15 +887,17 @@ class CloudAgentService {
         case 'get-installed-apps':
           await this.handleGetInstalledApps(cmd.requestId)
           break
-        // Phase 1: Fleet essentials
+        // Phase 1: Fleet essentials (Windows-only)
         case 'driver-update-scan':
-          await this.handleDriverUpdateScan(cmd.requestId)
-          break
         case 'driver-update-install':
-          await this.handleDriverUpdateInstall(cmd.requestId, cmd.updateIds)
-          break
         case 'driver-clean':
-          await this.handleDriverClean(cmd.requestId, cmd.publishedNames)
+          if (process.platform !== 'win32') {
+            await this.postCommandResult(cmd.requestId, false, undefined, 'Not supported on this platform')
+            break
+          }
+          if (cmd.type === 'driver-update-scan') await this.handleDriverUpdateScan(cmd.requestId)
+          else if (cmd.type === 'driver-update-install') await this.handleDriverUpdateInstall(cmd.requestId, cmd.updateIds)
+          else await this.handleDriverClean(cmd.requestId, cmd.publishedNames)
           break
         case 'startup-list':
           await this.handleStartupList(cmd.requestId)
@@ -1144,10 +916,13 @@ class CloudAgentService {
           await this.handlePrivacyApply(cmd.requestId, cmd.settingIds)
           break
         case 'debloater-scan':
-          await this.handleDebloaterScan(cmd.requestId)
-          break
         case 'debloater-remove':
-          await this.handleDebloaterRemove(cmd.requestId, cmd.packageNames)
+          if (process.platform !== 'win32') {
+            await this.postCommandResult(cmd.requestId, false, undefined, 'Not supported on this platform')
+            break
+          }
+          if (cmd.type === 'debloater-scan') await this.handleDebloaterScan(cmd.requestId)
+          else await this.handleDebloaterRemove(cmd.requestId, cmd.packageNames)
           break
         case 'service-scan':
           await this.handleServiceScan(cmd.requestId)
@@ -1163,11 +938,17 @@ class CloudAgentService {
           await this.handleMalwareDelete(cmd.requestId, cmd.paths)
           break
         case 'registry-scan':
-          await this.handleRegistryScan(cmd.requestId)
-          break
         case 'registry-fix':
-          await this.handleRegistryFix(cmd.requestId, cmd.entryIds)
+          if (process.platform !== 'win32') {
+            await this.postCommandResult(cmd.requestId, false, undefined, 'Not supported on this platform')
+            break
+          }
+          if (cmd.type === 'registry-scan') await this.handleRegistryScan(cmd.requestId)
+          else await this.handleRegistryFix(cmd.requestId, cmd.entryIds)
           break
+      }
+      if (!timedOut) {
+        this.logCloudAction(cmd, startedAt, true)
       }
     } catch (err) {
       if (!timedOut) {
@@ -1176,6 +957,7 @@ class CloudAgentService {
         if ('requestId' in cmd) {
           this.postCommandResult(cmd.requestId, false, undefined, msg).catch(() => {})
         }
+        this.logCloudAction(cmd, startedAt, false, msg)
       }
     } finally {
       clearTimeout(timeout)
@@ -1183,6 +965,63 @@ class CloudAgentService {
         this.commandRunning = false
         this.lastCommandFinishedAt = Date.now()
       }
+    }
+  }
+
+  private logCloudAction(cmd: CloudCommand, startedAt: number, success: boolean, error?: string): void {
+    try {
+      const entry: CloudActionEntry = {
+        id: `cloud-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        commandType: cmd.type,
+        requestId: 'requestId' in cmd ? cmd.requestId : '',
+        timestamp: new Date(startedAt).toISOString(),
+        duration: Date.now() - startedAt,
+        success,
+        error,
+        summary: this.getCommandSummary(cmd),
+      }
+      addCloudHistoryEntry(entry)
+    } catch {
+      // Never let history logging break command execution
+    }
+  }
+
+  private getCommandSummary(cmd: CloudCommand): string {
+    switch (cmd.type) {
+      case 'scan': return `Scan: ${cmd.scanType}`
+      case 'clean': return `Clean: ${cmd.itemIds?.length ?? 0} items`
+      case 'software-update-check': return 'Check software updates'
+      case 'software-update-run': return `Update ${cmd.appIds?.length ?? 0} apps`
+      case 'get-status': return 'Get device status'
+      case 'get-system-info': return 'Get system info'
+      case 'get-health-report': return 'Generate health report'
+      case 'ping': return 'Ping'
+      case 'shutdown': return `Shutdown${cmd.delaySec ? ` (${cmd.delaySec}s delay)` : ''}`
+      case 'restart': return `Restart${cmd.delaySec ? ` (${cmd.delaySec}s delay)` : ''}`
+      case 'windows-update-check': return 'Check Windows updates'
+      case 'windows-update-install': return 'Install Windows updates'
+      case 'run-sfc': return 'Run System File Checker'
+      case 'run-dism': return 'Run DISM repair'
+      case 'get-network-config': return 'Get network config'
+      case 'get-event-log': return `Get event log: ${cmd.logName ?? 'System'}`
+      case 'get-installed-apps': return 'Get installed apps'
+      case 'driver-update-scan': return 'Scan driver updates'
+      case 'driver-update-install': return `Install ${cmd.updateIds?.length ?? 0} driver updates`
+      case 'driver-clean': return `Clean ${cmd.publishedNames?.length ?? 0} drivers`
+      case 'startup-list': return 'List startup items'
+      case 'startup-toggle': return `Toggle startup: ${cmd.name}`
+      case 'disk-health': return 'Check disk health'
+      case 'privacy-scan': return 'Privacy scan'
+      case 'privacy-apply': return `Apply ${cmd.settingIds?.length ?? 0} privacy settings`
+      case 'debloater-scan': return 'Debloater scan'
+      case 'debloater-remove': return `Remove ${cmd.packageNames?.length ?? 0} packages`
+      case 'service-scan': return 'Service scan'
+      case 'service-apply': return `Apply ${cmd.changes?.length ?? 0} service changes`
+      case 'malware-quarantine': return `Quarantine ${cmd.paths?.length ?? 0} threats`
+      case 'malware-delete': return `Delete ${cmd.paths?.length ?? 0} threats`
+      case 'registry-scan': return 'Registry scan'
+      case 'registry-fix': return `Fix ${cmd.entryIds?.length ?? 0} registry entries`
+      default: return (cmd as CloudCommand).type
     }
   }
 
@@ -1201,15 +1040,7 @@ class CloudAgentService {
     switch (scanType) {
       case 'system': {
         const results: ScanResult[] = []
-        const targets = [
-          { path: SYSTEM_PATHS.userTemp, sub: 'User Temp Files' },
-          { path: SYSTEM_PATHS.systemTemp, sub: 'System Temp Files' },
-          { path: SYSTEM_PATHS.thumbnailCache, sub: 'Thumbnail & Icon Cache' },
-          { path: SYSTEM_PATHS.dxShaderCache, sub: 'DirectX Shader Cache' },
-          { path: SYSTEM_PATHS.inetCache, sub: 'Internet Cache' },
-          { path: SYSTEM_PATHS.errorReports, sub: 'Error Reports' },
-          { path: SYSTEM_PATHS.crashDumps, sub: 'Crash Dumps' },
-        ]
+        const targets = getPlatform().paths.systemCleanTargets().map(t => ({ path: t.path, sub: t.subcategory }))
         for (const t of targets) {
           try {
             const r = await scanDirectory(t.path, CleanerType.System, t.sub)
@@ -1387,153 +1218,70 @@ class CloudAgentService {
   private async handleShutdown(requestId: string, delaySec?: number): Promise<void> {
     const delay = Math.max(0, Math.min(typeof delaySec === 'number' ? delaySec : 30, 3600))
     cloudLog('INFO', `Shutdown requested with ${delay}s delay`)
-    // Acknowledge before shutting down
     await this.postCommandResult(requestId, true, { action: 'shutdown', delaySec: delay })
-    await execFileAsync('shutdown.exe', ['/s', '/t', String(delay)], { windowsHide: true })
+    await getPlatform().commands.shutdown(delay)
   }
 
   private async handleRestart(requestId: string, delaySec?: number): Promise<void> {
     const delay = Math.max(0, Math.min(typeof delaySec === 'number' ? delaySec : 30, 3600))
     cloudLog('INFO', `Restart requested with ${delay}s delay`)
     await this.postCommandResult(requestId, true, { action: 'restart', delaySec: delay })
-    await execFileAsync('shutdown.exe', ['/r', '/t', String(delay)], { windowsHide: true })
+    await getPlatform().commands.restart(delay)
   }
 
-  // ─── Windows Update ──────────────────────────────────
+  // ─── OS Updates ──────────────────────────────────
 
   private async handleWindowsUpdateCheck(requestId: string): Promise<void> {
-    // Use PowerShell's WindowsUpdate module via COM object (works without PSWindowsUpdate module)
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      `$session = New-Object -ComObject Microsoft.Update.Session; ` +
-      `$searcher = $session.CreateUpdateSearcher(); ` +
-      `$result = $searcher.Search('IsInstalled=0'); ` +
-      `$result.Updates | ForEach-Object { ` +
-      `  [PSCustomObject]@{ Title=$_.Title; KBArticleIDs=($_.KBArticleIDs -join ','); ` +
-      `  Severity=$_.MsrcSeverity; Size=$_.MaxDownloadSize; IsDownloaded=$_.IsDownloaded } ` +
-      `} | ConvertTo-Json -Compress`,
-    ], { timeout: 120_000, windowsHide: true })
-
-    const trimmed = stdout.trim()
-    if (!trimmed || trimmed === '') {
-      await this.postCommandResult(requestId, true, { updates: [], totalCount: 0 })
+    const updates = await getPlatform().commands.checkOsUpdates()
+    if (!updates) {
+      await this.postCommandResult(requestId, false, undefined, 'Not supported on this platform')
       return
     }
-    const raw = JSON.parse(trimmed)
-    const updates: Array<{ Title: string; KBArticleIDs: string; Severity: string; Size: number; IsDownloaded: boolean }> =
-      Array.isArray(raw) ? raw : [raw]
-
     await this.postCommandResult(requestId, true, {
-      updates: updates.map((u) => ({
-        title: u.Title ?? '',
-        kb: u.KBArticleIDs ?? '',
-        severity: u.Severity ?? 'Unspecified',
-        sizeBytes: u.Size ?? 0,
-        downloaded: u.IsDownloaded === true,
-      })),
+      updates,
       totalCount: updates.length,
     })
   }
 
   private async handleWindowsUpdateInstall(requestId: string): Promise<void> {
-    // Download and install all pending updates via COM
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      `$session = New-Object -ComObject Microsoft.Update.Session; ` +
-      `$searcher = $session.CreateUpdateSearcher(); ` +
-      `$result = $searcher.Search('IsInstalled=0'); ` +
-      `if ($result.Updates.Count -eq 0) { Write-Output '{"installed":0,"needsReboot":false}'; exit } ` +
-      `$downloader = $session.CreateUpdateDownloader(); ` +
-      `$downloader.Updates = $result.Updates; ` +
-      `$downloader.Download() | Out-Null; ` +
-      `$installer = $session.CreateUpdateInstaller(); ` +
-      `$installer.Updates = $result.Updates; ` +
-      `$installResult = $installer.Install(); ` +
-      `[PSCustomObject]@{ installed=$result.Updates.Count; ` +
-      `resultCode=$installResult.ResultCode; ` +
-      `needsReboot=$installResult.RebootRequired } | ConvertTo-Json -Compress`,
-    ], { timeout: 300_000, windowsHide: true }) // 5 min timeout for installs
-
-    const data = JSON.parse(stdout.trim())
-    await this.postCommandResult(requestId, true, {
-      installed: data.installed ?? 0,
-      resultCode: data.resultCode ?? -1,
-      needsReboot: data.needsReboot === true,
-    })
+    const result = await getPlatform().commands.installOsUpdates()
+    if (!result) {
+      await this.postCommandResult(requestId, false, undefined, 'Not supported on this platform')
+      return
+    }
+    await this.postCommandResult(requestId, true, result)
   }
 
   // ─── System File Checker & DISM ──────────────────────
 
   private async handleRunSfc(requestId: string): Promise<void> {
-    cloudLog('INFO', 'Running sfc /scannow')
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      `$p = Start-Process -FilePath 'sfc.exe' -ArgumentList '/scannow' -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput "$env:TEMP\\sfc_out.txt"; ` +
-      `$output = Get-Content "$env:TEMP\\sfc_out.txt" -Raw -ErrorAction SilentlyContinue; ` +
-      `Remove-Item "$env:TEMP\\sfc_out.txt" -ErrorAction SilentlyContinue; ` +
-      `[PSCustomObject]@{ exitCode=$p.ExitCode; output=$output } | ConvertTo-Json -Compress`,
-    ], { timeout: 300_000, windowsHide: true })
-
-    const data = JSON.parse(stdout.trim())
-    // Parse the SFC output for a summary line
-    const output = (data.output ?? '') as string
-    let status = 'unknown'
-    if (output.includes('did not find any integrity violations')) status = 'clean'
-    else if (output.includes('successfully repaired')) status = 'repaired'
-    else if (output.includes('found corrupt files but was unable')) status = 'corrupt_unrepairable'
-    else if (output.includes('could not perform')) status = 'failed'
-
-    await this.postCommandResult(requestId, true, {
-      exitCode: data.exitCode ?? -1,
-      status,
-    })
+    cloudLog('INFO', 'Running system file check')
+    const result = await getPlatform().commands.runSystemFileCheck()
+    if (!result) {
+      await this.postCommandResult(requestId, false, undefined, 'Not supported on this platform')
+      return
+    }
+    await this.postCommandResult(requestId, true, result)
   }
 
   private async handleRunDism(requestId: string): Promise<void> {
-    cloudLog('INFO', 'Running DISM /RestoreHealth')
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      `$p = Start-Process -FilePath 'dism.exe' -ArgumentList '/Online','/Cleanup-Image','/RestoreHealth' -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput "$env:TEMP\\dism_out.txt"; ` +
-      `$output = Get-Content "$env:TEMP\\dism_out.txt" -Raw -ErrorAction SilentlyContinue; ` +
-      `Remove-Item "$env:TEMP\\dism_out.txt" -ErrorAction SilentlyContinue; ` +
-      `[PSCustomObject]@{ exitCode=$p.ExitCode; output=$output } | ConvertTo-Json -Compress`,
-    ], { timeout: 300_000, windowsHide: true })
-
-    const data = JSON.parse(stdout.trim())
-    const output = (data.output ?? '') as string
-    let status = 'unknown'
-    if (output.includes('The restore operation completed successfully')) status = 'success'
-    else if (output.includes('component store corruption')) status = 'corrupt'
-    else if (output.includes('No component store corruption detected')) status = 'clean'
-    else if (data.exitCode === 0) status = 'success'
-
-    await this.postCommandResult(requestId, true, {
-      exitCode: data.exitCode ?? -1,
-      status,
-    })
+    cloudLog('INFO', 'Running system image repair')
+    const result = await getPlatform().commands.runSystemImageRepair()
+    if (!result) {
+      await this.postCommandResult(requestId, false, undefined, 'Not supported on this platform')
+      return
+    }
+    await this.postCommandResult(requestId, true, result)
   }
 
   // ─── Network Config ──────────────────────────────────
 
   private async handleGetNetworkConfig(requestId: string): Promise<void> {
-    const [interfaces, defaultGw, dns] = await Promise.all([
+    const [interfaces, defaultGw, dnsServers] = await Promise.all([
       si.networkInterfaces(),
       si.networkGatewayDefault(),
-      execFileAsync('powershell.exe', [
-        '-NoProfile', '-NonInteractive', '-Command',
-        'Get-DnsClientServerAddress -AddressFamily IPv4 | Select-Object InterfaceAlias,ServerAddresses | ConvertTo-Json -Compress',
-      ], { timeout: 15_000, windowsHide: true }).catch(() => ({ stdout: '[]' })),
+      getPlatform().commands.getDnsServers(),
     ])
-
-    let dnsServers: Array<{ iface: string; servers: string[] }> = []
-    try {
-      const raw = JSON.parse(dns.stdout.trim())
-      const items: Array<{ InterfaceAlias: string; ServerAddresses: string[] }> =
-        Array.isArray(raw) ? raw : [raw]
-      dnsServers = items
-        .filter((d) => d.ServerAddresses?.length > 0)
-        .map((d) => ({ iface: d.InterfaceAlias, servers: d.ServerAddresses }))
-    } catch { /* ignore */ }
 
     const ifaces = (Array.isArray(interfaces) ? interfaces : [interfaces])
       .filter((i) => i.ip4 || i.ip6)
@@ -1563,29 +1311,10 @@ class CloudAgentService {
     const log = allowedLogs.has(logName ?? '') ? logName! : 'System'
     const max = Math.max(1, Math.min(typeof maxEntries === 'number' ? maxEntries : 50, 200))
 
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      `Get-WinEvent -LogName '${log}' -MaxEvents ${max} | ` +
-      `Select-Object TimeCreated,Id,LevelDisplayName,ProviderName,Message | ` +
-      `ForEach-Object { [PSCustomObject]@{ ` +
-      `time=$_.TimeCreated.ToString('o'); id=$_.Id; level=$_.LevelDisplayName; ` +
-      `provider=$_.ProviderName; message=($_.Message -replace '\\r?\\n',' ').Substring(0, [Math]::Min(200, $_.Message.Length)) } } | ` +
-      `ConvertTo-Json -Compress`,
-    ], { timeout: 30_000, windowsHide: true })
-
-    const raw = JSON.parse(stdout.trim())
-    const entries: Array<{ time: string; id: number; level: string; provider: string; message: string }> =
-      Array.isArray(raw) ? raw : [raw]
-
+    const entries = await getPlatform().commands.getEventLog(log, max)
     await this.postCommandResult(requestId, true, {
       logName: log,
-      entries: entries.map((e) => ({
-        time: e.time,
-        eventId: e.id,
-        level: e.level ?? 'Information',
-        provider: e.provider ?? '',
-        message: e.message ?? '',
-      })),
+      entries,
       totalReturned: entries.length,
     })
   }
@@ -1596,36 +1325,9 @@ class CloudAgentService {
   private registryScanCache: Map<string, import('../../shared/types').RegistryEntry> = new Map()
 
   private async handleGetInstalledApps(requestId: string): Promise<void> {
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      // Query both 64-bit and 32-bit uninstall registry keys
-      `$apps = @(); ` +
-      `$paths = @('HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*', ` +
-      `'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'); ` +
-      `foreach ($p in $paths) { ` +
-      `  $apps += Get-ItemProperty $p -ErrorAction SilentlyContinue | ` +
-      `  Where-Object { $_.DisplayName -and $_.DisplayName.Trim() -ne '' } | ` +
-      `  Select-Object DisplayName,DisplayVersion,Publisher,InstallDate,EstimatedSize } ` +
-      `$apps | Sort-Object DisplayName -Unique | ConvertTo-Json -Compress`,
-    ], { timeout: 30_000, windowsHide: true })
-
-    const trimmed = stdout.trim()
-    if (!trimmed || trimmed === '') {
-      await this.postCommandResult(requestId, true, { apps: [], totalCount: 0 })
-      return
-    }
-    const raw = JSON.parse(trimmed)
-    const apps: Array<{ DisplayName: string; DisplayVersion: string; Publisher: string; InstallDate: string; EstimatedSize: number }> =
-      Array.isArray(raw) ? raw : [raw]
-
+    const apps = await getPlatform().commands.getInstalledApps()
     await this.postCommandResult(requestId, true, {
-      apps: apps.map((a) => ({
-        name: a.DisplayName ?? '',
-        version: a.DisplayVersion ?? '',
-        publisher: a.Publisher ?? '',
-        installDate: a.InstallDate ?? '',
-        sizeKb: a.EstimatedSize ?? 0,
-      })),
+      apps,
       totalCount: apps.length,
     })
   }
@@ -1694,6 +1396,8 @@ class CloudAgentService {
         id: i.id,
         name: i.name,
         displayName: i.displayName,
+        command: i.command,
+        location: i.location,
         source: i.source,
         enabled: i.enabled,
         publisher: i.publisher,
@@ -1715,7 +1419,11 @@ class CloudAgentService {
       await this.postCommandResult(requestId, false, undefined, 'Parameter too long')
       return
     }
-    const validSources = new Set(['registry-hkcu', 'registry-hklm', 'startup-folder', 'task-scheduler'])
+    const validSources = new Set([
+      'registry-hkcu', 'registry-hklm', 'startup-folder', 'task-scheduler',
+      'launch-agent-user', 'launch-agent-global', 'login-item',
+      'systemd-user', 'autostart-desktop', 'cron',
+    ])
     if (!validSources.has(source)) {
       await this.postCommandResult(requestId, false, undefined, 'Invalid source')
       return

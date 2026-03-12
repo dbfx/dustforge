@@ -195,6 +195,12 @@ export interface HealthReport {
       lockoutThreshold: number           // 0 = no lockout
       lockoutDurationMin: number
       lockoutObservationMin: number
+      windowsHello: {
+        enrolled: boolean                // user has NGC credentials set up
+        faceEnabled: boolean             // Windows Hello Face provider active
+        fingerprintEnabled: boolean      // Windows Hello Fingerprint provider active
+        pinEnabled: boolean              // Windows Hello PIN provider active
+      }
     }
   }
 }

@@ -32,6 +32,19 @@ export interface ScanHistoryEntry {
   scheduled?: boolean
 }
 
+// ─── Cloud Action History ────────────────────────────────────
+export interface CloudActionEntry {
+  id: string
+  commandType: string
+  requestId: string
+  timestamp: string
+  duration: number
+  success: boolean
+  error?: string
+  /** Brief summary of what happened, e.g. "Scanned 1,204 files" */
+  summary?: string
+}
+
 export interface ScanItem {
   id: string
   path: string
@@ -99,6 +112,8 @@ export interface StartupItem {
   command: string
   location: string
   source: 'registry-hkcu' | 'registry-hklm' | 'startup-folder' | 'task-scheduler'
+    | 'launch-agent-user' | 'launch-agent-global' | 'login-item'
+    | 'systemd-user' | 'autostart-desktop' | 'cron'
   enabled: boolean
   publisher: string
   impact: 'high' | 'medium' | 'low' | 'none'

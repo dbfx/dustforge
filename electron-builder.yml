@@ -12,6 +12,12 @@ files:
 extraResources:
   - from: resources/icon.ico
     to: icon.ico
+    filter:
+      - "**/*"
+  - from: resources/icon.png
+    to: icon.png
+    filter:
+      - "**/*"
 
 win:
   target:
@@ -27,6 +33,31 @@ nsis:
   deleteAppDataOnUninstall: false
   shortcutName: DustForge
   artifactName: DustForge-Setup-${version}.${ext}
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  icon: resources/icon.icns
+  category: public.app-categories.utilities
+  hardenedRuntime: true
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  artifactName: DustForge-${version}-${arch}.${ext}
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  icon: resources/icons/
+  category: Utility
+  artifactName: DustForge-${version}-${arch}.${ext}
 
 publish:
   provider: github

@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto'
 import { IPC } from '../../shared/channels'
 import type { WindowGetter } from '../ipc/index'
 import { CleanerType } from '../../shared/enums'
-import { UNINSTALL_LEFTOVER_DIRS } from '../constants/paths'
+import { getPlatform } from '../platform'
 import { SAFE_FOLDER_NAMES, SAFE_PREFIXES } from '../constants/uninstall-safelist'
 import { getDirectorySize } from './file-utils'
 import type { ScanItem, ScanResult } from '../../shared/types'
@@ -266,12 +266,13 @@ export async function scanForLeftovers(getWindow: WindowGetter): Promise<ScanRes
   const matchTokens = buildMatchTokens(programs)
 
   // Step 2: Scan each target directory
-  const totalDirs = UNINSTALL_LEFTOVER_DIRS.length
+  const leftoverDirs = getPlatform().paths.uninstallLeftoverDirs()
+  const totalDirs = leftoverDirs.length
   let totalItemsFound = 0
   let totalSizeFound = 0
 
   for (let dirIdx = 0; dirIdx < totalDirs; dirIdx++) {
-    const target = UNINSTALL_LEFTOVER_DIRS[dirIdx]
+    const target = leftoverDirs[dirIdx]
     const items: ScanItem[] = []
 
     safeSend(IPC.SCAN_PROGRESS, {

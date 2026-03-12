@@ -23,6 +23,7 @@ import { registerCloudAgentIpc } from './cloud-agent.ipc'
 import { getSettings, setSettings, getOnboardingComplete, setOnboardingComplete } from '../services/settings-store'
 import { isAdmin } from '../services/elevation'
 import { getHistory, addHistoryEntry, clearHistory } from '../services/history-store'
+import { getCloudHistory, clearCloudHistory } from '../services/cloud-history-store'
 import { validateSettingsPartial, validateHistoryEntry } from '../services/ipc-validation'
 import { createRestorePoint } from '../services/restore-point'
 import { checkForUpdates, downloadUpdate, installUpdate, getUpdateStatus, setAutoDownload } from '../services/auto-updater'
@@ -97,6 +98,10 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
     if (validated) addHistoryEntry(validated)
   })
   ipcMain.handle(IPC.HISTORY_CLEAR, () => clearHistory())
+
+  // Cloud action history
+  ipcMain.handle(IPC.CLOUD_HISTORY_GET, () => getCloudHistory())
+  ipcMain.handle(IPC.CLOUD_HISTORY_CLEAR, () => clearCloudHistory())
 
   // Auto-updater
   ipcMain.handle(IPC.UPDATER_CHECK, () => checkForUpdates())

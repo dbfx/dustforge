@@ -135,6 +135,10 @@ export const IPC = {
   CLOUD_GET_STATUS: 'cloud:get-status',
   CLOUD_RECONNECT: 'cloud:reconnect',
 
+  // Cloud Action History
+  CLOUD_HISTORY_GET: 'cloud:history:get',
+  CLOUD_HISTORY_CLEAR: 'cloud:history:clear',
+
   // Window controls
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_MAXIMIZE: 'window:maximize',

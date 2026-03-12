@@ -1,34 +1,15 @@
 import { ipcMain } from 'electron'
 import { existsSync } from 'fs'
 import { readdir } from 'fs/promises'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
 import { join } from 'path'
 import { IPC } from '../../shared/channels'
-import { BROWSER_PATHS } from '../constants/paths'
+import { getPlatform } from '../platform'
 import { scanDirectory, cleanItems } from '../services/file-utils'
 import { cacheItems } from '../services/scan-cache'
 import { getSettings } from '../services/settings-store'
 import { CleanerType } from '../../shared/enums'
 import type { ScanResult, CleanResult } from '../../shared/types'
 import type { WindowGetter } from './index'
-
-const execFileAsync = promisify(execFile)
-
-/** Kill browser processes before cleaning cache files */
-async function closeBrowsers(): Promise<void> {
-  const browserProcesses = [
-    'chrome.exe', 'msedge.exe', 'brave.exe', 'vivaldi.exe',
-    'opera.exe', 'firefox.exe'
-  ]
-  for (const proc of browserProcesses) {
-    try {
-      await execFileAsync('taskkill', ['/IM', proc, '/F'], { timeout: 5000 })
-    } catch {
-      // Process not running, ignore
-    }
-  }
-}
 
 interface ChromiumBrowserDef {
   key: string
@@ -41,20 +22,21 @@ interface ChromiumBrowserDef {
   hasProfiles: boolean
 }
 
-const chromiumBrowsers: ChromiumBrowserDef[] = [
-  { key: 'chrome', label: 'Chrome', ...BROWSER_PATHS.chrome, hasProfiles: true },
-  { key: 'edge', label: 'Edge', ...BROWSER_PATHS.edge, hasProfiles: true },
-  { key: 'brave', label: 'Brave', ...BROWSER_PATHS.brave, hasProfiles: true },
-  { key: 'vivaldi', label: 'Vivaldi', ...BROWSER_PATHS.vivaldi, hasProfiles: true },
-  // Opera stores profiles differently — cache is directly under the base path
-  { key: 'opera', label: 'Opera', ...BROWSER_PATHS.opera, hasProfiles: false },
-  { key: 'operaGX', label: 'Opera GX', ...BROWSER_PATHS.operaGX, hasProfiles: false },
-]
-
 export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.BROWSER_SCAN, async (): Promise<ScanResult[]> => {
     const results: ScanResult[] = []
     const category = CleanerType.Browser
+    const browserPaths = getPlatform().paths.browserPaths()
+
+    const chromiumBrowsers: ChromiumBrowserDef[] = [
+      { key: 'chrome', label: 'Chrome', ...browserPaths.chrome, hasProfiles: true },
+      { key: 'edge', label: 'Edge', ...browserPaths.edge, hasProfiles: true },
+      { key: 'brave', label: 'Brave', ...browserPaths.brave, hasProfiles: true },
+      { key: 'vivaldi', label: 'Vivaldi', ...browserPaths.vivaldi, hasProfiles: true },
+      // Opera stores profiles differently — cache is directly under the base path
+      { key: 'opera', label: 'Opera', ...browserPaths.opera, hasProfiles: false },
+      { key: 'operaGX', label: 'Opera GX', ...browserPaths.operaGX, hasProfiles: false },
+    ]
 
     // Scan all Chromium-based browsers
     for (const browser of chromiumBrowsers) {
@@ -96,12 +78,12 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
     }
 
     // Firefox
-    if (existsSync(BROWSER_PATHS.firefox.cache)) {
+    if (existsSync(browserPaths.firefox.cache)) {
       try {
-        const profileDirs = await readdir(BROWSER_PATHS.firefox.cache, { withFileTypes: true })
+        const profileDirs = await readdir(browserPaths.firefox.cache, { withFileTypes: true })
         for (const dir of profileDirs) {
           if (dir.isDirectory()) {
-            const cachePath = join(BROWSER_PATHS.firefox.cache, dir.name, 'cache2', 'entries')
+            const cachePath = join(browserPaths.firefox.cache, dir.name, 'cache2', 'entries')
             if (existsSync(cachePath)) {
               const result = await scanDirectory(cachePath, category, `Firefox - ${dir.name} Cache`)
               if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
@@ -129,7 +111,7 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.BROWSER_CLEAN, async (_event, itemIds: string[]): Promise<CleanResult> => {
     const settings = getSettings()
     if (settings.cleaner.closeBrowsersBeforeClean) {
-      await closeBrowsers()
+      await getPlatform().browser.closeBrowsers()
     }
     return cleanItems(itemIds)
   })

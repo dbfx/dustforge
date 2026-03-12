@@ -3,7 +3,7 @@ import { join, basename, extname } from 'path'
 import { execFile, spawn } from 'child_process'
 import { promisify } from 'util'
 import { createHash, randomUUID } from 'crypto'
-import { UNINSTALL_LEFTOVER_DIRS } from '../constants/paths'
+import { getPlatform } from '../platform'
 import { SAFE_FOLDER_NAMES, SAFE_PREFIXES } from '../constants/uninstall-safelist'
 import { getDirectorySize } from './file-utils'
 import type { InstalledProgram, ScanItem } from '../../shared/types'
@@ -422,7 +422,7 @@ export async function scanLeftoversForProgram(program: InstalledProgram): Promis
   }
 
   // Scan common directories for matching folders
-  for (const target of UNINSTALL_LEFTOVER_DIRS) {
+  for (const target of getPlatform().paths.uninstallLeftoverDirs()) {
     let entries: string[]
     try {
       entries = await readdir(target.path)

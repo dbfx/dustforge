@@ -28,7 +28,13 @@ const sourceLabels: Record<StartupItem['source'], string> = {
   'registry-hkcu': 'User Registry',
   'registry-hklm': 'System Registry',
   'startup-folder': 'Startup Folder',
-  'task-scheduler': 'Task Scheduler'
+  'task-scheduler': 'Task Scheduler',
+  'launch-agent-user': 'User Launch Agent',
+  'launch-agent-global': 'Global Launch Agent',
+  'login-item': 'Login Item',
+  'systemd-user': 'Systemd User Service',
+  'autostart-desktop': 'XDG Autostart',
+  'cron': 'Cron Job',
 }
 
 function formatMs(ms: number): string {

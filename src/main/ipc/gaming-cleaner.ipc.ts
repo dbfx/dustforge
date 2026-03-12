@@ -4,12 +4,7 @@ import { readdir, readFile, stat } from 'fs/promises'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { IPC } from '../../shared/channels'
-import {
-  GAMING_PATHS,
-  GPU_CACHE_PATHS,
-  STEAM_REDIST_PATTERNS,
-  DEFAULT_STEAM_LIBRARIES,
-} from '../constants/paths'
+import { getPlatform } from '../platform'
 import { scanDirectoriesAsItems, cleanItems, getDirectorySize } from '../services/file-utils'
 import { cacheItems } from '../services/scan-cache'
 import { CleanerType } from '../../shared/enums'
@@ -22,7 +17,7 @@ export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
     const category = CleanerType.Gaming
 
     // Launcher caches — directory-level items, one row per launcher
-    for (const launcher of GAMING_PATHS) {
+    for (const launcher of getPlatform().paths.gamingPaths()) {
       try {
         const result = await scanDirectoriesAsItems(
           launcher.paths, category, launcher.name, 'Launcher Caches'
@@ -37,7 +32,7 @@ export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
     }
 
     // GPU shader caches — directory-level items, one row per vendor
-    for (const gpu of GPU_CACHE_PATHS) {
+    for (const gpu of getPlatform().paths.gpuCachePaths()) {
       try {
         const result = await scanDirectoriesAsItems(
           gpu.paths, category, gpu.name, 'GPU Shader Caches'
@@ -94,7 +89,7 @@ export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
 async function getSteamLibraryPaths(): Promise<string[]> {
   const libraries: Set<string> = new Set()
 
-  for (const steamDir of DEFAULT_STEAM_LIBRARIES) {
+  for (const steamDir of getPlatform().paths.steamLibraries()) {
     const vdfPath = join(steamDir, 'steamapps', 'libraryfolders.vdf')
     try {
       const content = await readFile(vdfPath, 'utf-8')
@@ -107,7 +102,7 @@ async function getSteamLibraryPaths(): Promise<string[]> {
     }
   }
 
-  for (const dir of DEFAULT_STEAM_LIBRARIES) {
+  for (const dir of getPlatform().paths.steamLibraries()) {
     if (existsSync(join(dir, 'steamapps'))) {
       libraries.add(dir)
     }
@@ -219,7 +214,7 @@ async function scanSteamRedistributables(category: string): Promise<ScanResult[]
         const subcategory = `${game.name} — Redistributables`
 
         // Check top-level redist patterns
-        for (const pattern of STEAM_REDIST_PATTERNS) {
+        for (const pattern of getPlatform().paths.steamRedistPatterns()) {
           const redistPath = join(gameDir, pattern)
           if (!existsSync(redistPath)) continue
 
@@ -251,7 +246,7 @@ async function scanSteamRedistributables(category: string): Promise<ScanResult[]
           const subdirs = await readdir(gameDir, { withFileTypes: true })
           for (const sub of subdirs) {
             if (!sub.isDirectory()) continue
-            for (const pattern of STEAM_REDIST_PATTERNS) {
+            for (const pattern of getPlatform().paths.steamRedistPatterns()) {
               const redistPath = join(gameDir, sub.name, pattern)
               if (!existsSync(redistPath)) continue
               // Avoid duplicates

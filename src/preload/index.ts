@@ -43,6 +43,7 @@ import type {
   UpdateProgress,
   UpdateResult,
   FileTypeInfo,
+  CloudActionEntry,
 } from '../shared/types'
 
 const api = {
@@ -148,6 +149,10 @@ const api = {
   historyGet: (): Promise<ScanHistoryEntry[]> => ipcRenderer.invoke(IPC.HISTORY_GET),
   historyAdd: (entry: ScanHistoryEntry): Promise<void> => ipcRenderer.invoke(IPC.HISTORY_ADD, entry),
   historyClear: (): Promise<void> => ipcRenderer.invoke(IPC.HISTORY_CLEAR),
+
+  // Cloud action history
+  cloudHistoryGet: (): Promise<CloudActionEntry[]> => ipcRenderer.invoke(IPC.CLOUD_HISTORY_GET),
+  cloudHistoryClear: (): Promise<void> => ipcRenderer.invoke(IPC.CLOUD_HISTORY_CLEAR),
 
   // Privacy Shield
   privacyScan: (): Promise<PrivacyShieldState> => ipcRenderer.invoke(IPC.PRIVACY_SCAN),

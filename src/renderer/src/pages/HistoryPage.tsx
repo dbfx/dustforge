@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import {
   History, Sparkles, Database, PackageMinus, Trash2, ChevronDown,
   TrendingUp, Calendar, HardDrive, BarChart3, Clock, AlertCircle, Wifi, Cpu,
-  ShieldCheck, Bug, Zap, Settings2, RefreshCw
+  ShieldCheck, Bug, Zap, Settings2, RefreshCw, Cloud, CheckCircle2, XCircle
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -12,8 +12,9 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { useHistoryStore } from '@/stores/history-store'
+import { useCloudHistoryStore } from '@/stores/cloud-history-store'
 import { formatBytes } from '@/lib/utils'
-import type { ScanHistoryEntry, HistoryEntryType } from '@shared/types'
+import type { ScanHistoryEntry, HistoryEntryType, CloudActionEntry } from '@shared/types'
 
 const typeConfig: Record<HistoryEntryType, { label: string; icon: typeof Sparkles; color: string; bg: string }> = {
   cleaner: { label: 'System Clean', icon: Sparkles, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
@@ -30,16 +31,17 @@ const typeConfig: Record<HistoryEntryType, { label: string; icon: typeof Sparkle
 
 const PIE_COLORS = ['#f59e0b', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#14b8a6', '#ef4444', '#6366f1']
 
-type ViewMode = 'overview' | 'timeline'
+type ViewMode = 'overview' | 'timeline' | 'cloud'
 
 export function HistoryPage() {
   const { entries, loaded, load, clear } = useHistoryStore()
+  const { entries: cloudEntries, loaded: cloudLoaded, load: loadCloud, clear: clearCloud } = useCloudHistoryStore()
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [expandedEntry, setExpandedEntry] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('overview')
   const [typeFilter, setTypeFilter] = useState<'all' | ScanHistoryEntry['type']>('all')
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load(); loadCloud() }, [])
 
   const filtered = useMemo(() =>
     typeFilter === 'all' ? entries : entries.filter((e) => e.type === typeFilter),
@@ -160,6 +162,16 @@ export function HistoryPage() {
               >
                 Timeline
               </button>
+              <button
+                onClick={() => setViewMode('cloud')}
+                className="px-4 py-2 text-[12px] font-medium transition-colors"
+                style={{
+                  background: viewMode === 'cloud' ? 'rgba(59,130,246,0.1)' : 'rgba(255,255,255,0.03)',
+                  color: viewMode === 'cloud' ? '#3b82f6' : '#6e6e76'
+                }}
+              >
+                Cloud
+              </button>
             </div>
             <button
               onClick={() => setShowClearConfirm(true)}
@@ -182,7 +194,7 @@ export function HistoryPage() {
           weeklyData={weeklyData}
           entries={entries}
         />
-      ) : (
+      ) : viewMode === 'timeline' ? (
         <TimelineView
           entries={filtered}
           typeFilter={typeFilter}
@@ -190,14 +202,22 @@ export function HistoryPage() {
           expandedEntry={expandedEntry}
           setExpandedEntry={setExpandedEntry}
         />
+      ) : (
+        <CloudView entries={cloudEntries} loaded={cloudLoaded} />
       )}
 
       <ConfirmDialog
         open={showClearConfirm}
-        onConfirm={() => { clear(); setShowClearConfirm(false) }}
+        onConfirm={() => {
+          if (viewMode === 'cloud') { clearCloud() } else { clear() }
+          setShowClearConfirm(false)
+        }}
         onCancel={() => setShowClearConfirm(false)}
-        title="Clear Scan History"
-        description="This will permanently delete all scan history entries. This action cannot be undone."
+        title={viewMode === 'cloud' ? 'Clear Cloud History' : 'Clear Scan History'}
+        description={viewMode === 'cloud'
+          ? 'This will permanently delete all cloud action history entries. This action cannot be undone.'
+          : 'This will permanently delete all scan history entries. This action cannot be undone.'
+        }
         confirmLabel="Clear All"
         variant="danger"
       />
@@ -571,6 +591,165 @@ function TimelineView({
             No entries match this filter
           </div>
         )}
+      </div>
+    </>
+  )
+}
+
+// ============ Cloud View ============
+
+const cloudCommandLabels: Record<string, { label: string; color: string }> = {
+  'scan': { label: 'Scan', color: '#f59e0b' },
+  'clean': { label: 'Clean', color: '#22c55e' },
+  'software-update-check': { label: 'Update Check', color: '#06b6d4' },
+  'software-update-run': { label: 'Software Update', color: '#06b6d4' },
+  'get-status': { label: 'Status', color: '#6e6e76' },
+  'get-system-info': { label: 'System Info', color: '#6e6e76' },
+  'get-health-report': { label: 'Health Report', color: '#3b82f6' },
+  'ping': { label: 'Ping', color: '#6e6e76' },
+  'shutdown': { label: 'Shutdown', color: '#ef4444' },
+  'restart': { label: 'Restart', color: '#f97316' },
+  'windows-update-check': { label: 'Windows Update Check', color: '#06b6d4' },
+  'windows-update-install': { label: 'Windows Update', color: '#06b6d4' },
+  'run-sfc': { label: 'SFC Scan', color: '#8b5cf6' },
+  'run-dism': { label: 'DISM Repair', color: '#8b5cf6' },
+  'get-network-config': { label: 'Network Config', color: '#22c55e' },
+  'get-event-log': { label: 'Event Log', color: '#6366f1' },
+  'get-installed-apps': { label: 'App Inventory', color: '#a855f7' },
+  'driver-update-scan': { label: 'Driver Scan', color: '#8b5cf6' },
+  'driver-update-install': { label: 'Driver Install', color: '#8b5cf6' },
+  'driver-clean': { label: 'Driver Clean', color: '#8b5cf6' },
+  'startup-list': { label: 'Startup List', color: '#f97316' },
+  'startup-toggle': { label: 'Startup Toggle', color: '#f97316' },
+  'disk-health': { label: 'Disk Health', color: '#14b8a6' },
+  'privacy-scan': { label: 'Privacy Scan', color: '#14b8a6' },
+  'privacy-apply': { label: 'Privacy Apply', color: '#14b8a6' },
+  'debloater-scan': { label: 'Debloater Scan', color: '#a855f7' },
+  'debloater-remove': { label: 'Debloater Remove', color: '#a855f7' },
+  'service-scan': { label: 'Service Scan', color: '#6366f1' },
+  'service-apply': { label: 'Service Apply', color: '#6366f1' },
+  'malware-quarantine': { label: 'Quarantine', color: '#ef4444' },
+  'malware-delete': { label: 'Malware Delete', color: '#ef4444' },
+  'registry-scan': { label: 'Registry Scan', color: '#3b82f6' },
+  'registry-fix': { label: 'Registry Fix', color: '#3b82f6' },
+}
+
+function CloudView({ entries, loaded }: { entries: CloudActionEntry[]; loaded: boolean }) {
+  if (!loaded) return null
+
+  if (entries.length === 0) {
+    return (
+      <EmptyState
+        icon={Cloud}
+        title="No cloud actions yet"
+        description="When commands are received from the cloud dashboard, they will appear here."
+      />
+    )
+  }
+
+  const successCount = entries.filter((e) => e.success).length
+  const failCount = entries.filter((e) => !e.success).length
+  const avgDuration = entries.length > 0
+    ? entries.reduce((s, e) => s + e.duration, 0) / entries.length
+    : 0
+
+  // Group by command type for the summary
+  const byType: Record<string, number> = {}
+  for (const e of entries) {
+    byType[e.commandType] = (byType[e.commandType] || 0) + 1
+  }
+  const topCommands = Object.entries(byType)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 6)
+
+  return (
+    <>
+      {/* Stats row */}
+      <div className="mb-5 grid grid-cols-4 gap-3">
+        <MiniStat icon={Cloud} label="Total Commands" value={entries.length.toString()} color="#3b82f6" />
+        <MiniStat icon={CheckCircle2} label="Succeeded" value={successCount.toString()} color="#22c55e" />
+        <MiniStat icon={XCircle} label="Failed" value={failCount.toString()} color="#ef4444" />
+        <MiniStat icon={Clock} label="Avg Duration" value={formatDuration(avgDuration)} color="#a855f7" />
+      </div>
+
+      {/* Top commands summary */}
+      {topCommands.length > 0 && (
+        <div className="mb-5 rounded-2xl p-5" style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <h3 className="mb-3 text-[12px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>
+            Most Frequent Commands
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {topCommands.map(([type, count]) => {
+              const cfg = cloudCommandLabels[type] || { label: type, color: '#6e6e76' }
+              return (
+                <div
+                  key={type}
+                  className="flex items-center gap-2 rounded-xl px-3 py-2"
+                  style={{ background: `${cfg.color}10`, border: `1px solid ${cfg.color}20` }}
+                >
+                  <div className="h-2 w-2 rounded-full" style={{ background: cfg.color }} />
+                  <span className="text-[12px] font-medium" style={{ color: cfg.color }}>{cfg.label}</span>
+                  <span className="font-mono text-[11px]" style={{ color: '#6e6e76' }}>{count}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Action list */}
+      <div className="space-y-2">
+        {entries.map((entry) => {
+          const cfg = cloudCommandLabels[entry.commandType] || { label: entry.commandType, color: '#6e6e76' }
+          return (
+            <div
+              key={entry.id}
+              className="flex items-center gap-4 rounded-2xl px-5 py-4"
+              style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}
+            >
+              {/* Status indicator */}
+              <div
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                style={{ background: entry.success ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)' }}
+              >
+                {entry.success
+                  ? <CheckCircle2 className="h-5 w-5" style={{ color: '#22c55e' }} strokeWidth={1.8} />
+                  : <XCircle className="h-5 w-5" style={{ color: '#ef4444' }} strokeWidth={1.8} />
+                }
+              </div>
+
+              {/* Command info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-[13px] font-semibold text-zinc-200">{cfg.label}</span>
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                    style={{ background: `${cfg.color}15`, color: cfg.color }}
+                  >
+                    {entry.commandType}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[11px] truncate" style={{ color: '#5e5e66' }}>
+                  {entry.summary || (entry.error ? entry.error : 'Completed')}
+                </p>
+              </div>
+
+              {/* Timing */}
+              <div className="shrink-0 text-right">
+                <div className="flex items-center gap-1.5 text-[12px]" style={{ color: '#6e6e76' }}>
+                  <Calendar className="h-3.5 w-3.5" strokeWidth={1.6} />
+                  {new Date(entry.timestamp).toLocaleDateString('en-US', {
+                    month: 'short', day: 'numeric', year: 'numeric'
+                  })}
+                </div>
+                <div className="mt-1 flex items-center justify-end gap-1.5 text-[11px]" style={{ color: '#4e4e56' }}>
+                  <Clock className="h-3 w-3" strokeWidth={1.6} />
+                  {formatDuration(entry.duration)}
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </>
   )
