@@ -24,7 +24,7 @@
 
 ### Cleaning & Optimization
 - **System Cleaner** — Remove temp files, logs, caches, and other system junk
-- **Browser Cleaner** — Clear browser caches, cookies, and history across all major browsers
+- **Browser Cleaner** — Clear browser caches across all major browsers (never touches cookies, history, or sessions)
 - **App Cleaner** — Clean up leftover data from installed applications
 - **Gaming Cleaner** — Free space from game launchers and cached game data
 - **Recycle Bin** — Scan and empty the recycle bin

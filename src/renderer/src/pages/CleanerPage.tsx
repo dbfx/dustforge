@@ -36,7 +36,7 @@ interface CategoryDef {
 
 const categories: CategoryDef[] = [
   { type: CleanerType.System, label: 'System', icon: Monitor, description: 'Temp files, logs, caches, dumps, updates' },
-  { type: CleanerType.Browser, label: 'Browsers', icon: Globe, description: 'Cache, cookies, history' },
+  { type: CleanerType.Browser, label: 'Browsers', icon: Globe, description: 'Browser caches only' },
   { type: CleanerType.App, label: 'Applications', icon: AppWindow, description: 'App caches and dev tools' },
   { type: CleanerType.Gaming, label: 'Gaming', icon: Gamepad2, description: 'Launcher caches, redistributables' },
   { type: CleanerType.RecycleBin, label: 'Recycle Bin', icon: Trash2, description: 'Deleted files' }
