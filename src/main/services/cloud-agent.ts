@@ -84,6 +84,7 @@ class CloudAgentService {
   private linkedAt: string | null = null
   private error: string | null = null
   private commandRunning: boolean = false
+  private runningCommands: number = 0
   private healthReportRunning: boolean = false
   private lastCommandFinishedAt: number = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -801,30 +802,55 @@ class CloudAgentService {
 
   // ─── Command Execution ────────────────────────────────
 
+  /** Commands that only read data and can safely run in parallel */
+  private static readonly PARALLEL_SAFE: ReadonlySet<string> = new Set([
+    'scan', 'get-status', 'get-system-info', 'get-health-report',
+    'get-network-config', 'get-event-log', 'get-installed-apps',
+    'software-update-check', 'windows-update-check',
+    'driver-update-scan', 'startup-list', 'disk-health',
+    'privacy-scan', 'debloater-scan', 'service-scan', 'registry-scan',
+    'malware-quarantine', // quarantine is read-like (moves to vault)
+  ])
+
   private async executeCommand(cmd: CloudCommand): Promise<void> {
-    if (this.commandRunning) {
+    const isParallelSafe = CloudAgentService.PARALLEL_SAFE.has(cmd.type)
+
+    // Mutating commands need exclusive access
+    if (!isParallelSafe && this.commandRunning) {
       if ('requestId' in cmd) {
-        this.postCommandResult(cmd.requestId, false, undefined, 'Another command is already running').catch(() => {})
+        this.postCommandResult(cmd.requestId, false, undefined, 'A mutating command is already running').catch(() => {})
       }
       return
     }
 
-    // Rate limit: minimum 5 seconds between commands to prevent resource exhaustion
-    const elapsed = Date.now() - this.lastCommandFinishedAt
-    if (elapsed < 5_000) {
+    // Block mutating commands while any parallel commands are still running
+    if (!isParallelSafe && this.runningCommands > 0) {
       if ('requestId' in cmd) {
-        this.postCommandResult(cmd.requestId, false, undefined, 'Rate limited — try again shortly').catch(() => {})
+        this.postCommandResult(cmd.requestId, false, undefined, 'Commands are still running — try again shortly').catch(() => {})
       }
       return
     }
 
-    this.commandRunning = true
+    // Rate limit mutating commands: minimum 500ms to prevent accidental double-fires
+    if (!isParallelSafe) {
+      const elapsed = Date.now() - this.lastCommandFinishedAt
+      if (elapsed < 500) {
+        if ('requestId' in cmd) {
+          this.postCommandResult(cmd.requestId, false, undefined, 'Rate limited — try again shortly').catch(() => {})
+        }
+        return
+      }
+    }
+
+    if (!isParallelSafe) this.commandRunning = true
+    this.runningCommands++
     let timedOut = false
     const startedAt = Date.now()
 
     const timeout = setTimeout(() => {
       timedOut = true
-      this.commandRunning = false
+      if (!isParallelSafe) this.commandRunning = false
+      this.runningCommands = Math.max(0, this.runningCommands - 1)
       if ('requestId' in cmd) {
         this.postCommandResult(cmd.requestId, false, undefined, 'Command timed out').catch(() => {})
       }
@@ -962,7 +988,8 @@ class CloudAgentService {
     } finally {
       clearTimeout(timeout)
       if (!timedOut) {
-        this.commandRunning = false
+        if (!isParallelSafe) this.commandRunning = false
+        this.runningCommands = Math.max(0, this.runningCommands - 1)
         this.lastCommandFinishedAt = Date.now()
       }
     }
