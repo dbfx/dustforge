@@ -26,7 +26,10 @@
     "linux",
     "optimization"
   ],
-  "author": "",
+  "author": {
+    "name": "DustForge Contributors",
+    "email": "dustforge@users.noreply.github.com"
+  },
   "license": "MIT",
   "devDependencies": {
     "@commitlint/cli": "^20.4.3",

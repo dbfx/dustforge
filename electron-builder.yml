@@ -40,7 +40,7 @@ mac:
       arch:
         - x64
         - arm64
-  icon: resources/icon.icns
+  icon: resources/icon.png
   category: public.app-categories.utilities
   hardenedRuntime: true
   entitlements: resources/entitlements.mac.plist
