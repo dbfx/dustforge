@@ -1,3 +1,9 @@
+## [2.4.3](https://github.com/dbfx/dustforge/compare/v2.4.2...v2.4.3) (2026-03-13)
+
+
+### Bug Fixes
+
+* prevent cloud update timeouts with silent mode and concurrency ([34e55d1](https://github.com/dbfx/dustforge/commit/34e55d115f9fa2e7cdff4100e8499dc5defcb988))
 ## [2.4.2](https://github.com/dbfx/dustforge/compare/v2.4.1...v2.4.2) (2026-03-13)
 
 

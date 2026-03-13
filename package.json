@@ -1,6 +1,6 @@
 {
   "name": "dustforge",
-  "version": "2.4.2",
+  "version": "2.4.3",
   "description": "A modern, open-source system cleaner for Windows, macOS, and Linux",
   "main": "./out/main/index.js",
   "scripts": {
