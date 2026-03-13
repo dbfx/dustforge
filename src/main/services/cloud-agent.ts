@@ -98,6 +98,9 @@ class CloudAgentService {
   private lastErrorReason: string | null = null
   private lastTelemetrySuccessAt: number = 0
   private watchdogTimer: ReturnType<typeof setInterval> | null = null
+  // Cached slow si results — refreshed every 5th tick to keep most ticks fast
+  private cachedNetStats: Awaited<ReturnType<typeof si.networkStats>> | null = null
+  private cachedFsSize: Awaited<ReturnType<typeof si.fsSize>> | null = null
 
   // ─── Public API ─────────────────────────────────────────
 
@@ -652,22 +655,44 @@ class CloudAgentService {
   }
 
   private async collectAndSendTelemetry(): Promise<void> {
+    // Skip telemetry while health report is running — both compete for the
+    // shared persistent PowerShell process which deadlocks under contention
+    if (this.healthReportRunning) {
+      cloudLog('DEBUG', 'Skipping telemetry tick — health report in progress')
+      return
+    }
+
     try {
       const settings = getSettings()
       this.telemetryTick++
 
-      const [load, mem, diskIO, netStats, time, fsSize] = await withTimeout(
-        Promise.all([
-          si.currentLoad(),
-          si.mem(),
-          si.disksIO(),
-          si.networkStats(),
-          si.time(),
-          si.fsSize(),
-        ]),
-        20_000,
+      // Fast calls run every tick; slow calls (networkStats ~3-5s, fsSize ~0.5-1s)
+      // run every 5th tick and use cached values in between
+      const refreshSlow = this.telemetryTick % 5 === 1 || !this.cachedNetStats
+
+      const fastCalls = Promise.all([
+        si.currentLoad(),
+        si.mem(),
+        si.disksIO(),
+        si.time(),
+      ])
+      const slowCalls = refreshSlow
+        ? Promise.all([si.networkStats(), si.fsSize()])
+        : Promise.resolve(null)
+
+      const [fastResults, slowResults] = await withTimeout(
+        Promise.all([fastCalls, slowCalls]),
+        30_000,
         'Telemetry si gather',
       )
+
+      const [load, mem, diskIO, time] = fastResults
+      if (slowResults) {
+        this.cachedNetStats = slowResults[0]
+        this.cachedFsSize = slowResults[1]
+      }
+      const netStats = this.cachedNetStats!
+      const fsSize = this.cachedFsSize!
 
       const snapshot: TelemetrySnapshot = {
         cpu: load.currentLoad,

@@ -1,6 +1,5 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell, Tray } from 'electron'
 import { join } from 'path'
-import * as si from 'systeminformation'
 import { IPC } from '../shared/channels'
 import { registerCleanerIpc } from './ipc'
 import { getSettings } from './services/settings-store'
@@ -193,12 +192,6 @@ app.on('second-instance', () => {
 })
 
 app.whenReady().then(() => {
-  // Start a persistent PowerShell process so all systeminformation calls
-  // reuse it instead of spawning a new powershell.exe each time
-  if (process.platform === 'win32') {
-    si.powerShellStart()
-  }
-
   const settings = getSettings()
 
   // Apply auto-launch setting
@@ -269,9 +262,6 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   stopScheduler()
   cloudAgent.stop()
-  if (process.platform === 'win32') {
-    si.powerShellRelease()
-  }
 })
 
 } // end initGui
