@@ -61,6 +61,16 @@ function isAllowedMalwarePath(filePath: string): boolean {
   return getPlatform().malwarePaths.isAllowedMalwarePath(filePath)
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v) },
+      (e) => { clearTimeout(timer); reject(e) },
+    )
+  })
+}
+
 class CloudAgentService {
   private pusher: Pusher | null = null
   private channel: ReturnType<Pusher['subscribe']> | null = null
@@ -86,6 +96,8 @@ class CloudAgentService {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private reconnectAttempts: number = 0
   private lastErrorReason: string | null = null
+  private lastTelemetrySuccessAt: number = 0
+  private watchdogTimer: ReturnType<typeof setInterval> | null = null
 
   // ─── Public API ─────────────────────────────────────────
 
@@ -253,6 +265,7 @@ class CloudAgentService {
     }
 
     this.stopThreatMonitor()
+    this.stopWatchdog()
 
     if (this.channel) {
       this.channel.unbind_all()
@@ -289,6 +302,9 @@ class CloudAgentService {
         disableStats: true,
         enabledTransports: ['ws', 'wss'],
         cluster: '',
+        // Tighter heartbeat: detect dead sockets within ~50s instead of ~150s
+        activityTimeout: 30_000,
+        pongTimeout: 15_000,
         // Auth endpoint — Reverb validates API key + device ownership
         channelAuthorization: {
           endpoint: broadcasting,
@@ -415,6 +431,7 @@ class CloudAgentService {
       this.healthReportInitTimer = null
     }
     this.stopThreatMonitor()
+    this.stopWatchdog()
 
     cloudLog('INFO', 'Reverb disconnected')
 
@@ -437,9 +454,17 @@ class CloudAgentService {
   /** Discover server config from GET {serverUrl}/api/connect */
   private async discover(): Promise<void> {
     cloudLog('DEBUG', `Discovery: GET ${this.serverUrl}/api/connect`)
-    const res = await fetch(`${this.serverUrl}/api/connect`, {
-      headers: { Authorization: `Bearer ${this.apiKey}` },
-    })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15_000)
+    let res: Response
+    try {
+      res = await fetch(`${this.serverUrl}/api/connect`, {
+        headers: { Authorization: `Bearer ${this.apiKey}` },
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
     if (!res.ok) {
       cloudLog('ERROR', `Discovery failed: HTTP ${res.status}`)
       throw new Error(`Discovery returned HTTP ${res.status}`)
@@ -457,14 +482,22 @@ class CloudAgentService {
     if (!this.connectConfig) throw new Error('Not connected — no server config')
     const url = `${this.connectConfig.api}${path}`
     cloudLog('DEBUG', `POST ${url}`)
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify(body),
-    })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30_000)
+    let res: Response
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
 
     if (!res.ok) {
       const text = await res.text().catch(() => '')
@@ -569,12 +602,53 @@ class CloudAgentService {
     const settings = getSettings()
     const intervalMs = (settings.cloud.telemetryIntervalSec || 60) * 1000
 
+    this.lastTelemetrySuccessAt = Date.now()
+
     // Send first telemetry immediately
     this.collectAndSendTelemetry()
 
     this.telemetryTimer = setInterval(() => {
       this.collectAndSendTelemetry()
     }, intervalMs)
+
+    // Watchdog: if no successful telemetry for 5 minutes, force reconnect
+    this.startWatchdog()
+  }
+
+  private startWatchdog(): void {
+    if (this.watchdogTimer) return
+    const WATCHDOG_INTERVAL = 60_000
+    const WATCHDOG_STALE_MS = 5 * 60_000
+
+    this.watchdogTimer = setInterval(() => {
+      if (this.status !== 'connected') return
+      const elapsed = Date.now() - this.lastTelemetrySuccessAt
+      if (elapsed > WATCHDOG_STALE_MS) {
+        cloudLog('ERROR', `Watchdog: no successful telemetry for ${Math.round(elapsed / 1000)}s — forcing reconnect`)
+        this.forceReconnect()
+      }
+    }, WATCHDOG_INTERVAL)
+  }
+
+  private stopWatchdog(): void {
+    if (this.watchdogTimer) { clearInterval(this.watchdogTimer); this.watchdogTimer = null }
+  }
+
+  private forceReconnect(): void {
+    // Stop everything and reconnect from scratch
+    this.stopWatchdog()
+    if (this.telemetryTimer) { clearInterval(this.telemetryTimer); this.telemetryTimer = null }
+    if (this.healthReportTimer) { clearInterval(this.healthReportTimer); this.healthReportTimer = null }
+    if (this.healthReportInitTimer) { clearTimeout(this.healthReportInitTimer); this.healthReportInitTimer = null }
+    this.stopThreatMonitor()
+
+    if (this.channel) { this.channel.unbind_all(); this.channel = null }
+    if (this.pusher) { this.pusher.disconnect(); this.pusher = null }
+
+    this.status = 'disconnected'
+    this.error = 'Telemetry stalled — reconnecting'
+    this.reconnectAttempts = 0
+    this.scheduleReconnect()
   }
 
   private async collectAndSendTelemetry(): Promise<void> {
@@ -582,14 +656,18 @@ class CloudAgentService {
       const settings = getSettings()
       this.telemetryTick++
 
-      const [load, mem, diskIO, netStats, time, fsSize] = await Promise.all([
-        si.currentLoad(),
-        si.mem(),
-        si.disksIO(),
-        si.networkStats(),
-        si.time(),
-        si.fsSize(),
-      ])
+      const [load, mem, diskIO, netStats, time, fsSize] = await withTimeout(
+        Promise.all([
+          si.currentLoad(),
+          si.mem(),
+          si.disksIO(),
+          si.networkStats(),
+          si.time(),
+          si.fsSize(),
+        ]),
+        20_000,
+        'Telemetry si gather',
+      )
 
       const snapshot: TelemetrySnapshot = {
         cpu: load.currentLoad,
@@ -651,6 +729,7 @@ class CloudAgentService {
       await this.postTelemetry(snapshot)
       threatMonitor.clearAccumulated()
       this.lastTelemetryAt = new Date().toISOString()
+      this.lastTelemetrySuccessAt = Date.now()
       cloudLog('DEBUG', `Telemetry sent (tick ${this.telemetryTick}, cpu=${snapshot.cpu.toFixed(1)}%, mem=${snapshot.memoryPercent.toFixed(1)}%)`)
     } catch (err) {
       cloudLog('ERROR', `Telemetry failed: ${err}`)
@@ -710,23 +789,25 @@ class CloudAgentService {
       // all 7 at once causes large CPU spikes.
       const isWin = process.platform === 'win32'
 
+      const SCAN_TIMEOUT = 60_000 // 60s per batch
+
       // Batch 1: lightweight / fast scans
-      const [r0, r1, r2] = await Promise.allSettled([
+      const [r0, r1, r2] = await withTimeout(Promise.allSettled([
         this.collectServiceHealth(),
         this.collectPrivacyHealth(),
         this.collectSecurityPosture(),
-      ])
+      ]), SCAN_TIMEOUT, 'Health batch 1')
       if (r0.status === 'fulfilled') report.services = r0.value
       if (r1.status === 'fulfilled') report.privacy = r1.value
       if (r2.status === 'fulfilled') report.securityPosture = r2.value
 
       // Batch 2: heavier scans (registry, drivers, malware, software updates)
-      const [r3, r4, r5, r6] = await Promise.allSettled([
+      const [r3, r4, r5, r6] = await withTimeout(Promise.allSettled([
         isWin ? this.collectRegistryHealth() : Promise.resolve(report.registry),
         this.collectSoftwareUpdateHealth(),
         isWin ? this.collectDriverUpdateHealth() : Promise.resolve(report.driverUpdates),
         this.collectMalwareHealth(),
-      ])
+      ]), SCAN_TIMEOUT * 2, 'Health batch 2')
       if (r3.status === 'fulfilled') report.registry = r3.value
       if (r4.status === 'fulfilled') report.softwareUpdates = r4.value
       if (r5.status === 'fulfilled') report.driverUpdates = r5.value
