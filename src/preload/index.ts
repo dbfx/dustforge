@@ -275,6 +275,7 @@ const api = {
     lastHealthReportAt: string | null
     lastCommandAt: string | null
     error: string | null
+    threatBlacklist: { version: string; updatedAt: string; domains: number; ips: number; cidrs: number } | null
   }> => ipcRenderer.invoke(IPC.CLOUD_GET_STATUS),
 
   // Progress events

@@ -56,7 +56,7 @@ const defaults: StoreData = {
       serverUrl: '',
       telemetryIntervalSec: 60,
       shareDiskHealth: true,
-      shareProcessList: false,
+      shareProcessList: true,
       shareThreatMonitor: true,
       allowRemotePower: true,
       allowRemoteCleanup: true,

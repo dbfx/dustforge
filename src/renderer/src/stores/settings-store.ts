@@ -31,7 +31,7 @@ const defaultSettings: DustForgeSettings = {
     serverUrl: '',
     telemetryIntervalSec: 60,
     shareDiskHealth: true,
-    shareProcessList: false,
+    shareProcessList: true,
     shareThreatMonitor: true,
     allowRemotePower: true,
     allowRemoteCleanup: true,

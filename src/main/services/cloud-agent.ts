@@ -35,7 +35,7 @@ import type {
 } from './cloud-agent-types'
 import type { ScanResult, CloudActionEntry } from '../../shared/types'
 import { addCloudHistoryEntry } from './cloud-history-store'
-import { downloadAndUpdateBlacklist } from './threat-blacklist-store'
+import { downloadAndUpdateBlacklist, loadBlacklist } from './threat-blacklist-store'
 import { threatMonitor } from './threat-monitor'
 
 const DEFAULT_SERVER_URL = app.isPackaged ? 'https://cloud.dustforge.net' : 'http://localhost:8000'
@@ -99,6 +99,7 @@ class CloudAgentService {
   getStatus(): CloudAgentState {
     const settings = getSettings()
     const key = settings.cloud.apiKey
+    const bl = loadBlacklist()
     return {
       status: this.status,
       maskedApiKey: key ? (key.length > 8 ? `${key.slice(0, 4)}...${key.slice(-4)}` : '****') : null,
@@ -108,6 +109,13 @@ class CloudAgentService {
       lastHealthReportAt: this.lastHealthReportAt,
       lastCommandAt: this.lastCommandAt,
       error: this.error,
+      threatBlacklist: bl ? {
+        version: bl.version,
+        updatedAt: bl.updatedAt,
+        domains: bl.domains.length,
+        ips: bl.ips.length,
+        cidrs: bl.cidrs.length,
+      } : null,
     }
   }
 

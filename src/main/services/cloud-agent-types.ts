@@ -12,6 +12,13 @@ export interface CloudAgentState {
   lastHealthReportAt: string | null
   lastCommandAt: string | null
   error: string | null
+  threatBlacklist: {
+    version: string
+    updatedAt: string
+    domains: number
+    ips: number
+    cidrs: number
+  } | null
 }
 
 // ─── Commands (received via Reverb channel events) ──────────

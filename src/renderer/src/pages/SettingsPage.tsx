@@ -35,6 +35,7 @@ export function SettingsPage() {
   const [cloudStatus, setCloudStatus] = useState<{
     status: string; maskedApiKey: string | null; deviceId: string | null
     linkedAt: string | null; lastTelemetryAt: string | null; lastHealthReportAt: string | null; error: string | null
+    threatBlacklist: { version: string; updatedAt: string; domains: number; ips: number; cidrs: number } | null
   } | null>(null)
   const [cloudApiKey, setCloudApiKey] = useState('')
   const [cloudLinking, setCloudLinking] = useState(false)
@@ -390,12 +391,20 @@ export function SettingsPage() {
             <Row label="Share disk health" desc="Include disk SMART data in telemetry">
               <Toggle checked={settings.cloud.shareDiskHealth} onChange={(v) => save({ cloud: { ...settings.cloud, shareDiskHealth: v } })} />
             </Row>
-            <Row label="Share process list" desc="Include running processes (off by default)">
+            <Row label="Share process list" desc="Include running processes in telemetry">
               <Toggle checked={settings.cloud.shareProcessList} onChange={(v) => save({ cloud: { ...settings.cloud, shareProcessList: v } })} />
             </Row>
             <Row label="Threat monitor" desc="Scan connections against known-malicious IPs and domains">
               <Toggle checked={settings.cloud.shareThreatMonitor} onChange={(v) => save({ cloud: { ...settings.cloud, shareThreatMonitor: v } })} />
             </Row>
+            {cloudStatus?.threatBlacklist && (
+              <Row label="Threat list" desc={`v${cloudStatus.threatBlacklist.version} — updated ${new Date(cloudStatus.threatBlacklist.updatedAt).toLocaleDateString()}`}>
+                <span className="text-[11px] tabular-nums" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  {(cloudStatus.threatBlacklist.domains + cloudStatus.threatBlacklist.ips + cloudStatus.threatBlacklist.cidrs).toLocaleString()} rules
+                  <span style={{ color: 'rgba(255,255,255,0.3)' }}> ({cloudStatus.threatBlacklist.domains.toLocaleString()} domains, {cloudStatus.threatBlacklist.ips.toLocaleString()} IPs, {cloudStatus.threatBlacklist.cidrs.toLocaleString()} CIDRs)</span>
+                </span>
+              </Row>
+            )}
             <Row label="Remote power control" desc="Allow cloud to shutdown or restart this device">
               <Toggle checked={settings.cloud.allowRemotePower} onChange={(v) => save({ cloud: { ...settings.cloud, allowRemotePower: v } })} />
             </Row>
