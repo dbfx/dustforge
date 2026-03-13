@@ -1,3 +1,9 @@
+## [2.4.2](https://github.com/dbfx/dustforge/compare/v2.4.1...v2.4.2) (2026-03-13)
+
+
+### Features
+
+* table-based scan history views with auto-refresh ([18df5e9](https://github.com/dbfx/dustforge/commit/18df5e92d962ce044532b502cf2145a68ca43182))
 ## [2.4.1](https://github.com/dbfx/dustforge/compare/v2.4.0...v2.4.1) (2026-03-13)
 # [2.4.0](https://github.com/dbfx/dustforge/compare/v2.2.0...v2.4.0) (2026-03-13)
 
