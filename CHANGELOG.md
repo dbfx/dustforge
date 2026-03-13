@@ -1,3 +1,9 @@
+## [2.4.7](https://github.com/dbfx/dustforge/compare/v2.4.6...v2.4.7) (2026-03-13)
+
+
+### Features
+
+* add daemon mode, CLI config/service commands, and slim down health report ([b7b75f1](https://github.com/dbfx/dustforge/commit/b7b75f147df3525809da2fc12079d332915bd79c))
 ## [2.4.6](https://github.com/dbfx/dustforge/compare/v2.4.5...v2.4.6) (2026-03-13)
 
 
