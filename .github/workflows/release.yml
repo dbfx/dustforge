@@ -67,4 +67,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           npx conventional-changelog -p angular -r 1 -o _RELEASE_NOTES.md
-          gh release edit ${{ github.ref_name }} --notes-file _RELEASE_NOTES.md
+          for i in 1 2 3 4 5; do
+            gh release edit ${{ github.ref_name }} --notes-file _RELEASE_NOTES.md && break
+            echo "Attempt $i failed, retrying in 15s..."
+            sleep 15
+          done
