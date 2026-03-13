@@ -260,6 +260,7 @@ const WINGET_UPGRADE_ARGS = [
   '--accept-source-agreements',
   '--accept-package-agreements',
   '--disable-interactivity',
+  '--silent',
   '--include-unknown',
 ]
 
@@ -361,78 +362,100 @@ async function attemptElevatedUpgrade(appId: string): Promise<{ success: boolean
   }
 }
 
+/** Concurrency limit for parallel winget upgrades */
+const UPDATE_CONCURRENCY = 3
+
+/** Run a single app through the upgrade pipeline: normal → elevated → force */
+async function upgradeApp(
+  appId: string,
+  alreadyAdmin: boolean,
+): Promise<{ success: boolean; error?: string }> {
+  // First attempt: normal upgrade
+  let result = await attemptUpgrade(appId)
+
+  // If failed and not already admin, retry with elevation
+  if (!result.success && !alreadyAdmin) {
+    const lowerOutput = cleanOutput(result.output).toLowerCase()
+    const looksLikeElevationIssue =
+      ELEVATION_HINTS.some((h) => lowerOutput.includes(h)) ||
+      FAILURE_PATTERNS.some((p) => lowerOutput.includes(p))
+
+    if (looksLikeElevationIssue) {
+      result = await attemptElevatedUpgrade(appId)
+    }
+  }
+
+  // If still failed, retry once with --force (handles version mismatch issues)
+  if (!result.success) {
+    const retryResult = await attemptUpgrade(appId, ['--force'])
+    if (retryResult.success) result = retryResult
+  }
+
+  if (result.success) return { success: true }
+
+  const lastLine = cleanOutput(result.output).trim().split('\n').pop() || 'Upgrade failed'
+  return { success: false, error: lastLine.length > 200 ? lastLine.slice(0, 200) + '...' : lastLine }
+}
+
 export async function runUpdates(
   appIds: string[],
   onProgress: (progress: UpdateProgress) => void,
 ): Promise<UpdateResult> {
   let succeeded = 0
   let failed = 0
+  let completed = 0
   const errors: UpdateResult['errors'] = []
   const alreadyAdmin = isAdmin()
+  const total = appIds.length
 
-  for (let i = 0; i < appIds.length; i++) {
-    const appId = appIds[i]
-    onProgress({
-      phase: 'updating',
-      current: i + 1,
-      total: appIds.length,
-      currentApp: appId,
-      percent: Math.round((i / appIds.length) * 100),
-      status: 'in-progress',
-    })
+  // Process in concurrent batches
+  for (let batchStart = 0; batchStart < total; batchStart += UPDATE_CONCURRENCY) {
+    const batch = appIds.slice(batchStart, batchStart + UPDATE_CONCURRENCY)
 
-    try {
-      // First attempt: normal upgrade
-      let result = await attemptUpgrade(appId)
+    // Report all in-progress
+    for (const appId of batch) {
+      onProgress({
+        phase: 'updating',
+        current: completed + 1,
+        total,
+        currentApp: appId,
+        percent: Math.round((completed / total) * 100),
+        status: 'in-progress',
+      })
+    }
 
-      // If failed and not already admin, retry with elevation
-      if (!result.success && !alreadyAdmin) {
-        const lowerOutput = cleanOutput(result.output).toLowerCase()
-        const looksLikeElevationIssue =
-          ELEVATION_HINTS.some((h) => lowerOutput.includes(h)) ||
-          FAILURE_PATTERNS.some((p) => lowerOutput.includes(p))
+    const results = await Promise.allSettled(
+      batch.map((appId) => upgradeApp(appId, alreadyAdmin).then((r) => ({ appId, ...r }))),
+    )
 
-        if (looksLikeElevationIssue) {
-          result = await attemptElevatedUpgrade(appId)
-        }
-      }
-
-      // If still failed, retry once with --force (handles version mismatch issues)
-      if (!result.success) {
-        const retryResult = await attemptUpgrade(appId, ['--force'])
-        if (retryResult.success) result = retryResult
-      }
-
-      if (result.success) {
+    for (const settled of results) {
+      completed++
+      if (settled.status === 'fulfilled' && settled.value.success) {
         succeeded++
         onProgress({
           phase: 'updating',
-          current: i + 1,
-          total: appIds.length,
-          currentApp: appId,
-          percent: Math.round(((i + 1) / appIds.length) * 100),
+          current: completed,
+          total,
+          currentApp: settled.value.appId,
+          percent: Math.round((completed / total) * 100),
           status: 'done',
         })
       } else {
-        throw new Error(result.output.trim().split('\n').pop() || 'Upgrade failed')
+        failed++
+        const appId = settled.status === 'fulfilled' ? settled.value.appId : batch[results.indexOf(settled)]
+        const reason = settled.status === 'fulfilled'
+          ? (settled.value.error || 'Upgrade failed')
+          : (settled.reason?.message || 'Unknown error')
+        errors.push({ appId, name: appId, reason })
+        onProgress({
+          phase: 'updating',
+          current: completed,
+          total,
+          currentApp: appId,
+          percent: Math.round((completed / total) * 100),
+          status: 'failed',
+        })
       }
-    } catch (err) {
-      failed++
-      const rawMsg = err instanceof Error ? err.message : 'Unknown error'
-      const lastLine = cleanOutput(rawMsg).trim().split('\n').pop() || rawMsg
-      errors.push({
-        appId,
-        name: appId,
-        reason: lastLine.length > 200 ? lastLine.slice(0, 200) + '...' : lastLine,
-      })
-      onProgress({
-        phase: 'updating',
-        current: i + 1,
-        total: appIds.length,
-        currentApp: appId,
-        percent: Math.round(((i + 1) / appIds.length) * 100),
-        status: 'failed',
-      })
     }
   }
 

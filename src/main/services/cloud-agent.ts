@@ -38,6 +38,15 @@ import { threatMonitor } from './threat-monitor'
 const DEFAULT_SERVER_URL = app.isPackaged ? 'https://cloud.dustforge.net' : 'http://localhost:8000'
 
 const COMMAND_TIMEOUT_MS = 5 * 60 * 1000
+const LONG_COMMAND_TIMEOUT_MS = 30 * 60 * 1000 // for bulk update / install commands
+
+const LONG_RUNNING_COMMANDS = new Set([
+  'software-update-run',
+  'windows-update-install',
+  'driver-update-install',
+  'run-sfc',
+  'run-dism',
+])
 const HEALTH_REPORT_INTERVAL_MS = 30 * 60 * 1000 // 30 minutes
 
 /** Connection config returned by GET {serverUrl}/api/connect */
@@ -1044,7 +1053,7 @@ class CloudAgentService {
         this.postCommandResult(cmd.requestId, false, undefined, 'Command timed out').catch(() => {})
       }
       this.logCloudAction(cmd, startedAt, false, 'Command timed out')
-    }, COMMAND_TIMEOUT_MS)
+    }, LONG_RUNNING_COMMANDS.has(cmd.type) ? LONG_COMMAND_TIMEOUT_MS : COMMAND_TIMEOUT_MS)
 
     try {
       // Check user permission settings for restricted command categories
