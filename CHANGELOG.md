@@ -1,3 +1,10 @@
+## [2.4.6](https://github.com/dbfx/dustforge/compare/v2.4.5...v2.4.6) (2026-03-13)
+
+
+### Bug Fixes
+
+* handle PowerShell DateTime[] in hotfix InstalledOn field ([335b571](https://github.com/dbfx/dustforge/commit/335b57171a95631bbbc5dbdcbc20d6532684d6c0))
+* remove persistent PowerShell and optimize telemetry tick frequency ([d309c05](https://github.com/dbfx/dustforge/commit/d309c05b6164d516c4cfc49adb2fe0edff079ae3))
 ## [2.4.5](https://github.com/dbfx/dustforge/compare/v2.4.4...v2.4.5) (2026-03-13)
 
 
