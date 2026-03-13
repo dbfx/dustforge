@@ -9,6 +9,7 @@ import { createDarwinServices } from './services'
 import { createDarwinMalware } from './malware'
 import { createDarwinBrowser } from './browser'
 import { createDarwinMalwarePaths } from './malware-paths'
+import { createDarwinNetwork } from './network'
 
 export function createDarwinProvider(): PlatformProvider {
   return {
@@ -23,5 +24,6 @@ export function createDarwinProvider(): PlatformProvider {
     malware: createDarwinMalware(),
     browser: createDarwinBrowser(),
     malwarePaths: createDarwinMalwarePaths(),
+    network: createDarwinNetwork(),
   }
 }

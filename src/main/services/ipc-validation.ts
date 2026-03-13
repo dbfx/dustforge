@@ -69,7 +69,7 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
   if ('cloud' in obj && obj.cloud !== undefined) {
     const c = obj.cloud as Record<string, unknown>
     if (typeof c !== 'object' || c === null || Array.isArray(c)) return null
-    const allowedCloudKeys = new Set(['apiKey', 'serverUrl', 'telemetryIntervalSec', 'shareDiskHealth', 'shareProcessList'])
+    const allowedCloudKeys = new Set(['apiKey', 'serverUrl', 'telemetryIntervalSec', 'shareDiskHealth', 'shareProcessList', 'shareThreatMonitor', 'allowRemotePower', 'allowRemoteCleanup', 'allowRemoteInstalls', 'allowRemoteConfig'])
     for (const key of Object.keys(c)) {
       if (!allowedCloudKeys.has(key)) return null
     }
@@ -91,7 +91,8 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
           const bare = host.replace(/^\[|\]$/g, '')
           if (bare.startsWith('fc') || bare.startsWith('fd')) return null
           if (bare.startsWith('fe8') || bare.startsWith('fe9') || bare.startsWith('fea') || bare.startsWith('feb')) return null
-          if (bare.startsWith('::ffff:127.') || bare.startsWith('::ffff:10.') || bare.startsWith('::ffff:192.168.')) return null
+          if (bare.startsWith('::ffff:127.') || bare.startsWith('::ffff:10.') || bare.startsWith('::ffff:192.168.') || bare.startsWith('::ffff:169.254.')) return null
+          if (/^::ffff:172\.(1[6-9]|2\d|3[01])\./.test(bare)) return null
         }
       } catch {
         return null

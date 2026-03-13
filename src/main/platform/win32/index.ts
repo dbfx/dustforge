@@ -9,6 +9,7 @@ import { createWin32Services } from './services'
 import { createWin32Malware } from './malware'
 import { createWin32Browser } from './browser'
 import { createWin32MalwarePaths } from './malware-paths'
+import { createWin32Network } from './network'
 
 export function createWin32Provider(): PlatformProvider {
   return {
@@ -23,5 +24,6 @@ export function createWin32Provider(): PlatformProvider {
     malware: createWin32Malware(),
     browser: createWin32Browser(),
     malwarePaths: createWin32MalwarePaths(),
+    network: createWin32Network(),
   }
 }

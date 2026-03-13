@@ -393,6 +393,21 @@ export function SettingsPage() {
             <Row label="Share process list" desc="Include running processes (off by default)">
               <Toggle checked={settings.cloud.shareProcessList} onChange={(v) => save({ cloud: { ...settings.cloud, shareProcessList: v } })} />
             </Row>
+            <Row label="Threat monitor" desc="Scan connections against known-malicious IPs and domains">
+              <Toggle checked={settings.cloud.shareThreatMonitor} onChange={(v) => save({ cloud: { ...settings.cloud, shareThreatMonitor: v } })} />
+            </Row>
+            <Row label="Remote power control" desc="Allow cloud to shutdown or restart this device">
+              <Toggle checked={settings.cloud.allowRemotePower} onChange={(v) => save({ cloud: { ...settings.cloud, allowRemotePower: v } })} />
+            </Row>
+            <Row label="Remote cleanup" desc="Allow cloud to delete files, remove bloatware, and fix registry">
+              <Toggle checked={settings.cloud.allowRemoteCleanup} onChange={(v) => save({ cloud: { ...settings.cloud, allowRemoteCleanup: v } })} />
+            </Row>
+            <Row label="Remote installs" desc="Allow cloud to install software, driver, and Windows updates">
+              <Toggle checked={settings.cloud.allowRemoteInstalls} onChange={(v) => save({ cloud: { ...settings.cloud, allowRemoteInstalls: v } })} />
+            </Row>
+            <Row label="Remote config changes" desc="Allow cloud to toggle startup items, services, and privacy settings">
+              <Toggle checked={settings.cloud.allowRemoteConfig} onChange={(v) => save({ cloud: { ...settings.cloud, allowRemoteConfig: v } })} />
+            </Row>
             <Row label="Telemetry interval" desc="How often system stats are sent">
               <select
                 value={settings.cloud.telemetryIntervalSec}

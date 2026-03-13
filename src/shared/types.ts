@@ -487,6 +487,11 @@ export interface DustForgeSettings {
     telemetryIntervalSec: number
     shareDiskHealth: boolean
     shareProcessList: boolean
+    shareThreatMonitor: boolean
+    allowRemotePower: boolean
+    allowRemoteCleanup: boolean
+    allowRemoteInstalls: boolean
+    allowRemoteConfig: boolean
   }
 }
 

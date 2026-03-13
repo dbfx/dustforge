@@ -255,6 +255,26 @@ export interface PlatformMalwarePaths {
   isAllowedMalwarePath(filePath: string): boolean
 }
 
+// ─── Network Scanning ──────────────────────────────────────
+
+export interface ActiveConnection {
+  remoteAddress: string
+  remotePort: number
+  pid: number | null
+}
+
+export interface DnsCacheEntry {
+  domain: string
+  resolvedAddress: string | null
+}
+
+export interface PlatformNetwork {
+  /** Get established TCP connections with remote address, port, and PID */
+  getEstablishedConnections(): Promise<ActiveConnection[]>
+  /** Get DNS cache entries. Returns empty array if not supported on this platform. */
+  getDnsCacheEntries(): Promise<DnsCacheEntry[]>
+}
+
 // ─── Top-level Provider ─────────────────────────────────────
 
 export interface PlatformProvider {
@@ -269,4 +289,5 @@ export interface PlatformProvider {
   readonly malware: PlatformMalware
   readonly browser: PlatformBrowser
   readonly malwarePaths: PlatformMalwarePaths
+  readonly network: PlatformNetwork
 }

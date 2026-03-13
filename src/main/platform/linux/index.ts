@@ -9,6 +9,7 @@ import { createLinuxServices } from './services'
 import { createLinuxMalware } from './malware'
 import { createLinuxBrowser } from './browser'
 import { createLinuxMalwarePaths } from './malware-paths'
+import { createLinuxNetwork } from './network'
 
 export function createLinuxProvider(): PlatformProvider {
   return {
@@ -23,5 +24,6 @@ export function createLinuxProvider(): PlatformProvider {
     malware: createLinuxMalware(),
     browser: createLinuxBrowser(),
     malwarePaths: createLinuxMalwarePaths(),
+    network: createLinuxNetwork(),
   }
 }

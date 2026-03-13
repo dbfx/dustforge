@@ -69,6 +69,43 @@ export type CloudCommand =
   | { type: 'malware-delete'; requestId: string; paths: string[] }
   | { type: 'registry-scan'; requestId: string }
   | { type: 'registry-fix'; requestId: string; entryIds: string[] }
+  // Phase 4: Threat monitoring
+  | { type: 'update-threat-blacklist'; requestId: string; url: string }
+  | { type: 'get-threat-status'; requestId: string }
+
+// ─── Threat Monitor ─────────────────────────────────────────
+
+export interface ThreatBlacklist {
+  version: string
+  updatedAt: string
+  domains: string[]
+  ips: string[]
+  cidrs: string[]
+}
+
+export interface FlaggedConnection {
+  remoteAddress: string
+  remotePort: number
+  pid: number | null
+  matchedRule: string
+  matchType: 'ip' | 'cidr'
+  detectedAt: string
+}
+
+export interface FlaggedDnsEntry {
+  domain: string
+  resolvedAddress: string | null
+  matchedRule: string
+  detectedAt: string
+}
+
+export interface ThreatSnapshot {
+  flaggedConnections: FlaggedConnection[]
+  flaggedDns: FlaggedDnsEntry[]
+  blacklistVersion: string | null
+  lastConnectionScanAt: string | null
+  lastDnsScanAt: string | null
+}
 
 // ─── Telemetry (frequent, lightweight) ──────────────────────
 
@@ -99,6 +136,7 @@ export interface TelemetrySnapshot {
     cpuPercent: number
     memPercent: number
   }>
+  threatSnapshot?: ThreatSnapshot
 }
 
 // ─── Health Report (infrequent, comprehensive) ──────────────

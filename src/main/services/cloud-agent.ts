@@ -29,11 +29,14 @@ import type {
   CloudAgentState,
   CloudCommand,
   TelemetrySnapshot,
+  ThreatSnapshot,
   HealthReport,
   AllowedScanType,
 } from './cloud-agent-types'
 import type { ScanResult, CloudActionEntry } from '../../shared/types'
 import { addCloudHistoryEntry } from './cloud-history-store'
+import { downloadAndUpdateBlacklist } from './threat-blacklist-store'
+import { threatMonitor } from './threat-monitor'
 
 const DEFAULT_SERVER_URL = app.isPackaged ? 'https://cloud.dustforge.net' : 'http://localhost:8000'
 
@@ -166,6 +169,7 @@ class CloudAgentService {
     if (this.telemetryTimer) { clearInterval(this.telemetryTimer); this.telemetryTimer = null }
     if (this.healthReportTimer) { clearInterval(this.healthReportTimer); this.healthReportTimer = null }
     if (this.healthReportInitTimer) { clearTimeout(this.healthReportInitTimer); this.healthReportInitTimer = null }
+    this.stopThreatMonitor()
     await this.start()
   }
 
@@ -246,6 +250,8 @@ class CloudAgentService {
       clearTimeout(this.healthReportInitTimer)
       this.healthReportInitTimer = null
     }
+
+    this.stopThreatMonitor()
 
     if (this.channel) {
       this.channel.unbind_all()
@@ -333,6 +339,7 @@ class CloudAgentService {
       cloudLog('INFO', `Subscribed to private-device.${this.deviceId}, starting telemetry`)
       this.startTelemetry()
       this.startHealthReports()
+      this.startThreatMonitor()
     })
 
     this.channel.bind('pusher:subscription_error', (err: unknown) => {
@@ -396,6 +403,7 @@ class CloudAgentService {
       clearTimeout(this.healthReportInitTimer)
       this.healthReportInitTimer = null
     }
+    this.stopThreatMonitor()
 
     cloudLog('INFO', 'Reverb disconnected')
 
@@ -461,10 +469,25 @@ class CloudAgentService {
     return null
   }
 
+  private getDisabledCapabilities(): string[] {
+    const s = getSettings().cloud
+    const disabled: string[] = []
+    if (s.allowRemotePower === false) disabled.push('remote-power')
+    if (s.allowRemoteCleanup === false) disabled.push('remote-cleanup')
+    if (s.allowRemoteInstalls === false) disabled.push('remote-installs')
+    if (s.allowRemoteConfig === false) disabled.push('remote-config')
+    if (s.shareThreatMonitor === false) disabled.push('threat-monitor')
+    if (s.shareDiskHealth === false) disabled.push('disk-health')
+    if (s.shareProcessList === false) disabled.push('process-list')
+    return disabled
+  }
+
   private async postTelemetry(snapshot: TelemetrySnapshot): Promise<void> {
+    const disabled = this.getDisabledCapabilities()
     await this.postApi(`/devices/${this.deviceId}/telemetry`, {
       timestamp: Date.now(),
       snapshot,
+      ...(disabled.length > 0 ? { disabledCapabilities: disabled } : {}),
     })
   }
 
@@ -505,6 +528,8 @@ class CloudAgentService {
       'service-scan', 'service-apply',
       // Phase 3: Maintenance
       'malware-quarantine', 'malware-delete', 'registry-scan', 'registry-fix',
+      // Phase 4: Threat monitoring
+      'update-threat-blacklist', 'get-threat-status',
     ])
     if (!('type' in cmd) || !allowedTypes.has(cmd.type)) return
     if (!('requestId' in cmd) || typeof cmd.requestId !== 'string' || cmd.requestId.length > 200) return
@@ -594,7 +619,14 @@ class CloudAgentService {
         }
       }
 
+      // Include threat monitor data if any flagged connections/DNS entries exist
+      const threats = threatMonitor.getThreatSnapshot()
+      if (threats && (threats.flaggedConnections.length > 0 || threats.flaggedDns.length > 0)) {
+        snapshot.threatSnapshot = threats
+      }
+
       await this.postTelemetry(snapshot)
+      threatMonitor.clearAccumulated()
       this.lastTelemetryAt = new Date().toISOString()
       cloudLog('DEBUG', `Telemetry sent (tick ${this.telemetryTick}, cpu=${snapshot.cpu.toFixed(1)}%, mem=${snapshot.memoryPercent.toFixed(1)}%)`)
     } catch (err) {
@@ -800,7 +832,134 @@ class CloudAgentService {
   }
 
 
+  // ─── Threat Monitor ─────────────────────────────────
+
+  private static readonly THREAT_ALERT_COOLDOWN_MS = 60_000 // min 60s between alert POSTs
+  private static readonly THREAT_ALERT_MAX_PER_HOUR = 30    // hard cap per hour
+  private threatAlertLastSentAt = 0
+  private threatAlertPending: ThreatSnapshot | null = null
+  private threatAlertCooldownTimer: ReturnType<typeof setTimeout> | null = null
+  private threatAlertHourlyCount = 0
+  private threatAlertHourlyResetAt = 0
+
+  private startThreatMonitor(): void {
+    const settings = getSettings()
+    if (settings.cloud.shareThreatMonitor === false) return
+
+    // Wire up immediate alert callback — fires the moment new threats are detected
+    // The snapshot contains only NEWLY-detected items from this scan cycle
+    threatMonitor.setThreatCallback((snapshot) => {
+      if (this.status !== 'connected') return
+      this.queueThreatAlert(snapshot)
+    })
+
+    threatMonitor.start()
+  }
+
+  /** Queue a threat alert, rate-limited to avoid overwhelming the cloud */
+  private queueThreatAlert(snapshot: ThreatSnapshot): void {
+    // Merge new items into any pending batch
+    if (this.threatAlertPending) {
+      this.threatAlertPending.flaggedConnections.push(...snapshot.flaggedConnections)
+      this.threatAlertPending.flaggedDns.push(...snapshot.flaggedDns)
+      this.threatAlertPending.blacklistVersion = snapshot.blacklistVersion
+      this.threatAlertPending.lastConnectionScanAt = snapshot.lastConnectionScanAt
+      this.threatAlertPending.lastDnsScanAt = snapshot.lastDnsScanAt
+    } else {
+      this.threatAlertPending = {
+        ...snapshot,
+        flaggedConnections: [...snapshot.flaggedConnections],
+        flaggedDns: [...snapshot.flaggedDns],
+      }
+    }
+
+    const now = Date.now()
+    const elapsed = now - this.threatAlertLastSentAt
+
+    if (elapsed >= CloudAgentService.THREAT_ALERT_COOLDOWN_MS) {
+      this.flushThreatAlert()
+    } else if (!this.threatAlertCooldownTimer) {
+      // Schedule flush after cooldown expires
+      const delay = CloudAgentService.THREAT_ALERT_COOLDOWN_MS - elapsed
+      this.threatAlertCooldownTimer = setTimeout(() => {
+        this.threatAlertCooldownTimer = null
+        this.flushThreatAlert()
+      }, delay)
+    }
+    // If timer already running, new items are batched into pending — sent when timer fires
+  }
+
+  private flushThreatAlert(): void {
+    if (!this.threatAlertPending) return
+    const batch = this.threatAlertPending
+    this.threatAlertPending = null
+
+    // Hourly rate cap
+    const now = Date.now()
+    if (now >= this.threatAlertHourlyResetAt) {
+      this.threatAlertHourlyCount = 0
+      this.threatAlertHourlyResetAt = now + 3_600_000
+    }
+    if (this.threatAlertHourlyCount >= CloudAgentService.THREAT_ALERT_MAX_PER_HOUR) {
+      cloudLog('DEBUG', `Threat alert suppressed (hourly cap ${CloudAgentService.THREAT_ALERT_MAX_PER_HOUR} reached)`)
+      return
+    }
+
+    this.threatAlertLastSentAt = now
+    this.threatAlertHourlyCount++
+
+    this.postThreatAlert(batch).catch((err) => {
+      cloudLog('ERROR', `Threat alert POST failed: ${err}`)
+    })
+  }
+
+  private stopThreatMonitor(): void {
+    threatMonitor.setThreatCallback(null)
+    threatMonitor.stop()
+    if (this.threatAlertCooldownTimer) { clearTimeout(this.threatAlertCooldownTimer); this.threatAlertCooldownTimer = null }
+    this.threatAlertPending = null
+  }
+
+  private async postThreatAlert(snapshot: ThreatSnapshot): Promise<void> {
+    await this.postApi(`/devices/${this.deviceId}/threat-alert`, {
+      timestamp: Date.now(),
+      snapshot,
+    })
+    cloudLog('INFO', `Threat alert sent (${snapshot.flaggedConnections.length} connections, ${snapshot.flaggedDns.length} DNS)`)
+  }
+
   // ─── Command Execution ────────────────────────────────
+
+  /** Maps command types to user permission settings. Returns error message if blocked, null if allowed. */
+  private checkCommandPermission(type: string): string | null {
+    const s = getSettings().cloud
+    switch (type) {
+      case 'shutdown':
+      case 'restart':
+        if (s.allowRemotePower === false) return 'Disabled by user: remote power control is turned off'
+        break
+      case 'clean':
+      case 'malware-delete':
+      case 'driver-clean':
+      case 'debloater-remove':
+      case 'registry-fix':
+        if (s.allowRemoteCleanup === false) return 'Disabled by user: remote cleanup is turned off'
+        break
+      case 'software-update-run':
+      case 'windows-update-install':
+      case 'driver-update-install':
+      case 'run-sfc':
+      case 'run-dism':
+        if (s.allowRemoteInstalls === false) return 'Disabled by user: remote installs are turned off'
+        break
+      case 'startup-toggle':
+      case 'privacy-apply':
+      case 'service-apply':
+        if (s.allowRemoteConfig === false) return 'Disabled by user: remote config changes are turned off'
+        break
+    }
+    return null
+  }
 
   /** Commands that only read data and can safely run in parallel */
   private static readonly PARALLEL_SAFE: ReadonlySet<string> = new Set([
@@ -810,6 +969,7 @@ class CloudAgentService {
     'driver-update-scan', 'startup-list', 'disk-health',
     'privacy-scan', 'debloater-scan', 'service-scan', 'registry-scan',
     'malware-quarantine', // quarantine is read-like (moves to vault)
+    'get-threat-status',
   ])
 
   private async executeCommand(cmd: CloudCommand): Promise<void> {
@@ -858,6 +1018,15 @@ class CloudAgentService {
     }, COMMAND_TIMEOUT_MS)
 
     try {
+      // Check user permission settings for restricted command categories
+      const blocked = this.checkCommandPermission(cmd.type)
+      if (blocked) {
+        if ('requestId' in cmd) {
+          await this.postCommandResult(cmd.requestId, false, undefined, blocked)
+        }
+        return
+      }
+
       switch (cmd.type) {
         case 'scan':
           await this.handleScan(cmd.requestId, cmd.scanType)
@@ -972,6 +1141,13 @@ class CloudAgentService {
           if (cmd.type === 'registry-scan') await this.handleRegistryScan(cmd.requestId)
           else await this.handleRegistryFix(cmd.requestId, cmd.entryIds)
           break
+        // Phase 4: Threat monitoring
+        case 'update-threat-blacklist':
+          await this.handleUpdateThreatBlacklist(cmd.requestId, cmd.url)
+          break
+        case 'get-threat-status':
+          await this.handleGetThreatStatus(cmd.requestId)
+          break
       }
       if (!timedOut) {
         this.logCloudAction(cmd, startedAt, true)
@@ -1048,6 +1224,8 @@ class CloudAgentService {
       case 'malware-delete': return `Delete ${cmd.paths?.length ?? 0} threats`
       case 'registry-scan': return 'Registry scan'
       case 'registry-fix': return `Fix ${cmd.entryIds?.length ?? 0} registry entries`
+      case 'update-threat-blacklist': return 'Update threat blacklist'
+      case 'get-threat-status': return 'Get threat status'
       default: return (cmd as CloudCommand).type
     }
   }
@@ -1685,6 +1863,101 @@ class CloudAgentService {
       fixed: result.fixed,
       failed: result.failed,
       failures: result.failures.map((f) => ({ issue: f.issue.slice(0, 200), reason: f.reason.slice(0, 200) })),
+    })
+  }
+  // ─── Threat Blacklist ───────────────────────────────
+
+  private async handleUpdateThreatBlacklist(requestId: string, url: string): Promise<void> {
+    if (typeof url !== 'string' || url.length === 0 || url.length > 2000) {
+      await this.postCommandResult(requestId, false, undefined, 'Invalid URL')
+      return
+    }
+
+    // SSRF validation: only allow http(s), block private/loopback ranges
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        await this.postCommandResult(requestId, false, undefined, 'Only HTTP(S) URLs allowed')
+        return
+      }
+      if (app.isPackaged) {
+        const host = parsed.hostname.toLowerCase()
+        if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1') {
+          await this.postCommandResult(requestId, false, undefined, 'Private/loopback URLs not allowed')
+          return
+        }
+        if (host.startsWith('10.') || host.startsWith('192.168.') || host.startsWith('169.254.')) {
+          await this.postCommandResult(requestId, false, undefined, 'Private/loopback URLs not allowed')
+          return
+        }
+        if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) {
+          await this.postCommandResult(requestId, false, undefined, 'Private/loopback URLs not allowed')
+          return
+        }
+        if (host === '0.0.0.0') {
+          await this.postCommandResult(requestId, false, undefined, 'Private/loopback URLs not allowed')
+          return
+        }
+        const bare = host.replace(/^\[|\]$/g, '')
+        if (bare.startsWith('fc') || bare.startsWith('fd')) {
+          await this.postCommandResult(requestId, false, undefined, 'Private/loopback URLs not allowed')
+          return
+        }
+        if (bare.startsWith('fe8') || bare.startsWith('fe9') || bare.startsWith('fea') || bare.startsWith('feb')) {
+          await this.postCommandResult(requestId, false, undefined, 'Private/loopback URLs not allowed')
+          return
+        }
+        if (bare.startsWith('::ffff:127.') || bare.startsWith('::ffff:10.') || bare.startsWith('::ffff:192.168.') || bare.startsWith('::ffff:169.254.')) {
+          await this.postCommandResult(requestId, false, undefined, 'Private/loopback URLs not allowed')
+          return
+        }
+        if (/^::ffff:172\.(1[6-9]|2\d|3[01])\./.test(bare)) {
+          await this.postCommandResult(requestId, false, undefined, 'Private/loopback URLs not allowed')
+          return
+        }
+      }
+    } catch {
+      await this.postCommandResult(requestId, false, undefined, 'Invalid URL format')
+      return
+    }
+
+    cloudLog('INFO', `Updating threat blacklist from ${url}`)
+    const result = await downloadAndUpdateBlacklist(url)
+
+    if (result.success) {
+      threatMonitor.reloadBlacklist()
+      await this.postCommandResult(requestId, true, {
+        domains: result.stats!.domains,
+        ips: result.stats!.ips,
+        cidrs: result.stats!.cidrs,
+      })
+    } else {
+      await this.postCommandResult(requestId, false, undefined, result.error!.slice(0, 200))
+    }
+  }
+
+  private async handleGetThreatStatus(requestId: string): Promise<void> {
+    const snapshot = threatMonitor.getThreatSnapshot()
+    if (!snapshot) {
+      await this.postCommandResult(requestId, true, {
+        active: false,
+        reason: 'No blacklist loaded',
+        flaggedConnections: [],
+        flaggedDns: [],
+        blacklistVersion: null,
+        lastConnectionScanAt: null,
+        lastDnsScanAt: null,
+      })
+      return
+    }
+
+    await this.postCommandResult(requestId, true, {
+      active: true,
+      flaggedConnections: snapshot.flaggedConnections,
+      flaggedDns: snapshot.flaggedDns,
+      blacklistVersion: snapshot.blacklistVersion,
+      lastConnectionScanAt: snapshot.lastConnectionScanAt,
+      lastDnsScanAt: snapshot.lastDnsScanAt,
     })
   }
 }

@@ -39,6 +39,11 @@ function makeSettings(
       telemetryIntervalSec: 60,
       shareDiskHealth: true,
       shareProcessList: false,
+      shareThreatMonitor: true,
+      allowRemotePower: true,
+      allowRemoteCleanup: true,
+      allowRemoteInstalls: true,
+      allowRemoteConfig: true,
     },
   }
 }
