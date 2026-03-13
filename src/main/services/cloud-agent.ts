@@ -20,10 +20,7 @@ import { scanBloatware, removeBloatware } from '../ipc/debloater.ipc'
 import { applyServiceChanges } from '../ipc/service-manager.ipc'
 import { quarantineMalware, deleteMalware } from '../ipc/malware-scanner.ipc'
 import { PerfMonitorService } from './perf-monitor'
-import { logInfo, logError } from './logger'
-import { join } from 'path'
-import { appendFileSync, mkdirSync } from 'fs'
-import { tmpdir } from 'os'
+import { cloudLog } from './logger'
 import type {
   CloudAgentStatus,
   CloudAgentState,
@@ -40,20 +37,6 @@ import { threatMonitor } from './threat-monitor'
 
 const DEFAULT_SERVER_URL = app.isPackaged ? 'https://cloud.dustforge.net' : 'http://localhost:8000'
 
-// ─── Cloud Agent Debug Log ──────────────────────────────────
-const CLOUD_LOG_DIR = join(tmpdir(), 'dustforge-cloud')
-const CLOUD_LOG_FILE = join(CLOUD_LOG_DIR, 'cloud-agent.log')
-try { mkdirSync(CLOUD_LOG_DIR, { recursive: true }) } catch { /* ignore */ }
-
-function cloudLog(level: 'INFO' | 'ERROR' | 'DEBUG', msg: string, data?: unknown): void {
-  const ts = new Date().toISOString()
-  const extra = data !== undefined ? ` ${JSON.stringify(data)}` : ''
-  const line = `[${ts}] ${level}: ${msg}${extra}\n`
-  try { appendFileSync(CLOUD_LOG_FILE, line) } catch { /* ignore */ }
-  // Also write to main log for INFO/ERROR
-  if (level === 'ERROR') logError(msg)
-  else if (level === 'INFO') logInfo(msg)
-}
 const COMMAND_TIMEOUT_MS = 5 * 60 * 1000
 const HEALTH_REPORT_INTERVAL_MS = 30 * 60 * 1000 // 30 minutes
 
