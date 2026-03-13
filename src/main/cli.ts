@@ -825,7 +825,7 @@ async function handleConfig(args: string[], json: boolean): Promise<void> {
       return
     }
     // Support dotted paths like cloud.apiKey
-    const value = key.split('.').reduce((obj, k) => obj?.[k], settings)
+    const value = key.split('.').reduce((obj: any, k: string) => obj?.[k], settings as any) as unknown
     if (value === undefined) {
       log(`Unknown setting: ${key}`)
       app.exit(1)

@@ -29,33 +29,39 @@ export function createLinuxSecurity(): PlatformSecurity {
     },
 
     async collectFirewallStatus(): Promise<HealthReport['securityPosture']['firewall']> {
-      // Try ufw first, then iptables
+      const noProfiles = { domain: false, private: false, public: false }
+
+      // UFW (Ubuntu/Debian front-end)
       try {
         const { stdout } = await execFileAsync('/usr/sbin/ufw', ['status'], { timeout: 10_000 })
         const enabled = stdout.includes('Status: active')
-        return {
-          enabled,
-          products: [{ name: 'UFW', enabled }],
-          windowsProfiles: { domain: false, private: false, public: false },
-        }
-      } catch { /* try iptables */ }
+        return { enabled, products: [{ name: 'UFW', enabled }], windowsProfiles: noProfiles }
+      } catch { /* not available */ }
 
+      // firewalld (Fedora/RHEL/CentOS)
+      try {
+        const { stdout } = await execFileAsync('/usr/bin/firewall-cmd', ['--state'], { timeout: 10_000 })
+        const enabled = stdout.trim() === 'running'
+        return { enabled, products: [{ name: 'firewalld', enabled }], windowsProfiles: noProfiles }
+      } catch { /* not available */ }
+
+      // nftables (modern default on Debian 11+, Ubuntu 22.04+, Fedora, RHEL 9+)
+      try {
+        const { stdout } = await execFileAsync('/usr/sbin/nft', ['list', 'ruleset'], { timeout: 10_000 })
+        // If there are any tables defined, nftables is active
+        const enabled = stdout.includes('table ')
+        return { enabled, products: [{ name: 'nftables', enabled }], windowsProfiles: noProfiles }
+      } catch { /* not available */ }
+
+      // iptables (legacy fallback)
       try {
         const { stdout } = await execFileAsync('/usr/sbin/iptables', ['-L', '-n'], { timeout: 10_000 })
         // If there are rules beyond default ACCEPT policies, consider it enabled
         const lines = stdout.split('\n').filter(l => l.trim() && !l.startsWith('Chain') && !l.startsWith('target'))
         const enabled = lines.length > 0
-        return {
-          enabled,
-          products: [{ name: 'iptables', enabled }],
-          windowsProfiles: { domain: false, private: false, public: false },
-        }
+        return { enabled, products: [{ name: 'iptables', enabled }], windowsProfiles: noProfiles }
       } catch {
-        return {
-          enabled: false,
-          products: [],
-          windowsProfiles: { domain: false, private: false, public: false },
-        }
+        return { enabled: false, products: [], windowsProfiles: noProfiles }
       }
     },
 

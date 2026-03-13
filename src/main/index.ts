@@ -9,6 +9,15 @@ import { cloudAgent } from './services/cloud-agent'
 import { runCli } from './cli'
 import { runDaemon } from './daemon'
 
+// ─── Headless mode flags ─────────────────────────────────────
+// When running without a GUI (daemon or CLI), disable GPU and sandbox
+// so Electron works on headless Linux servers without X11/Wayland.
+if (process.argv.includes('--daemon') || process.argv.includes('--cli')) {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('no-sandbox')
+  app.commandLine.appendSwitch('ozone-platform', 'headless')
+}
+
 // ─── CLI / Daemon mode ───────────────────────────────────────
 // If --cli is passed, run headless and exit — no GUI, no tray.
 // If --daemon is passed, run headless cloud agent and stay alive.

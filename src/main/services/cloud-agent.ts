@@ -14,7 +14,7 @@ import { scanPrivacy } from '../ipc/privacy-shield.ipc'
 import { scanServices } from '../ipc/service-manager.ipc'
 import { scanDriverUpdates, installDriverUpdates, scanDrivers, cleanDrivers } from '../ipc/driver-manager.ipc'
 import { scanNetwork } from '../ipc/network-cleanup.ipc'
-import { listStartupItems, toggleStartupItem } from '../ipc/startup-manager.ipc'
+import { listStartupItems as listStartupItemsWin32, toggleStartupItem as toggleStartupItemWin32 } from '../ipc/startup-manager.ipc'
 import { applyPrivacySettings } from '../ipc/privacy-shield.ipc'
 import { scanBloatware, removeBloatware } from '../ipc/debloater.ipc'
 import { applyServiceChanges } from '../ipc/service-manager.ipc'
@@ -206,6 +206,14 @@ class CloudAgentService {
       this.status = 'connecting'
       this.error = null
       await this.discover()
+      // Register/update device info (hostname, version) on every connect so the
+      // server always has the current hostname — especially important for daemon
+      // mode where link() is never called.
+      await this.postApi(`/devices/${this.deviceId}/register`, {
+        machineId: getMachineId(),
+        appVersion: app.getVersion(),
+        hostname: hostname(),
+      })
       this.connect()
       this.reconnectAttempts = 0
     } catch (err) {
@@ -1148,7 +1156,7 @@ class CloudAgentService {
         case 'restart':
           await this.handleRestart(cmd.requestId, cmd.delaySec)
           break
-        // Windows maintenance
+        // OS maintenance (uses platform abstraction — returns "not supported" if unavailable)
         case 'windows-update-check':
           await this.handleWindowsUpdateCheck(cmd.requestId)
           break
@@ -1156,10 +1164,13 @@ class CloudAgentService {
           await this.handleWindowsUpdateInstall(cmd.requestId)
           break
         case 'run-sfc':
-          await this.handleRunSfc(cmd.requestId)
-          break
         case 'run-dism':
-          await this.handleRunDism(cmd.requestId)
+          if (process.platform !== 'win32') {
+            await this.postCommandResult(cmd.requestId, false, undefined, 'Not supported on this platform')
+            break
+          }
+          if (cmd.type === 'run-sfc') await this.handleRunSfc(cmd.requestId)
+          else await this.handleRunDism(cmd.requestId)
           break
         // Network
         case 'get-network-config':
@@ -1194,12 +1205,15 @@ class CloudAgentService {
         case 'disk-health':
           await this.handleDiskHealth(cmd.requestId)
           break
-        // Phase 2: Compliance & security
+        // Phase 2: Compliance & security (Windows-only)
         case 'privacy-scan':
-          await this.handlePrivacyScan(cmd.requestId)
-          break
         case 'privacy-apply':
-          await this.handlePrivacyApply(cmd.requestId, cmd.settingIds)
+          if (process.platform !== 'win32') {
+            await this.postCommandResult(cmd.requestId, false, undefined, 'Not supported on this platform')
+            break
+          }
+          if (cmd.type === 'privacy-scan') await this.handlePrivacyScan(cmd.requestId)
+          else await this.handlePrivacyApply(cmd.requestId, cmd.settingIds)
           break
         case 'debloater-scan':
         case 'debloater-remove':
@@ -1211,10 +1225,13 @@ class CloudAgentService {
           else await this.handleDebloaterRemove(cmd.requestId, cmd.packageNames)
           break
         case 'service-scan':
-          await this.handleServiceScan(cmd.requestId)
-          break
         case 'service-apply':
-          await this.handleServiceApply(cmd.requestId, cmd.changes)
+          if (process.platform !== 'win32') {
+            await this.postCommandResult(cmd.requestId, false, undefined, 'Not supported on this platform')
+            break
+          }
+          if (cmd.type === 'service-scan') await this.handleServiceScan(cmd.requestId)
+          else await this.handleServiceApply(cmd.requestId, cmd.changes)
           break
         // Phase 3: Maintenance
         case 'malware-quarantine':
@@ -1360,6 +1377,10 @@ class CloudAgentService {
       }
 
       case 'registry': {
+        if (process.platform !== 'win32') {
+          await this.postCommandResult(requestId, false, undefined, 'Not supported on this platform')
+          return
+        }
         const entries = await scanRegistry()
         // Strip registry key paths and issue text (contains local file paths)
         await this.postCommandResult(requestId, true, {
@@ -1389,6 +1410,10 @@ class CloudAgentService {
       }
 
       case 'network': {
+        if (process.platform !== 'win32') {
+          await this.postCommandResult(requestId, false, undefined, 'Not supported on this platform')
+          return
+        }
         const items = await scanNetwork()
         // Only send IDs and types — labels may contain wifi network names or other sensitive info
         await this.postCommandResult(requestId, true, {
@@ -1686,7 +1711,11 @@ class CloudAgentService {
   }
 
   private async handleStartupList(requestId: string): Promise<void> {
-    const items = await listStartupItems()
+    // Windows uses the rich startup-manager.ipc (registry, Task Scheduler, etc.)
+    // Other platforms use the platform abstraction (XDG autostart, systemd, launchd, etc.)
+    const items = process.platform === 'win32'
+      ? await listStartupItemsWin32()
+      : await getPlatform().startup.listItems()
     await this.postCommandResult(requestId, true, {
       items: items.map((i) => ({
         id: i.id,
@@ -1725,7 +1754,9 @@ class CloudAgentService {
       return
     }
     cloudLog('INFO', `Startup toggle: ${name} → ${enabled ? 'enabled' : 'disabled'}`)
-    const success = await toggleStartupItem(name, location, command, source as any, enabled)
+    const success = process.platform === 'win32'
+      ? await toggleStartupItemWin32(name, location, command, source as any, enabled)
+      : await getPlatform().startup.toggleItem(name, location, command, source as any, enabled)
     await this.postCommandResult(requestId, success, { name, enabled }, success ? undefined : 'Failed to toggle startup item')
   }
 
