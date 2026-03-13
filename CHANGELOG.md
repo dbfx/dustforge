@@ -1,3 +1,9 @@
+## [2.4.5](https://github.com/dbfx/dustforge/compare/v2.4.4...v2.4.5) (2026-03-13)
+
+
+### Bug Fixes
+
+* prevent cloud agent silent hangs with timeouts and watchdog ([9b6dcba](https://github.com/dbfx/dustforge/commit/9b6dcba776701d25899e5b497005e2a100747bb7))
 ## [2.4.4](https://github.com/dbfx/dustforge/compare/v2.4.3...v2.4.4) (2026-03-13)
 
 
