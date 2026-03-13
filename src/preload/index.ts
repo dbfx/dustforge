@@ -154,6 +154,18 @@ const api = {
   cloudHistoryGet: (): Promise<CloudActionEntry[]> => ipcRenderer.invoke(IPC.CLOUD_HISTORY_GET),
   cloudHistoryClear: (): Promise<void> => ipcRenderer.invoke(IPC.CLOUD_HISTORY_CLEAR),
 
+  // History push events
+  onHistoryChanged: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on(IPC.HISTORY_CHANGED, handler)
+    return () => { ipcRenderer.removeListener(IPC.HISTORY_CHANGED, handler) }
+  },
+  onCloudHistoryChanged: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on(IPC.CLOUD_HISTORY_CHANGED, handler)
+    return () => { ipcRenderer.removeListener(IPC.CLOUD_HISTORY_CHANGED, handler) }
+  },
+
   // Privacy Shield
   privacyScan: (): Promise<PrivacyShieldState> => ipcRenderer.invoke(IPC.PRIVACY_SCAN),
   privacyApply: (ids: string[]): Promise<PrivacyApplyResult> =>

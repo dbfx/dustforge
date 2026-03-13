@@ -671,10 +671,12 @@ class CloudAgentService {
       }
 
       // Run all scans concurrently — each one is independent and safe to fail
+      // Registry and driver scans are Windows-only (use reg.exe / PowerShell)
+      const isWin = process.platform === 'win32'
       const results = await Promise.allSettled([
-        this.collectRegistryHealth(),
+        isWin ? this.collectRegistryHealth() : Promise.resolve(report.registry),
         this.collectSoftwareUpdateHealth(),
-        this.collectDriverUpdateHealth(),
+        isWin ? this.collectDriverUpdateHealth() : Promise.resolve(report.driverUpdates),
         this.collectServiceHealth(),
         this.collectPrivacyHealth(),
         this.collectMalwareHealth(),

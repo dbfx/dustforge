@@ -139,6 +139,10 @@ export const IPC = {
   CLOUD_HISTORY_GET: 'cloud:history:get',
   CLOUD_HISTORY_CLEAR: 'cloud:history:clear',
 
+  // History push events (main -> renderer)
+  HISTORY_CHANGED: 'history:changed',
+  CLOUD_HISTORY_CHANGED: 'cloud:history:changed',
+
   // Window controls
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_MAXIMIZE: 'window:maximize',

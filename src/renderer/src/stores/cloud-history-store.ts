@@ -30,3 +30,8 @@ export const useCloudHistoryStore = create<CloudHistoryState>((set) => ({
     }
   }
 }))
+
+// Auto-refresh when main process signals a new cloud action was logged
+window.dustforge.onCloudHistoryChanged(() => {
+  useCloudHistoryStore.getState().load()
+})

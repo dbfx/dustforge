@@ -40,3 +40,8 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     }
   }
 }))
+
+// Auto-refresh when main process signals a new entry was added
+window.dustforge.onHistoryChanged(() => {
+  useHistoryStore.getState().load()
+})

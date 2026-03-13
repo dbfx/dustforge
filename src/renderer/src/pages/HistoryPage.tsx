@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import {
-  History, Sparkles, Database, PackageMinus, Trash2, ChevronDown,
-  TrendingUp, Calendar, HardDrive, BarChart3, Clock, AlertCircle, Wifi, Cpu,
+  History, Sparkles, Database, PackageMinus, Trash2, Info,
+  TrendingUp, HardDrive, BarChart3, Clock, AlertCircle, Wifi, Cpu,
   ShieldCheck, Bug, Zap, Settings2, RefreshCw, Cloud, CheckCircle2, XCircle
 } from 'lucide-react'
 import {
@@ -37,7 +37,7 @@ export function HistoryPage() {
   const { entries, loaded, load, clear } = useHistoryStore()
   const { entries: cloudEntries, loaded: cloudLoaded, load: loadCloud, clear: clearCloud } = useCloudHistoryStore()
   const [showClearConfirm, setShowClearConfirm] = useState(false)
-  const [expandedEntry, setExpandedEntry] = useState<string | null>(null)
+  const [selectedEntry, setSelectedEntry] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('overview')
   const [typeFilter, setTypeFilter] = useState<'all' | ScanHistoryEntry['type']>('all')
 
@@ -199,8 +199,8 @@ export function HistoryPage() {
           entries={filtered}
           typeFilter={typeFilter}
           setTypeFilter={setTypeFilter}
-          expandedEntry={expandedEntry}
-          setExpandedEntry={setExpandedEntry}
+          selectedEntry={selectedEntry}
+          setSelectedEntry={setSelectedEntry}
         />
       ) : (
         <CloudView entries={cloudEntries} loaded={cloudLoaded} />
@@ -416,14 +416,14 @@ function TimelineView({
   entries,
   typeFilter,
   setTypeFilter,
-  expandedEntry,
-  setExpandedEntry
+  selectedEntry,
+  setSelectedEntry
 }: {
   entries: ScanHistoryEntry[]
   typeFilter: 'all' | ScanHistoryEntry['type']
   setTypeFilter: (f: 'all' | ScanHistoryEntry['type']) => void
-  expandedEntry: string | null
-  setExpandedEntry: (id: string | null) => void
+  selectedEntry: string | null
+  setSelectedEntry: (id: string | null) => void
 }) {
   const filters: { label: string; value: 'all' | ScanHistoryEntry['type'] }[] = [
     { label: 'All', value: 'all' },
@@ -439,10 +439,12 @@ function TimelineView({
     { label: 'Updates', value: 'software-update' }
   ]
 
+  const detail = entries.find((e) => e.id === selectedEntry) || null
+
   return (
     <>
       {/* Filter pills */}
-      <div className="mb-5 flex items-center gap-2">
+      <div className="mb-4 flex items-center gap-2">
         {filters.map((f) => (
           <button
             key={f.value}
@@ -461,130 +463,79 @@ function TimelineView({
         </span>
       </div>
 
-      {/* Entries */}
-      <div className="space-y-2.5">
-        {entries.map((entry) => {
-          const config = typeConfig[entry.type]
-          const Icon = config.icon
-          const isExpanded = expandedEntry === entry.id
-
-          return (
-            <div
-              key={entry.id}
-              className="overflow-hidden rounded-2xl transition-all"
-              style={{ background: '#16161a', border: `1px solid ${isExpanded ? config.color + '30' : 'rgba(255,255,255,0.05)'}` }}
-            >
-              {/* Entry header */}
-              <div
-                className="flex items-center gap-4 px-5 py-4 cursor-pointer transition-colors"
-                style={{ background: isExpanded ? config.bg.replace('0.1', '0.03') : 'transparent' }}
-                onClick={() => setExpandedEntry(isExpanded ? null : entry.id)}
-              >
-                <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                  style={{ background: config.bg }}
+      {/* Table */}
+      <div className="overflow-hidden rounded-2xl" style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <table className="w-full">
+          <thead>
+            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>Type</th>
+              <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>Date</th>
+              <th className="px-4 py-3 text-right text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>Items</th>
+              <th className="px-4 py-3 text-right text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>Space</th>
+              <th className="px-4 py-3 text-right text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>Duration</th>
+              <th className="px-4 py-3 text-center text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>Status</th>
+              <th className="w-10 px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((entry) => {
+              const config = typeConfig[entry.type]
+              const Icon = config.icon
+              return (
+                <tr
+                  key={entry.id}
+                  className="cursor-pointer transition-colors"
+                  style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
+                  onClick={() => setSelectedEntry(entry.id)}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                 >
-                  <Icon className="h-5 w-5" style={{ color: config.color }} strokeWidth={1.8} />
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-[13px] font-semibold text-zinc-200">{config.label}</span>
-                    {entry.scheduled && (
-                      <span className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                        style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>
-                        Scheduled
-                      </span>
-                    )}
-                    {entry.errorCount > 0 && (
-                      <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
-                        style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
-                        <AlertCircle className="h-3 w-3" strokeWidth={2} />
-                        {entry.errorCount} error{entry.errorCount !== 1 ? 's' : ''}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 text-[11px]" style={{ color: '#5e5e66' }}>
-                    {entry.totalItemsCleaned.toLocaleString()} items processed
-                    {entry.totalSpaceSaved > 0 && ` · ${formatBytes(entry.totalSpaceSaved)} recovered`}
-                  </p>
-                </div>
-
-                <div className="shrink-0 text-right">
-                  <div className="flex items-center gap-1.5 text-[12px]" style={{ color: '#6e6e76' }}>
-                    <Calendar className="h-3.5 w-3.5" strokeWidth={1.6} />
-                    {new Date(entry.timestamp).toLocaleDateString('en-US', {
-                      month: 'short', day: 'numeric', year: 'numeric'
-                    })}
-                  </div>
-                  <div className="mt-1 flex items-center gap-1.5 text-[11px]" style={{ color: '#4e4e56' }}>
-                    <Clock className="h-3 w-3" strokeWidth={1.6} />
-                    {formatDuration(entry.duration)}
-                  </div>
-                </div>
-
-                <ChevronDown
-                  className="h-4 w-4 shrink-0 transition-transform"
-                  style={{ color: '#4e4e56', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
-                  strokeWidth={2}
-                />
-              </div>
-
-              {/* Expanded detail */}
-              {isExpanded && (
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                  {/* Summary stats row */}
-                  <div className="grid grid-cols-4 gap-3 p-5">
-                    <DetailStat label="Found" value={entry.totalItemsFound.toLocaleString()} />
-                    <DetailStat label="Processed" value={entry.totalItemsCleaned.toLocaleString()} />
-                    <DetailStat label="Skipped" value={entry.totalItemsSkipped.toLocaleString()} />
-                    <DetailStat label="Space Saved" value={entry.totalSpaceSaved > 0 ? formatBytes(entry.totalSpaceSaved) : '—'} />
-                  </div>
-
-                  {/* Category breakdown bar chart */}
-                  {entry.categories.length > 0 && (
-                    <div className="px-5 pb-5">
-                      <h4 className="mb-3 text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>
-                        Category Breakdown
-                      </h4>
-                      <div className="space-y-2">
-                        {entry.categories.map((cat, i) => {
-                          const maxItems = Math.max(...entry.categories.map((c) => c.itemsCleaned), 1)
-                          const percent = (cat.itemsCleaned / maxItems) * 100
-                          return (
-                            <div key={cat.name} className="flex items-center gap-3">
-                              <span className="w-24 shrink-0 truncate text-[12px] capitalize text-zinc-400">
-                                {cat.name}
-                              </span>
-                              <div className="flex-1 h-[6px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                                <div
-                                  className="h-full rounded-full transition-all duration-500"
-                                  style={{
-                                    width: `${percent}%`,
-                                    background: PIE_COLORS[i % PIE_COLORS.length],
-                                    opacity: 0.8
-                                  }}
-                                />
-                              </div>
-                              <span className="w-16 shrink-0 text-right font-mono text-[11px]" style={{ color: '#6e6e76' }}>
-                                {cat.itemsCleaned}
-                              </span>
-                              {cat.spaceSaved > 0 && (
-                                <span className="w-20 shrink-0 text-right font-mono text-[11px]" style={{ color: '#4e4e56' }}>
-                                  {formatBytes(cat.spaceSaved)}
-                                </span>
-                              )}
-                            </div>
-                          )
-                        })}
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ background: config.bg }}>
+                        <Icon className="h-3.5 w-3.5" style={{ color: config.color }} strokeWidth={1.8} />
                       </div>
+                      <span className="text-[12.5px] font-medium text-zinc-200">{config.label}</span>
+                      {entry.scheduled && (
+                        <span className="rounded-full px-1.5 py-0.5 text-[9px] font-medium" style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>
+                          Sched
+                        </span>
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
+                  </td>
+                  <td className="px-4 py-3 text-[12px]" style={{ color: '#8e8e96' }}>
+                    {new Date(entry.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    <span className="ml-1.5" style={{ color: '#4e4e56' }}>
+                      {new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-[12px] text-zinc-300">
+                    {entry.totalItemsCleaned.toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-[12px]" style={{ color: entry.totalSpaceSaved > 0 ? '#22c55e' : '#4e4e56' }}>
+                    {entry.totalSpaceSaved > 0 ? formatBytes(entry.totalSpaceSaved) : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-[12px]" style={{ color: '#6e6e76' }}>
+                    {formatDuration(entry.duration)}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {entry.errorCount > 0 ? (
+                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+                        <AlertCircle className="h-3 w-3" strokeWidth={2} />
+                        {entry.errorCount}
+                      </span>
+                    ) : (
+                      <CheckCircle2 className="inline h-4 w-4" style={{ color: '#22c55e' }} strokeWidth={1.8} />
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <Info className="inline h-3.5 w-3.5" style={{ color: '#4e4e56' }} strokeWidth={1.8} />
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
 
         {entries.length === 0 && (
           <div className="py-12 text-center text-[13px]" style={{ color: '#4e4e56' }}>
@@ -592,7 +543,97 @@ function TimelineView({
           </div>
         )}
       </div>
+
+      {/* Detail popup */}
+      {detail && <ScanDetailPopup entry={detail} onClose={() => setSelectedEntry(null)} />}
     </>
+  )
+}
+
+// ============ Scan Detail Popup ============
+
+function ScanDetailPopup({ entry, onClose }: { entry: ScanHistoryEntry; onClose: () => void }) {
+  const config = typeConfig[entry.type]
+  const Icon = config.icon
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }} onClick={onClose} />
+      <div
+        className="relative w-full max-w-lg animate-scale-in rounded-2xl p-6"
+        style={{ background: '#18181c', border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }}
+      >
+        {/* Header */}
+        <div className="mb-5 flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: config.bg }}>
+            <Icon className="h-5 w-5" style={{ color: config.color }} strokeWidth={1.8} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-[15px] font-semibold text-white">{config.label}</h3>
+            <p className="text-[12px]" style={{ color: '#6e6e76' }}>
+              {new Date(entry.timestamp).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+              {' at '}
+              {new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+              {entry.scheduled && <span className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>Scheduled</span>}
+            </p>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors" style={{ color: '#6e6e76' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+            <XCircle className="h-4 w-4" strokeWidth={1.8} />
+          </button>
+        </div>
+
+        {/* Stats grid */}
+        <div className="mb-5 grid grid-cols-4 gap-2.5">
+          <DetailStat label="Found" value={entry.totalItemsFound.toLocaleString()} />
+          <DetailStat label="Processed" value={entry.totalItemsCleaned.toLocaleString()} />
+          <DetailStat label="Skipped" value={entry.totalItemsSkipped.toLocaleString()} />
+          <DetailStat label="Space Saved" value={entry.totalSpaceSaved > 0 ? formatBytes(entry.totalSpaceSaved) : '—'} />
+        </div>
+
+        {/* Duration & errors */}
+        <div className="mb-5 flex items-center gap-4">
+          <div className="flex items-center gap-1.5 text-[12px]" style={{ color: '#6e6e76' }}>
+            <Clock className="h-3.5 w-3.5" strokeWidth={1.6} />
+            {formatDuration(entry.duration)}
+          </div>
+          {entry.errorCount > 0 && (
+            <div className="flex items-center gap-1.5 text-[12px]" style={{ color: '#ef4444' }}>
+              <AlertCircle className="h-3.5 w-3.5" strokeWidth={1.8} />
+              {entry.errorCount} error{entry.errorCount !== 1 ? 's' : ''}
+            </div>
+          )}
+        </div>
+
+        {/* Category breakdown */}
+        {entry.categories.length > 0 && (
+          <div>
+            <h4 className="mb-3 text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>
+              Categories
+            </h4>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
+              {entry.categories.map((cat, i) => {
+                const maxItems = Math.max(...entry.categories.map((c) => c.itemsCleaned), 1)
+                const percent = (cat.itemsCleaned / maxItems) * 100
+                return (
+                  <div key={cat.name} className="flex items-center gap-3">
+                    <span className="w-24 shrink-0 truncate text-[12px] capitalize text-zinc-400">{cat.name}</span>
+                    <div className="flex-1 h-[6px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                      <div className="h-full rounded-full" style={{ width: `${percent}%`, background: PIE_COLORS[i % PIE_COLORS.length], opacity: 0.8 }} />
+                    </div>
+                    <span className="w-14 shrink-0 text-right font-mono text-[11px]" style={{ color: '#6e6e76' }}>{cat.itemsCleaned}</span>
+                    {cat.spaceSaved > 0 && (
+                      <span className="w-18 shrink-0 text-right font-mono text-[11px]" style={{ color: '#4e4e56' }}>{formatBytes(cat.spaceSaved)}</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -635,6 +676,8 @@ const cloudCommandLabels: Record<string, { label: string; color: string }> = {
 }
 
 function CloudView({ entries, loaded }: { entries: CloudActionEntry[]; loaded: boolean }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
   if (!loaded) return null
 
   if (entries.length === 0) {
@@ -653,14 +696,7 @@ function CloudView({ entries, loaded }: { entries: CloudActionEntry[]; loaded: b
     ? entries.reduce((s, e) => s + e.duration, 0) / entries.length
     : 0
 
-  // Group by command type for the summary
-  const byType: Record<string, number> = {}
-  for (const e of entries) {
-    byType[e.commandType] = (byType[e.commandType] || 0) + 1
-  }
-  const topCommands = Object.entries(byType)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 6)
+  const detail = entries.find((e) => e.id === selectedId) || null
 
   return (
     <>
@@ -672,86 +708,133 @@ function CloudView({ entries, loaded }: { entries: CloudActionEntry[]; loaded: b
         <MiniStat icon={Clock} label="Avg Duration" value={formatDuration(avgDuration)} color="#a855f7" />
       </div>
 
-      {/* Top commands summary */}
-      {topCommands.length > 0 && (
-        <div className="mb-5 rounded-2xl p-5" style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}>
-          <h3 className="mb-3 text-[12px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>
-            Most Frequent Commands
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {topCommands.map(([type, count]) => {
-              const cfg = cloudCommandLabels[type] || { label: type, color: '#6e6e76' }
+      {/* Table */}
+      <div className="overflow-hidden rounded-2xl" style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <table className="w-full">
+          <thead>
+            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <th className="w-10 px-4 py-3 text-center text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>Status</th>
+              <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>Command</th>
+              <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>Summary</th>
+              <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>Date</th>
+              <th className="px-4 py-3 text-right text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>Duration</th>
+              <th className="w-10 px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((entry) => {
+              const cfg = cloudCommandLabels[entry.commandType] || { label: entry.commandType, color: '#6e6e76' }
               return (
-                <div
-                  key={type}
-                  className="flex items-center gap-2 rounded-xl px-3 py-2"
-                  style={{ background: `${cfg.color}10`, border: `1px solid ${cfg.color}20` }}
+                <tr
+                  key={entry.id}
+                  className="cursor-pointer transition-colors"
+                  style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
+                  onClick={() => setSelectedId(entry.id)}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                 >
-                  <div className="h-2 w-2 rounded-full" style={{ background: cfg.color }} />
-                  <span className="text-[12px] font-medium" style={{ color: cfg.color }}>{cfg.label}</span>
-                  <span className="font-mono text-[11px]" style={{ color: '#6e6e76' }}>{count}</span>
-                </div>
+                  <td className="px-4 py-3 text-center">
+                    {entry.success
+                      ? <CheckCircle2 className="inline h-4 w-4" style={{ color: '#22c55e' }} strokeWidth={1.8} />
+                      : <XCircle className="inline h-4 w-4" style={{ color: '#ef4444' }} strokeWidth={1.8} />
+                    }
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12.5px] font-medium text-zinc-200">{cfg.label}</span>
+                      <span className="rounded-full px-2 py-0.5 text-[9px] font-medium" style={{ background: `${cfg.color}15`, color: cfg.color }}>
+                        {entry.commandType}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 max-w-[240px]">
+                    <span className="block truncate text-[12px]" style={{ color: entry.error ? '#ef4444' : '#6e6e76' }}>
+                      {entry.summary || entry.error || 'Completed'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-[12px]" style={{ color: '#8e8e96' }}>
+                    {new Date(entry.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    <span className="ml-1.5" style={{ color: '#4e4e56' }}>
+                      {new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-[12px]" style={{ color: '#6e6e76' }}>
+                    {formatDuration(entry.duration)}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <Info className="inline h-3.5 w-3.5" style={{ color: '#4e4e56' }} strokeWidth={1.8} />
+                  </td>
+                </tr>
               )
             })}
-          </div>
-        </div>
-      )}
-
-      {/* Action list */}
-      <div className="space-y-2">
-        {entries.map((entry) => {
-          const cfg = cloudCommandLabels[entry.commandType] || { label: entry.commandType, color: '#6e6e76' }
-          return (
-            <div
-              key={entry.id}
-              className="flex items-center gap-4 rounded-2xl px-5 py-4"
-              style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}
-            >
-              {/* Status indicator */}
-              <div
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                style={{ background: entry.success ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)' }}
-              >
-                {entry.success
-                  ? <CheckCircle2 className="h-5 w-5" style={{ color: '#22c55e' }} strokeWidth={1.8} />
-                  : <XCircle className="h-5 w-5" style={{ color: '#ef4444' }} strokeWidth={1.8} />
-                }
-              </div>
-
-              {/* Command info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-[13px] font-semibold text-zinc-200">{cfg.label}</span>
-                  <span
-                    className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                    style={{ background: `${cfg.color}15`, color: cfg.color }}
-                  >
-                    {entry.commandType}
-                  </span>
-                </div>
-                <p className="mt-0.5 text-[11px] truncate" style={{ color: '#5e5e66' }}>
-                  {entry.summary || (entry.error ? entry.error : 'Completed')}
-                </p>
-              </div>
-
-              {/* Timing */}
-              <div className="shrink-0 text-right">
-                <div className="flex items-center gap-1.5 text-[12px]" style={{ color: '#6e6e76' }}>
-                  <Calendar className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  {new Date(entry.timestamp).toLocaleDateString('en-US', {
-                    month: 'short', day: 'numeric', year: 'numeric'
-                  })}
-                </div>
-                <div className="mt-1 flex items-center justify-end gap-1.5 text-[11px]" style={{ color: '#4e4e56' }}>
-                  <Clock className="h-3 w-3" strokeWidth={1.6} />
-                  {formatDuration(entry.duration)}
-                </div>
-              </div>
-            </div>
-          )
-        })}
+          </tbody>
+        </table>
       </div>
+
+      {/* Detail popup */}
+      {detail && <CloudDetailPopup entry={detail} onClose={() => setSelectedId(null)} />}
     </>
+  )
+}
+
+// ============ Cloud Detail Popup ============
+
+function CloudDetailPopup({ entry, onClose }: { entry: CloudActionEntry; onClose: () => void }) {
+  const cfg = cloudCommandLabels[entry.commandType] || { label: entry.commandType, color: '#6e6e76' }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }} onClick={onClose} />
+      <div
+        className="relative w-full max-w-md animate-scale-in rounded-2xl p-6"
+        style={{ background: '#18181c', border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }}
+      >
+        {/* Header */}
+        <div className="mb-5 flex items-center gap-3">
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+            style={{ background: entry.success ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)' }}
+          >
+            {entry.success
+              ? <CheckCircle2 className="h-5 w-5" style={{ color: '#22c55e' }} strokeWidth={1.8} />
+              : <XCircle className="h-5 w-5" style={{ color: '#ef4444' }} strokeWidth={1.8} />
+            }
+          </div>
+          <div className="flex-1">
+            <h3 className="text-[15px] font-semibold text-white">{cfg.label}</h3>
+            <p className="text-[12px]" style={{ color: '#6e6e76' }}>
+              {new Date(entry.timestamp).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+              {' at '}
+              {new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </p>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors" style={{ color: '#6e6e76' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+            <XCircle className="h-4 w-4" strokeWidth={1.8} />
+          </button>
+        </div>
+
+        {/* Detail rows */}
+        <div className="space-y-3 rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
+          <DetailRow label="Command" value={entry.commandType} color={cfg.color} />
+          <DetailRow label="Status" value={entry.success ? 'Success' : 'Failed'} color={entry.success ? '#22c55e' : '#ef4444'} />
+          <DetailRow label="Duration" value={formatDuration(entry.duration)} />
+          <DetailRow label="Request ID" value={entry.requestId} mono />
+          {entry.summary && <DetailRow label="Summary" value={entry.summary} />}
+          {entry.error && <DetailRow label="Error" value={entry.error} color="#ef4444" />}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DetailRow({ label, value, color, mono }: { label: string; value: string; color?: string; mono?: boolean }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <span className="shrink-0 text-[11px] font-medium uppercase tracking-wider" style={{ color: '#52525e' }}>{label}</span>
+      <span className={`text-right text-[12px] break-all ${mono ? 'font-mono' : ''}`} style={{ color: color || '#a1a1aa' }}>{value}</span>
+    </div>
   )
 }
 

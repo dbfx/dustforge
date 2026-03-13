@@ -1,8 +1,8 @@
 import { join } from 'path'
 import { appendFileSync, mkdirSync, statSync, renameSync, unlinkSync } from 'fs'
-import { homedir } from 'os'
+import { app } from 'electron'
 
-const LOG_DIR = join(homedir(), 'AppData', 'Local', 'DustForge', 'logs')
+const LOG_DIR = join(app.getPath('userData'), 'logs')
 const LOG_FILE = join(LOG_DIR, 'dustforge.log')
 const LOG_FILE_OLD = join(LOG_DIR, 'dustforge.old.log')
 const CLOUD_LOG_FILE = join(LOG_DIR, 'cloud-agent.log')

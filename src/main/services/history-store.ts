@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join } from 'path'
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
+import { IPC } from '../../shared/channels'
 import type { ScanHistoryEntry } from '../../shared/types'
 
 const MAX_HISTORY = 100
@@ -50,6 +51,8 @@ export function addHistoryEntry(entry: ScanHistoryEntry): void {
   history.unshift(entry)
   if (history.length > MAX_HISTORY) history.length = MAX_HISTORY
   writeFileSync(getHistoryPath(), JSON.stringify(history, null, 2), 'utf-8')
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win && !win.isDestroyed()) win.webContents.send(IPC.HISTORY_CHANGED)
 }
 
 export function clearHistory(): void {

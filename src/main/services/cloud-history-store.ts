@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join } from 'path'
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
+import { IPC } from '../../shared/channels'
 import type { CloudActionEntry } from '../../shared/types'
 
 const MAX_ENTRIES = 200
@@ -50,6 +51,8 @@ export function addCloudHistoryEntry(entry: CloudActionEntry): void {
   history.unshift(entry)
   if (history.length > MAX_ENTRIES) history.length = MAX_ENTRIES
   writeFileSync(getFilePath(), JSON.stringify(history, null, 2), 'utf-8')
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win && !win.isDestroyed()) win.webContents.send(IPC.CLOUD_HISTORY_CHANGED)
 }
 
 export function clearCloudHistory(): void {
