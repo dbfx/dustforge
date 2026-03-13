@@ -123,10 +123,13 @@ export function createWin32Security(): PlatformSecurity {
       const recentPatches = patches
         .filter((p) => p.HotFixID && p.InstalledOn)
         .map((p) => {
-          const date = new Date(p.InstalledOn)
+          // PowerShell can serialize InstalledOn as a DateTime[] (array) for
+          // hotfixes that were applied multiple times. Normalize to first element.
+          const installedRaw = Array.isArray(p.InstalledOn) ? p.InstalledOn[0] : p.InstalledOn
+          const date = new Date(installedRaw)
           return {
             id: p.HotFixID,
-            installedOn: isNaN(date.getTime()) ? p.InstalledOn : date.toISOString().split('T')[0],
+            installedOn: isNaN(date.getTime()) ? String(installedRaw ?? '') : date.toISOString().split('T')[0],
             description: (p.Description || '').slice(0, 100),
           }
         })
