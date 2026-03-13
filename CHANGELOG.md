@@ -1,3 +1,9 @@
+# [2.5.0](https://github.com/dbfx/dustforge/compare/v2.4.7...v2.5.0) (2026-03-13)
+
+
+### Features
+
+* improve Linux/macOS daemon support and cross-platform guards ([2034288](https://github.com/dbfx/dustforge/commit/2034288ea71df9a4601ec8ab6ed99fd7fda03641))
 ## [2.4.7](https://github.com/dbfx/dustforge/compare/v2.4.6...v2.4.7) (2026-03-13)
 
 
