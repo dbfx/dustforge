@@ -71,8 +71,8 @@ export class PerfMonitorService {
     // Collect immediately
     this.collectSnapshot()
 
-    // Slow interval: process list every 3s
-    this.slowTimer = setInterval(() => this.collectProcesses(), 3000)
+    // Slow interval: process list every 5s
+    this.slowTimer = setInterval(() => this.collectProcesses(), 5000)
     this.collectProcesses()
   }
 

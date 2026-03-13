@@ -82,6 +82,7 @@ class CloudAgentService {
   private runningCommands: number = 0
   private healthReportRunning: boolean = false
   private lastCommandFinishedAt: number = 0
+  private processedRequestIds = new Set<string>()
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private reconnectAttempts: number = 0
   private lastErrorReason: string | null = null
@@ -329,6 +330,16 @@ class CloudAgentService {
     if (!this.pusher) return
 
     const channelName = `private-device.${this.deviceId}`
+
+    // Clean up any existing channel to prevent duplicate event handlers
+    // (Pusher's internal reconnect can fire 'connected' multiple times
+    //  without a 'disconnected' in between)
+    if (this.channel) {
+      this.channel.unbind_all()
+      this.pusher.unsubscribe(channelName)
+      this.channel = null
+    }
+
     this.channel = this.pusher.subscribe(channelName)
 
     this.channel.bind('pusher:subscription_succeeded', () => {
@@ -534,6 +545,18 @@ class CloudAgentService {
     if (!('type' in cmd) || !allowedTypes.has(cmd.type)) return
     if (!('requestId' in cmd) || typeof cmd.requestId !== 'string' || cmd.requestId.length > 200) return
 
+    // Deduplicate — Pusher reconnects can re-deliver the same event
+    if (this.processedRequestIds.has(cmd.requestId)) {
+      cloudLog('DEBUG', `Ignoring duplicate command requestId=${cmd.requestId}`)
+      return
+    }
+    this.processedRequestIds.add(cmd.requestId)
+    // Prevent unbounded growth
+    if (this.processedRequestIds.size > 500) {
+      const keep = [...this.processedRequestIds].slice(-250)
+      this.processedRequestIds = new Set(keep)
+    }
+
     this.lastCommandAt = new Date().toISOString()
     this.executeCommand(cmd)
   }
@@ -587,8 +610,8 @@ class CloudAgentService {
         })),
       }
 
-      // Include disk health every 10th tick (~10 minutes at default interval)
-      if (settings.cloud.shareDiskHealth && this.telemetryTick % 10 === 0) {
+      // Include disk health every 30th tick (~30 minutes at default interval)
+      if (settings.cloud.shareDiskHealth && this.telemetryTick % 30 === 0) {
         try {
           const disks = await si.diskLayout()
           snapshot.diskHealth = disks.map((d) => ({
@@ -601,8 +624,8 @@ class CloudAgentService {
         }
       }
 
-      // Include top processes every 5th tick (~5 minutes at default interval)
-      if (settings.cloud.shareProcessList && this.telemetryTick % 5 === 0) {
+      // Include top processes every 10th tick (~10 minutes at default interval)
+      if (settings.cloud.shareProcessList && this.telemetryTick % 10 === 0) {
         try {
           const data = await si.processes()
           // Sort by CPU + memory, take top 20 — only send name and resource usage, no PIDs/users/paths
@@ -638,6 +661,9 @@ class CloudAgentService {
 
   private startHealthReports(): void {
     if (this.healthReportTimer) return
+
+    // Clear any stale init timer from a previous connection cycle
+    if (this.healthReportInitTimer) { clearTimeout(this.healthReportInitTimer); this.healthReportInitTimer = null }
 
     // First health report after 2 minutes (let app settle)
     this.healthReportInitTimer = setTimeout(() => {
@@ -679,26 +705,32 @@ class CloudAgentService {
         },
       }
 
-      // Run all scans concurrently — each one is independent and safe to fail
-      // Registry and driver scans are Windows-only (use reg.exe / PowerShell)
+      // Run scans in two batches to limit concurrent CPU/process load.
+      // Each scan spawns child processes (PowerShell, reg.exe, etc.) so running
+      // all 7 at once causes large CPU spikes.
       const isWin = process.platform === 'win32'
-      const results = await Promise.allSettled([
+
+      // Batch 1: lightweight / fast scans
+      const [r0, r1, r2] = await Promise.allSettled([
+        this.collectServiceHealth(),
+        this.collectPrivacyHealth(),
+        this.collectSecurityPosture(),
+      ])
+      if (r0.status === 'fulfilled') report.services = r0.value
+      if (r1.status === 'fulfilled') report.privacy = r1.value
+      if (r2.status === 'fulfilled') report.securityPosture = r2.value
+
+      // Batch 2: heavier scans (registry, drivers, malware, software updates)
+      const [r3, r4, r5, r6] = await Promise.allSettled([
         isWin ? this.collectRegistryHealth() : Promise.resolve(report.registry),
         this.collectSoftwareUpdateHealth(),
         isWin ? this.collectDriverUpdateHealth() : Promise.resolve(report.driverUpdates),
-        this.collectServiceHealth(),
-        this.collectPrivacyHealth(),
         this.collectMalwareHealth(),
-        this.collectSecurityPosture(),
       ])
-
-      if (results[0].status === 'fulfilled') report.registry = results[0].value
-      if (results[1].status === 'fulfilled') report.softwareUpdates = results[1].value
-      if (results[2].status === 'fulfilled') report.driverUpdates = results[2].value
-      if (results[3].status === 'fulfilled') report.services = results[3].value
-      if (results[4].status === 'fulfilled') report.privacy = results[4].value
-      if (results[5].status === 'fulfilled') report.malware = results[5].value
-      if (results[6].status === 'fulfilled') report.securityPosture = results[6].value
+      if (r3.status === 'fulfilled') report.registry = r3.value
+      if (r4.status === 'fulfilled') report.softwareUpdates = r4.value
+      if (r5.status === 'fulfilled') report.driverUpdates = r5.value
+      if (r6.status === 'fulfilled') report.malware = r6.value
 
       await this.postHealthReport(report)
       this.lastHealthReportAt = new Date().toISOString()

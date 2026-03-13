@@ -3,7 +3,7 @@ import { loadBlacklist } from './threat-blacklist-store'
 import { logInfo, logError } from './logger'
 import type { ThreatBlacklist, FlaggedConnection, FlaggedDnsEntry, ThreatSnapshot } from './cloud-agent-types'
 
-const CONNECTION_INTERVAL_MS = 15_000
+const CONNECTION_INTERVAL_MS = 30_000
 const DNS_INTERVAL_MS = 60_000
 const MAX_ACCUMULATED = 500
 
@@ -224,6 +224,10 @@ class ThreatMonitorService {
   }
 
   private startTimers(): void {
+    // Prevent duplicate timers if called during reconnect/reload
+    if (this.connectionTimer) { clearInterval(this.connectionTimer); this.connectionTimer = null }
+    if (this.dnsTimer) { clearInterval(this.dnsTimer); this.dnsTimer = null }
+
     // Run first scans immediately
     this.scanConnections()
     this.scanDns()
