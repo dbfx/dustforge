@@ -1,6 +1,6 @@
 {
   "name": "dustforge",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "A modern, open-source system cleaner for Windows, macOS, and Linux",
   "main": "./out/main/index.js",
   "scripts": {
@@ -15,7 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
-    "release": "node -e \"const v='v'+require('./package.json').version;const{execSync:r}=require('child_process');r('git tag '+v,{stdio:'inherit'});r('git push origin '+v,{stdio:'inherit'});console.log('\\nTag '+v+' pushed. GitHub CI will build and publish the release.\\nTrack progress: https://github.com/dbfx/dustforge/actions/workflows/release.yml')\"",
+    "release": "node scripts/release.js",
     "prepare": "husky"
   },
   "keywords": [
