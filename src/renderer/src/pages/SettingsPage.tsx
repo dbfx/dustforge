@@ -397,14 +397,16 @@ export function SettingsPage() {
             <Row label="Threat monitor" desc="Scan connections against known-malicious IPs and domains">
               <Toggle checked={settings.cloud.shareThreatMonitor} onChange={(v) => save({ cloud: { ...settings.cloud, shareThreatMonitor: v } })} />
             </Row>
-            {cloudStatus?.threatBlacklist && (
-              <Row label="Threat list" desc={`v${cloudStatus.threatBlacklist.version} — updated ${new Date(cloudStatus.threatBlacklist.updatedAt).toLocaleDateString()}`}>
+            <Row label="Threat list" desc={cloudStatus?.threatBlacklist ? `v${cloudStatus.threatBlacklist.version} — updated ${new Date(cloudStatus.threatBlacklist.updatedAt).toLocaleDateString()}` : 'Waiting for cloud to push a threat list'}>
+              {cloudStatus?.threatBlacklist ? (
                 <span className="text-[11px] tabular-nums" style={{ color: 'rgba(255,255,255,0.5)' }}>
                   {(cloudStatus.threatBlacklist.domains + cloudStatus.threatBlacklist.ips + cloudStatus.threatBlacklist.cidrs).toLocaleString()} rules
                   <span style={{ color: 'rgba(255,255,255,0.3)' }}> ({cloudStatus.threatBlacklist.domains.toLocaleString()} domains, {cloudStatus.threatBlacklist.ips.toLocaleString()} IPs, {cloudStatus.threatBlacklist.cidrs.toLocaleString()} CIDRs)</span>
                 </span>
-              </Row>
-            )}
+              ) : (
+                <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Not loaded</span>
+              )}
+            </Row>
             <Row label="Remote power control" desc="Allow cloud to shutdown or restart this device">
               <Toggle checked={settings.cloud.allowRemotePower} onChange={(v) => save({ cloud: { ...settings.cloud, allowRemotePower: v } })} />
             </Row>

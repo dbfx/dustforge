@@ -862,6 +862,42 @@ class CloudAgentService {
     })
 
     threatMonitor.start()
+
+    // If no blacklist on disk, ask the cloud for one
+    if (!loadBlacklist()) {
+      this.fetchInitialBlacklist()
+    }
+  }
+
+  /** Ask the cloud for a threat blacklist URL and download it if available */
+  private async fetchInitialBlacklist(): Promise<void> {
+    try {
+      if (!this.connectConfig) return
+      const url = `${this.connectConfig.api}/devices/${this.deviceId}/threat-blacklist-url`
+      cloudLog('DEBUG', `Fetching initial blacklist URL from ${url}`)
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${this.apiKey}` },
+      })
+      if (!res.ok) {
+        cloudLog('DEBUG', `No blacklist URL available (HTTP ${res.status})`)
+        return
+      }
+      const data = await res.json() as { url?: string }
+      if (!data?.url || typeof data.url !== 'string') {
+        cloudLog('DEBUG', 'No blacklist URL in response')
+        return
+      }
+      cloudLog('INFO', `Downloading initial blacklist from ${data.url}`)
+      const result = await downloadAndUpdateBlacklist(data.url)
+      if (result.success) {
+        threatMonitor.reloadBlacklist()
+        cloudLog('INFO', `Initial blacklist loaded (${result.stats!.domains} domains, ${result.stats!.ips} IPs, ${result.stats!.cidrs} CIDRs)`)
+      } else {
+        cloudLog('ERROR', `Initial blacklist download failed: ${result.error}`)
+      }
+    } catch (err) {
+      cloudLog('DEBUG', `Failed to fetch initial blacklist: ${err}`)
+    }
   }
 
   /** Queue a threat alert, rate-limited to avoid overwhelming the cloud */

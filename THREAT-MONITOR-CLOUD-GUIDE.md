@@ -72,7 +72,24 @@ You can aggregate from public threat intelligence feeds like:
 
 ---
 
-## Step 2: Send the Command
+## Step 2: Implement the Blacklist URL Endpoint (Auto-Fetch on Connect)
+
+When the agent connects and has no blacklist on disk, it automatically requests one:
+
+**Endpoint:** `GET /api/devices/{deviceId}/threat-blacklist-url`
+
+**Response (blacklist available):**
+```json
+{ "url": "https://your-server.com/api/blacklists/latest.json" }
+```
+
+**Response (no blacklist configured):** Return `404` — the agent will silently wait for an `update-threat-blacklist` command instead.
+
+This means new devices get a blacklist immediately on first connect without needing a manual push. The agent only calls this endpoint once per connection if no blacklist exists locally.
+
+---
+
+## Step 3: Push Updates via Command
 
 Broadcast on the device's Reverb channel (`private-device.{deviceId}`, event `DeviceCommand`):
 
@@ -117,7 +134,7 @@ Broadcast on the device's Reverb channel (`private-device.{deviceId}`, event `De
 
 ---
 
-## Step 3: Implement the Threat Alert Endpoint (Immediate Alerts)
+## Step 4: Implement the Threat Alert Endpoint (Immediate Alerts)
 
 **This is the most important endpoint for real-time security.** The agent POSTs here the moment new threats are detected — within 15 seconds for connection matches, within 60 seconds for DNS matches.
 
@@ -167,7 +184,7 @@ Broadcast on the device's Reverb channel (`private-device.{deviceId}`, event `De
 
 ---
 
-## Step 4: Poll with `get-threat-status` (On-Demand)
+## Step 5: Poll with `get-threat-status` (On-Demand)
 
 For situations where you want to check a specific device's threat state without waiting for telemetry:
 
@@ -200,7 +217,7 @@ This command is **parallel-safe** (read-only) and can be polled as frequently as
 
 ---
 
-## Step 5: Telemetry (Periodic Backup)
+## Step 6: Telemetry (Periodic Backup)
 
 Flagged connections also appear in the existing telemetry POST (`/api/devices/{deviceId}/telemetry`) under a new optional `threatSnapshot` field. This field is **only included when there are flagged items** — if no threats are detected, it's omitted entirely.
 
@@ -294,7 +311,7 @@ Flagged connections also appear in the existing telemetry POST (`/api/devices/{d
 
 ---
 
-## Step 6: Suggested Cloud Implementation
+## Step 7: Suggested Cloud Implementation
 
 ### Recommended Workflow
 
