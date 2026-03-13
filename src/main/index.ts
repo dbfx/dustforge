@@ -7,12 +7,15 @@ import { startScheduler, stopScheduler, getNextScanTime, notifyScheduledScanComp
 import { initAutoUpdater } from './services/auto-updater'
 import { cloudAgent } from './services/cloud-agent'
 import { runCli } from './cli'
+import { runDaemon } from './daemon'
 
-// ─── CLI mode ────────────────────────────────────────────────
+// ─── CLI / Daemon mode ───────────────────────────────────────
 // If --cli is passed, run headless and exit — no GUI, no tray.
+// If --daemon is passed, run headless cloud agent and stay alive.
 if (process.argv.includes('--cli')) {
   app.whenReady().then(() => runCli())
-  // Skip all GUI setup below
+} else if (process.argv.includes('--daemon')) {
+  app.whenReady().then(() => runDaemon())
 } else {
   initGui()
 }

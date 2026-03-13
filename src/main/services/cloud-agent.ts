@@ -793,12 +793,8 @@ class CloudAgentService {
       cloudLog('DEBUG', 'Collecting health report')
 
       const report: HealthReport = {
-        registry: { totalIssues: 0, byType: {}, byRisk: {} },
-        softwareUpdates: { totalAvailable: 0, bySeverity: {}, apps: [] },
-        driverUpdates: { totalAvailable: 0, drivers: [] },
         services: { totalRunning: 0, totalDisabled: 0, safeToDisable: 0, byCategory: {} },
         privacy: { score: 0, total: 0, protected: 0, byCategory: {} },
-        malware: { threatsFound: 0, filesScanned: 0, bySeverity: {}, threats: [] },
         securityPosture: {
           antivirus: { products: [], primary: null },
           firewall: { enabled: false, products: [], windowsProfiles: { domain: false, private: false, public: false } },
@@ -809,34 +805,16 @@ class CloudAgentService {
         },
       }
 
-      // Run scans in two batches to limit concurrent CPU/process load.
-      // Each scan spawns child processes (PowerShell, reg.exe, etc.) so running
-      // all 7 at once causes large CPU spikes.
-      const isWin = process.platform === 'win32'
+      const SCAN_TIMEOUT = 60_000
 
-      const SCAN_TIMEOUT = 60_000 // 60s per batch
-
-      // Batch 1: lightweight / fast scans
       const [r0, r1, r2] = await withTimeout(Promise.allSettled([
         this.collectServiceHealth(),
         this.collectPrivacyHealth(),
         this.collectSecurityPosture(),
-      ]), SCAN_TIMEOUT, 'Health batch 1')
+      ]), SCAN_TIMEOUT, 'Health report')
       if (r0.status === 'fulfilled') report.services = r0.value
       if (r1.status === 'fulfilled') report.privacy = r1.value
       if (r2.status === 'fulfilled') report.securityPosture = r2.value
-
-      // Batch 2: heavier scans (registry, drivers, malware, software updates)
-      const [r3, r4, r5, r6] = await withTimeout(Promise.allSettled([
-        isWin ? this.collectRegistryHealth() : Promise.resolve(report.registry),
-        this.collectSoftwareUpdateHealth(),
-        isWin ? this.collectDriverUpdateHealth() : Promise.resolve(report.driverUpdates),
-        this.collectMalwareHealth(),
-      ]), SCAN_TIMEOUT * 2, 'Health batch 2')
-      if (r3.status === 'fulfilled') report.registry = r3.value
-      if (r4.status === 'fulfilled') report.softwareUpdates = r4.value
-      if (r5.status === 'fulfilled') report.driverUpdates = r5.value
-      if (r6.status === 'fulfilled') report.malware = r6.value
 
       await this.postHealthReport(report)
       this.lastHealthReportAt = new Date().toISOString()
@@ -845,49 +823,6 @@ class CloudAgentService {
       cloudLog('ERROR', `Health report failed: ${err}`)
     } finally {
       this.healthReportRunning = false
-    }
-  }
-
-  private async collectRegistryHealth(): Promise<HealthReport['registry']> {
-    const entries = await scanRegistry()
-    const byType: Record<string, number> = {}
-    const byRisk: Record<string, number> = {}
-    for (const e of entries) {
-      byType[e.type] = (byType[e.type] || 0) + 1
-      byRisk[e.risk] = (byRisk[e.risk] || 0) + 1
-    }
-    return { totalIssues: entries.length, byType, byRisk }
-  }
-
-  private async collectSoftwareUpdateHealth(): Promise<HealthReport['softwareUpdates']> {
-    const result = await checkForUpdates()
-    const bySeverity: Record<string, number> = {}
-    for (const a of result.apps) {
-      bySeverity[a.severity] = (bySeverity[a.severity] || 0) + 1
-    }
-    return {
-      totalAvailable: result.totalCount,
-      bySeverity,
-      apps: result.apps.map((a) => ({
-        id: a.id,
-        name: a.name,
-        current: a.currentVersion,
-        available: a.availableVersion,
-        severity: a.severity,
-      })),
-    }
-  }
-
-  private async collectDriverUpdateHealth(): Promise<HealthReport['driverUpdates']> {
-    const result = await scanDriverUpdates()
-    return {
-      totalAvailable: result.totalAvailable,
-      drivers: result.updates.map((d) => ({
-        deviceName: d.deviceName,
-        className: d.className,
-        currentVersion: d.currentVersion,
-        availableVersion: d.availableVersion,
-      })),
     }
   }
 
@@ -925,26 +860,6 @@ class CloudAgentService {
       total: result.total,
       protected: result.protected,
       byCategory,
-    }
-  }
-
-  private async collectMalwareHealth(): Promise<HealthReport['malware']> {
-    const result = await scanMalware()
-    const bySeverity: Record<string, number> = {}
-    for (const t of result.threats) {
-      bySeverity[t.severity] = (bySeverity[t.severity] || 0) + 1
-    }
-    return {
-      threatsFound: result.threats.length,
-      filesScanned: result.filesScanned,
-      bySeverity,
-      // Don't send full file paths to cloud — just filename, detection, severity
-      threats: result.threats.map((t) => ({
-        fileName: t.fileName,
-        detectionName: t.detectionName,
-        severity: t.severity,
-        source: t.source,
-      })),
     }
   }
 

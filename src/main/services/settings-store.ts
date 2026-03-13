@@ -140,6 +140,11 @@ export function setSettings(partial: Partial<DustForgeSettings>): void {
   })
 }
 
+/** Wait for any pending setSettings() writes to complete */
+export function flushSettings(): Promise<void> {
+  return writeLock
+}
+
 export function getOnboardingComplete(): boolean {
   return readStore().onboardingComplete
 }

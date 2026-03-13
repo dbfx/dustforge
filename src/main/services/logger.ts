@@ -2,6 +2,13 @@ import { join } from 'path'
 import { appendFileSync, mkdirSync, statSync, renameSync, unlinkSync } from 'fs'
 import { app } from 'electron'
 
+let _daemonMode = false
+
+/** When enabled, all log lines are also written to stdout (for daemon/journald) */
+export function setDaemonMode(enabled: boolean): void {
+  _daemonMode = enabled
+}
+
 const LOG_DIR = join(app.getPath('userData'), 'logs')
 const LOG_FILE = join(LOG_DIR, 'dustforge.log')
 const LOG_FILE_OLD = join(LOG_DIR, 'dustforge.old.log')
@@ -75,4 +82,8 @@ export function cloudLog(level: 'INFO' | 'ERROR' | 'DEBUG', message: string, dat
   // Also write to main log for INFO/ERROR
   if (level === 'ERROR') logError(message)
   else if (level === 'INFO') logInfo(message)
+  // Mirror to stdout in daemon mode (for journald / foreground use)
+  if (_daemonMode) {
+    process.stdout.write(`[${timestamp()}] [cloud:${level}] ${message}${extra}\n`)
+  }
 }

@@ -149,26 +149,6 @@ export interface TelemetrySnapshot {
 // ─── Health Report (infrequent, comprehensive) ──────────────
 
 export interface HealthReport {
-  // Registry issues grouped by type
-  registry: {
-    totalIssues: number
-    byType: Record<string, number>
-    byRisk: Record<string, number>
-  }
-
-  // Software updates available
-  softwareUpdates: {
-    totalAvailable: number
-    bySeverity: Record<string, number>
-    apps: Array<{ id: string; name: string; current: string; available: string; severity: string }>
-  }
-
-  // Driver updates available
-  driverUpdates: {
-    totalAvailable: number
-    drivers: Array<{ deviceName: string; className: string; currentVersion: string; availableVersion: string }>
-  }
-
   // Services that could be optimized
   services: {
     totalRunning: number
@@ -183,14 +163,6 @@ export interface HealthReport {
     total: number
     protected: number
     byCategory: Record<string, { total: number; protected: number }>
-  }
-
-  // Malware scan summary
-  malware: {
-    threatsFound: number
-    filesScanned: number
-    bySeverity: Record<string, number>
-    threats: Array<{ fileName: string; detectionName: string; severity: string; source: string }>
   }
 
   // Security posture (native Windows checks)

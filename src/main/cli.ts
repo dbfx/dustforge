@@ -225,6 +225,12 @@ DustForge CLI — Full-featured command line interface
 
 Usage:
   dustforge --cli <command> [subcommand] [options]
+  dustforge --daemon [--api-key <key>] [--server-url <url>]
+
+Daemon Mode (headless cloud agent):
+  --daemon                     Start as headless cloud agent daemon
+  --daemon --api-key <key>     Set API key and start daemon
+  --daemon --server-url <url>  Set custom server URL and start daemon
 
 File Cleaners (legacy flags also supported):
   scan [--system] [--browser] [--app] [--gaming] [--recycle-bin] [--all]
@@ -298,6 +304,15 @@ Scan History:
 Restore Points:
   restore-point create [description]   Create a system restore point
 
+Config Management:
+  config get [key]             Show settings (e.g. config get cloud.apiKey)
+  config set <key> <value>     Update a setting (e.g. config set cloud.apiKey my-key)
+
+Service Management (Linux):
+  service install              Install as a systemd service
+  service uninstall            Remove the systemd service
+  service status               Show service status
+
 Global Options:
   --json          Output as JSON
   --all           Select all items for action commands
@@ -311,6 +326,9 @@ Examples:
   dustforge --cli startup list              Show startup items
   dustforge --cli malware scan              Run malware scan
   dustforge --cli perf info                 Show system specs
+  dustforge --cli config set cloud.apiKey my-key   Set cloud API key
+  dustforge --daemon                        Run headless cloud agent
+  sudo dustforge --cli service install      Install as Linux service
 `.trim())
 }
 
@@ -793,6 +811,183 @@ async function handleRestorePoint(args: string[], json: boolean): Promise<void> 
   }
 }
 
+// ─── Config management ───────────────────────────────────────
+
+async function handleConfig(args: string[], json: boolean): Promise<void> {
+  const sub = args[0]
+  const { getSettings, setSettings } = await import('./services/settings-store')
+
+  if (sub === 'get') {
+    const key = args[1]
+    const settings = getSettings() as Record<string, any>
+    if (!key) {
+      out(settings, json)
+      return
+    }
+    // Support dotted paths like cloud.apiKey
+    const value = key.split('.').reduce((obj, k) => obj?.[k], settings)
+    if (value === undefined) {
+      log(`Unknown setting: ${key}`)
+      app.exit(1)
+      return
+    }
+    // Mask the API key in non-JSON output
+    if (key === 'cloud.apiKey' && !json && typeof value === 'string' && value.length > 8) {
+      log(`  ${key}: ${value.slice(0, 4)}...${value.slice(-4)}`)
+    } else {
+      out(json ? { [key]: value } : `  ${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`, json)
+    }
+  } else if (sub === 'set') {
+    const key = args[1]
+    const rawValue = args.slice(2).join(' ')
+    if (!key || !rawValue) {
+      log('Usage: dustforge --cli config set <key> <value>')
+      log('Example: dustforge --cli config set cloud.apiKey your-key-here')
+      return
+    }
+    // Parse the value — try JSON first, then treat as string
+    let value: any = rawValue
+    try {
+      value = JSON.parse(rawValue)
+    } catch {
+      // Keep as string — handle common types
+      if (rawValue === 'true') value = true
+      else if (rawValue === 'false') value = false
+      else if (/^\d+$/.test(rawValue)) value = parseInt(rawValue, 10)
+    }
+    // Build nested object from dotted path
+    const parts = key.split('.')
+    const obj: Record<string, any> = {}
+    let cursor = obj
+    for (let i = 0; i < parts.length - 1; i++) {
+      cursor[parts[i]] = {}
+      cursor = cursor[parts[i]]
+    }
+    cursor[parts[parts.length - 1]] = value
+    setSettings(obj as any)
+    if (!json) log(`  Set ${key} = ${typeof value === 'string' && key.includes('apiKey') ? '****' : value}`)
+    else out({ success: true, key, value: key.includes('apiKey') ? '****' : value }, true)
+  } else {
+    log('Usage: dustforge --cli config <get|set> [key] [value]')
+    log('')
+    log('Examples:')
+    log('  dustforge --cli config get                        Show all settings')
+    log('  dustforge --cli config get cloud.apiKey            Show API key')
+    log('  dustforge --cli config set cloud.apiKey my-key     Set API key')
+    log('  dustforge --cli config set cloud.serverUrl http://localhost:8000')
+  }
+}
+
+// ─── Service management (systemd) ────────────────────────────
+
+async function handleService(args: string[], json: boolean): Promise<void> {
+  const sub = args[0]
+
+  if (process.platform !== 'linux') {
+    log('Error: Service management is only supported on Linux (systemd).')
+    if (process.platform === 'win32') {
+      log('On Windows, use Task Scheduler or NSSM to run as a service.')
+    } else if (process.platform === 'darwin') {
+      log('On macOS, use launchd with a plist file.')
+    }
+    app.exit(1)
+    return
+  }
+
+  const { writeFileSync, existsSync, unlinkSync } = await import('fs')
+  const { execFileSync } = await import('child_process')
+
+  const serviceName = 'dustforge'
+  const servicePath = `/etc/systemd/system/${serviceName}.service`
+  const exePath = app.getPath('exe')
+
+  // Determine the user to run as (prefer the user who invoked sudo)
+  const runUser = process.env['SUDO_USER'] || process.env['USER'] || 'root'
+
+  const unitContent = `[Unit]
+Description=DustForge System Cleaner Daemon
+Documentation=https://dustforge.net
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${runUser}
+ExecStart=${exePath} --daemon
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dustforge
+Environment=ELECTRON_NO_ATTACH_CONSOLE=1
+Environment=DISPLAY=
+
+[Install]
+WantedBy=multi-user.target
+`
+
+  if (sub === 'install') {
+    try {
+      writeFileSync(servicePath, unitContent, 'utf-8')
+      execFileSync('systemctl', ['daemon-reload'])
+      if (!json) {
+        log(`Service installed: ${servicePath}`)
+        log('')
+        log('To start now:          sudo systemctl start dustforge')
+        log('To enable on boot:     sudo systemctl enable dustforge')
+        log('To do both:            sudo systemctl enable --now dustforge')
+        log('To view logs:          journalctl -u dustforge -f')
+      } else {
+        out({ success: true, path: servicePath }, true)
+      }
+    } catch (err: any) {
+      if (err.message?.includes('EACCES') || err.message?.includes('Permission denied')) {
+        log('Error: Permission denied. Run with sudo:')
+        log(`  sudo dustforge --cli service install`)
+      } else {
+        log(`Error installing service: ${err.message}`)
+      }
+      app.exit(1)
+    }
+  } else if (sub === 'uninstall') {
+    try {
+      // Stop and disable first, ignore errors if not running
+      try { execFileSync('systemctl', ['stop', serviceName]) } catch { /* ok */ }
+      try { execFileSync('systemctl', ['disable', serviceName]) } catch { /* ok */ }
+      if (existsSync(servicePath)) {
+        unlinkSync(servicePath)
+        execFileSync('systemctl', ['daemon-reload'])
+      }
+      if (!json) log('Service uninstalled.')
+      else out({ success: true }, true)
+    } catch (err: any) {
+      if (err.message?.includes('EACCES') || err.message?.includes('Permission denied')) {
+        log('Error: Permission denied. Run with sudo:')
+        log(`  sudo dustforge --cli service uninstall`)
+      } else {
+        log(`Error uninstalling service: ${err.message}`)
+      }
+      app.exit(1)
+    }
+  } else if (sub === 'status') {
+    try {
+      const output = execFileSync('systemctl', ['status', serviceName], { encoding: 'utf-8' })
+      log(output)
+    } catch (err: any) {
+      // systemctl status returns exit code 3 if service is not running
+      if (err.stdout) log(err.stdout)
+      else if (err.stderr) log(err.stderr)
+      else log('Service is not installed or not running.')
+    }
+  } else {
+    log('Usage: dustforge --cli service <install|uninstall|status>')
+    log('')
+    log('  install     Install DustForge as a systemd service')
+    log('  uninstall   Stop, disable, and remove the systemd service')
+    log('  status      Show current service status')
+  }
+}
+
 // ─── Legacy file cleaner (backward compatible) ───────────────
 
 async function runLegacyScanClean(categories: string[], doClean: boolean, json: boolean): Promise<void> {
@@ -947,6 +1142,8 @@ export async function runCli(): Promise<void> {
       case 'leftovers': await handleLeftovers(commandArgs, json); break
       case 'history': await handleHistory(commandArgs, json); break
       case 'restore-point': await handleRestorePoint(commandArgs, json); break
+      case 'config': await handleConfig(commandArgs, json); break
+      case 'service': await handleService(commandArgs, json); break
       default:
         log(`Unknown command: ${command}`)
         log('Run dustforge --cli --help for usage information.')
