@@ -1,3 +1,9 @@
+## [2.4.4](https://github.com/dbfx/dustforge/compare/v2.4.3...v2.4.4) (2026-03-13)
+
+
+### Bug Fixes
+
+* prevent duplicate cloud commands and reduce CPU usage ([bfebbfd](https://github.com/dbfx/dustforge/commit/bfebbfdeeaf39cd4a23701e95f418c0cb5c72854))
 ## [2.4.3](https://github.com/dbfx/dustforge/compare/v2.4.2...v2.4.3) (2026-03-13)
 
 
