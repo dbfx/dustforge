@@ -1,3 +1,9 @@
+## [2.8.2](https://github.com/dbfx/dustforge/compare/v2.8.1...v2.8.2) (2026-03-14)
+
+
+### Bug Fixes
+
+* handle Chromium --no-sandbox requirement when running as root on Linux ([48af4be](https://github.com/dbfx/dustforge/commit/48af4be21b52b9e7cabe1ee4ef5cffed1841f71d))
 ## [2.8.1](https://github.com/dbfx/dustforge/compare/v2.8.0...v2.8.1) (2026-03-14)
 # [2.8.0](https://github.com/dbfx/dustforge/compare/v2.7.0...v2.8.0) (2026-03-14)
 
