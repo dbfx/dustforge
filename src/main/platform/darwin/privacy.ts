@@ -1,5 +1,7 @@
 import { execFile } from 'child_process'
+import { readFile, writeFile } from 'fs/promises'
 import { promisify } from 'util'
+import { updateSshdConfig, updateSysctlConfig } from '../config-utils'
 import type { PlatformPrivacy, PrivacySettingDef } from '../types'
 
 const execFileAsync = promisify(execFile)
@@ -7,7 +9,12 @@ const execFileAsync = promisify(execFile)
 export function createDarwinPrivacy(): PlatformPrivacy {
   return {
     getSettings(): PrivacySettingDef[] {
-      return DARWIN_PRIVACY_SETTINGS
+      return [
+        ...DARWIN_PRIVACY_SETTINGS,
+        ...DARWIN_KERNEL_SETTINGS,
+        ...DARWIN_NETWORK_SETTINGS,
+        ...DARWIN_ACCESS_SETTINGS,
+      ]
     },
   }
 }
@@ -19,6 +26,71 @@ async function defaultsRead(domain: string, key: string): Promise<string> {
 
 async function defaultsWrite(domain: string, key: string, type: string, value: string): Promise<void> {
   await execFileAsync('/usr/bin/defaults', ['write', domain, key, `-${type}`, value], { timeout: 5_000 })
+}
+
+// ─── systemsetup helpers ────────────────────────────────────
+
+async function systemsetupGet(flag: string): Promise<string> {
+  const { stdout } = await execFileAsync('/usr/sbin/systemsetup', [flag], { timeout: 5_000 })
+  return stdout.trim()
+}
+
+async function systemsetupSet(flag: string, value: string): Promise<void> {
+  await execFileAsync('/usr/sbin/systemsetup', [flag, value], { timeout: 5_000 })
+}
+
+// ─── socketfilterfw (Application Firewall) helpers ──────────
+
+const SOCKETFILTERFW = '/usr/libexec/ApplicationFirewall/socketfilterfw'
+
+async function socketfilterfwGet(flag: string): Promise<string> {
+  const { stdout } = await execFileAsync(SOCKETFILTERFW, [flag], { timeout: 5_000 })
+  return stdout.trim()
+}
+
+async function socketfilterfwSet(flag: string, value: string): Promise<void> {
+  await execFileAsync(SOCKETFILTERFW, [flag, value], { timeout: 5_000 })
+}
+
+// ─── Sysctl helpers (macOS) ─────────────────────────────────
+
+const SYSCTL_CONF = '/etc/sysctl.conf'
+
+async function sysctlGet(param: string): Promise<string> {
+  const { stdout } = await execFileAsync('/usr/sbin/sysctl', ['-n', param], { timeout: 5_000 })
+  return stdout.trim()
+}
+
+async function sysctlApply(param: string, value: string): Promise<void> {
+  // Apply live first — fail fast if the kernel rejects the value
+  await execFileAsync('/usr/sbin/sysctl', ['-w', `${param}=${value}`], { timeout: 5_000 })
+
+  // Persist to /etc/sysctl.conf (macOS uses a single file, not .d/)
+  let existing = ''
+  try {
+    existing = await readFile(SYSCTL_CONF, 'utf8')
+  } catch { /* file doesn't exist yet */ }
+
+  const updated = updateSysctlConfig(
+    existing, param, value, '=',
+    '# Delete this file and reboot to revert all changes',
+  )
+
+  await writeFile(SYSCTL_CONF, updated, 'utf8')
+}
+
+// ─── SSH config helper (macOS) ──────────────────────────────
+
+async function applySshdDirective(directive: string, value: string): Promise<void> {
+  const content = await readFile('/etc/ssh/sshd_config', 'utf8')
+  const updated = updateSshdConfig(content, directive, value)
+  await writeFile('/etc/ssh/sshd_config', updated, 'utf8')
+  // Reload sshd via launchctl
+  try {
+    await execFileAsync('/bin/launchctl', ['kickstart', '-k', 'system/com.openssh.sshd'], { timeout: 10_000 })
+  } catch {
+    await execFileAsync('/bin/launchctl', ['stop', 'com.openssh.sshd'], { timeout: 10_000 }).catch(() => {})
+  }
 }
 
 const DARWIN_PRIVACY_SETTINGS: PrivacySettingDef[] = [
@@ -135,6 +207,240 @@ const DARWIN_PRIVACY_SETTINGS: PrivacySettingDef[] = [
     },
     async apply() {
       await defaultsWrite('com.apple.CrashReporter', 'DialogType', 'string', 'none')
+    },
+  },
+]
+
+// ─── Kernel / System Hardening ──────────────────────────────
+
+const DARWIN_KERNEL_SETTINGS: PrivacySettingDef[] = [
+  {
+    id: 'macos-gatekeeper',
+    category: 'kernel',
+    label: 'Gatekeeper',
+    description: 'Ensure Gatekeeper is enabled to block unverified applications',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const { stdout, stderr } = await execFileAsync('/usr/sbin/spctl', ['--status'], { timeout: 5_000 })
+        const out = (stdout + stderr).trim()
+        return out.includes('assessments enabled')
+      } catch { return false }
+    },
+    async apply() {
+      await execFileAsync('/usr/sbin/spctl', ['--master-enable'], { timeout: 5_000 })
+    },
+  },
+  {
+    id: 'macos-remote-apple-events',
+    category: 'kernel',
+    label: 'Remote Apple Events',
+    description: 'Disable remote Apple Events to prevent remote automation of your Mac',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const out = await systemsetupGet('-getremoteappleevents')
+        return out.toLowerCase().includes('off')
+      } catch { return false }
+    },
+    async apply() {
+      await systemsetupSet('-setremoteappleevents', 'off')
+    },
+  },
+  {
+    id: 'macos-wake-on-network',
+    category: 'kernel',
+    label: 'Wake on Network Access',
+    description: 'Disable wake on network access to prevent remote wake-ups',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const out = await systemsetupGet('-getwakeonnetworkaccess')
+        return out.toLowerCase().includes('off')
+      } catch { return false }
+    },
+    async apply() {
+      await systemsetupSet('-setwakeonnetworkaccess', 'off')
+    },
+  },
+  {
+    id: 'macos-guest-account',
+    category: 'kernel',
+    label: 'Guest Account',
+    description: 'Disable the guest account to prevent unauthorized local access',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const val = await defaultsRead('/Library/Preferences/com.apple.loginwindow', 'GuestEnabled')
+        return val === '0'
+      } catch { return false }
+    },
+    async apply() {
+      await defaultsWrite('/Library/Preferences/com.apple.loginwindow', 'GuestEnabled', 'bool', 'false')
+    },
+  },
+  {
+    id: 'macos-auto-login',
+    category: 'kernel',
+    label: 'Automatic Login',
+    description: 'Disable automatic login to require authentication at startup',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const val = await defaultsRead('/Library/Preferences/com.apple.loginwindow', 'autoLoginUser')
+        // If the key exists and has a value, auto-login is enabled
+        return !val || val.length === 0
+      } catch {
+        // Key doesn't exist = auto-login is disabled = good
+        return true
+      }
+    },
+    async apply() {
+      await execFileAsync('/usr/bin/defaults', [
+        'delete', '/Library/Preferences/com.apple.loginwindow', 'autoLoginUser',
+      ], { timeout: 5_000 }).catch(() => {})
+    },
+  },
+]
+
+// ─── Network Hardening ──────────────────────────────────────
+
+const DARWIN_NETWORK_SETTINGS: PrivacySettingDef[] = [
+  {
+    id: 'macos-firewall',
+    category: 'network',
+    label: 'Application Firewall',
+    description: 'Enable the macOS Application Firewall to control incoming connections',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const out = await socketfilterfwGet('--getglobalstate')
+        return out.toLowerCase().includes('enabled')
+      } catch { return false }
+    },
+    async apply() {
+      await socketfilterfwSet('--setglobalstate', 'on')
+    },
+  },
+  {
+    id: 'macos-stealth-mode',
+    category: 'network',
+    label: 'Stealth Mode',
+    description: 'Enable stealth mode so your Mac does not respond to probe requests (ICMP ping)',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const out = await socketfilterfwGet('--getstealthmode')
+        return out.toLowerCase().includes('enabled')
+      } catch { return false }
+    },
+    async apply() {
+      await socketfilterfwSet('--setstealthmode', 'on')
+    },
+  },
+  {
+    id: 'macos-ip-forwarding',
+    category: 'network',
+    label: 'Disable IP Forwarding',
+    description: 'Prevent the system from forwarding packets between network interfaces',
+    requiresAdmin: true,
+    async check() {
+      try {
+        return (await sysctlGet('net.inet.ip.forwarding')) === '0'
+      } catch { return false }
+    },
+    async apply() {
+      await sysctlApply('net.inet.ip.forwarding', '0')
+    },
+  },
+  {
+    id: 'macos-block-signed-auto',
+    category: 'network',
+    label: 'Block Signed App Auto-Allow',
+    description: 'Prevent signed applications from automatically bypassing the firewall',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const out = await socketfilterfwGet('--getallowsigned')
+        // Output has two lines (built-in + download). Hardened = neither says "enabled"
+        return !out.toLowerCase().includes('enabled')
+      } catch { return false }
+    },
+    async apply() {
+      // Must disable both built-in and downloaded signed app auto-allow
+      await socketfilterfwSet('--setallowsignedapp', 'off')
+      await socketfilterfwSet('--setallowsigned', 'off')
+    },
+  },
+]
+
+// ─── Access Control ─────────────────────────────────────────
+
+const DARWIN_ACCESS_SETTINGS: PrivacySettingDef[] = [
+  {
+    id: 'macos-remote-login',
+    category: 'access',
+    label: 'Disable Remote Login (SSH)',
+    description: 'Disable the SSH server entirely. If you need SSH access, leave this off and harden SSH settings instead',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const out = await systemsetupGet('-getremotelogin')
+        return out.toLowerCase().includes('off')
+      } catch { return false }
+    },
+    async apply() {
+      await execFileAsync('/usr/sbin/systemsetup', ['-f', '-setremotelogin', 'off'], { timeout: 5_000 })
+    },
+  },
+  {
+    id: 'macos-ssh-root-login',
+    category: 'access',
+    label: 'Disable SSH Root Login',
+    description: 'Prevent direct root login over SSH — use sudo from a regular account instead',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const content = await readFile('/etc/ssh/sshd_config', 'utf8')
+        return /^\s*PermitRootLogin\s+no\s*$/m.test(content)
+      } catch { return false }
+    },
+    async apply() {
+      await applySshdDirective('PermitRootLogin', 'no')
+    },
+  },
+  {
+    id: 'macos-ssh-password-auth',
+    category: 'access',
+    label: 'Disable SSH Password Authentication',
+    description: 'Require key-based SSH authentication only. WARNING: ensure SSH keys are configured before enabling or you may be locked out',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const content = await readFile('/etc/ssh/sshd_config', 'utf8')
+        return /^\s*PasswordAuthentication\s+no\s*$/m.test(content)
+      } catch { return false }
+    },
+    async apply() {
+      await applySshdDirective('PasswordAuthentication', 'no')
+    },
+  },
+  {
+    id: 'macos-core-dumps',
+    category: 'access',
+    label: 'Disable Core Dumps',
+    description: 'Prevent core dumps to avoid leaking sensitive memory contents',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const { stdout } = await execFileAsync('/bin/launchctl', ['limit', 'core'], { timeout: 5_000 })
+        // Output format: "\tcore\t\t<soft>\t\t<hard>"
+        const parts = stdout.trim().split(/\s+/)
+        return parts.length >= 3 && parts[1] === '0' && parts[2] === '0'
+      } catch { return false }
+    },
+    async apply() {
+      await execFileAsync('/bin/launchctl', ['limit', 'core', '0', '0'], { timeout: 5_000 })
     },
   },
 ]

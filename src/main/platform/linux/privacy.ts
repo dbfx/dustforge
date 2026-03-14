@@ -1,6 +1,7 @@
 import { execFile } from 'child_process'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { promisify } from 'util'
+import { updateSshdConfig, updateSysctlConfig } from '../config-utils'
 import type { PlatformPrivacy, PrivacySettingDef } from '../types'
 
 const execFileAsync = promisify(execFile)
@@ -155,10 +156,8 @@ async function sysctlGet(param: string): Promise<string> {
 }
 
 async function sysctlApply(param: string, value: string): Promise<void> {
-  // Apply live first — if the kernel rejects the parameter (unsupported or
-  // invalid value) we fail fast WITHOUT writing it to the persistent config.
-  // This prevents a bad line from poisoning the config file and breaking
-  // future applies of other (valid) settings.
+  // Apply live first — if the kernel rejects the parameter we fail fast
+  // WITHOUT writing it to the persistent config.
   await execFileAsync('/usr/sbin/sysctl', ['-w', `${param}=${value}`], { timeout: 5_000 })
 
   // Live apply succeeded — now persist to the drop-in config file
@@ -167,33 +166,13 @@ async function sysctlApply(param: string, value: string): Promise<void> {
     existing = await readFile(SYSCTL_CONF, 'utf8')
   } catch { /* file doesn't exist yet */ }
 
-  // Strip trailing blank lines to prevent accumulation
-  const lines = existing.split('\n')
-  while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop()
-
-  const newLine = `${param} = ${value}`
-  let found = false
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trimStart()
-    if (trimmed.startsWith(`${param} =`) || trimmed.startsWith(`${param}=`)) {
-      lines[i] = newLine
-      found = true
-      break
-    }
-  }
-  if (!found) {
-    // Append, but add header comment if file is new
-    if (lines.length === 0 || existing.length === 0) {
-      lines.length = 0
-      lines.push('# DustForge system hardening — managed automatically')
-      lines.push('# Remove this file and run "sysctl --system" to revert all changes')
-      lines.push('')
-    }
-    lines.push(newLine)
-  }
+  const updated = updateSysctlConfig(
+    existing, param, value, ' = ',
+    '# Remove this file and run "sysctl --system" to revert all changes',
+  )
 
   await mkdir('/etc/sysctl.d', { recursive: true })
-  await writeFile(SYSCTL_CONF, lines.join('\n') + '\n', 'utf8')
+  await writeFile(SYSCTL_CONF, updated, 'utf8')
 }
 
 function sysctlSetting(
@@ -342,20 +321,7 @@ const SYSCTL_NETWORK_SETTINGS: PrivacySettingDef[] = [
  */
 async function applySshdDirective(directive: string, value: string): Promise<void> {
   const content = await readFile('/etc/ssh/sshd_config', 'utf8')
-  const canonicalLine = `${directive} ${value}`
-  const pattern = new RegExp(`^(\\s*#?\\s*${directive}\\s.*)$`, 'gm')
-  // Comment out every existing occurrence, except lines that already match
-  // the exact canonical value (keeps the file idempotent on repeated applies)
-  let updated = content.replace(pattern, (match) => {
-    const trimmed = match.trimStart()
-    if (trimmed === canonicalLine) return match // already correct, leave it
-    return trimmed.startsWith('#') ? match : `# ${trimmed}`
-  })
-  // Only append if no uncommented canonical line exists
-  const hasCanonical = new RegExp(`^\\s*${directive}\\s+${value}\\s*$`, 'm').test(updated)
-  if (!hasCanonical) {
-    updated = updated.trimEnd() + `\n${canonicalLine}\n`
-  }
+  const updated = updateSshdConfig(content, directive, value)
   await writeFile('/etc/ssh/sshd_config', updated, 'utf8')
   // Reload sshd — service name varies by distro
   try {
