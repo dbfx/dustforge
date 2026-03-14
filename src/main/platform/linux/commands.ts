@@ -218,10 +218,57 @@ export function createLinuxCommands(): PlatformCommands {
     },
 
     async runSystemFileCheck(): Promise<SfcResult | null> {
+      const pm = await detectPackageManager()
+      if (!pm) return null
+
+      try {
+        if (pm === 'apt') {
+          await execFileAsync('/usr/bin/apt-get', ['clean'], { timeout: 60_000 })
+          return { exitCode: 0, status: 'clean' }
+        }
+        if (pm === 'dnf') {
+          await execFileAsync('/usr/bin/dnf', ['clean', 'all'], { timeout: 60_000 })
+          return { exitCode: 0, status: 'clean' }
+        }
+        if (pm === 'pacman') {
+          await execFileAsync('/usr/bin/pacman', ['-Scc', '--noconfirm'], { timeout: 60_000 })
+          return { exitCode: 0, status: 'clean' }
+        }
+      } catch {
+        return { exitCode: -1, status: 'failed' }
+      }
       return null
     },
 
     async runSystemImageRepair(): Promise<DismResult | null> {
+      const pm = await detectPackageManager()
+      if (!pm) return null
+
+      try {
+        if (pm === 'apt') {
+          await execFileAsync('/usr/bin/apt-get', ['autoremove', '-y', '-qq'], { timeout: 120_000 })
+          return { exitCode: 0, status: 'success' }
+        }
+        if (pm === 'dnf') {
+          await execFileAsync('/usr/bin/dnf', ['autoremove', '-y', '-q'], { timeout: 120_000 })
+          return { exitCode: 0, status: 'success' }
+        }
+        if (pm === 'pacman') {
+          let orphans: string[] = []
+          try {
+            const { stdout } = await execFileAsync('/usr/bin/pacman', ['-Qdtq'], { timeout: 10_000 })
+            orphans = stdout.trim().split('\n').filter(Boolean)
+          } catch {
+            // pacman -Qdtq exits non-zero when no orphans exist
+            return { exitCode: 0, status: 'clean' }
+          }
+          if (orphans.length === 0) return { exitCode: 0, status: 'clean' }
+          await execFileAsync('/usr/bin/pacman', ['-Rns', '--noconfirm', ...orphans], { timeout: 120_000 })
+          return { exitCode: 0, status: 'success' }
+        }
+      } catch {
+        return { exitCode: -1, status: 'failed' }
+      }
       return null
     },
   }

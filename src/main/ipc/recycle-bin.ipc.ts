@@ -1,18 +1,43 @@
 import { ipcMain } from 'electron'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { existsSync } from 'fs'
 import { IPC } from '../../shared/channels'
 import { CleanerType } from '../../shared/enums'
 import type { ScanResult, CleanResult } from '../../shared/types'
 import { randomUUID } from 'crypto'
+import { getPlatform } from '../platform'
+import { scanDirectory, cleanItems } from '../services/file-utils'
+import { cacheItems } from '../services/scan-cache'
 
 const execFileAsync = promisify(execFile)
 
-// Track last scanned size so we can report it after cleaning
+// Windows: track last scanned size (virtual items have no real path)
 let lastScannedSize = 0
+// macOS/Linux: track last scanned item IDs for cleanItems()
+let lastScannedItemIds: string[] = []
 
 export function registerRecycleBinIpc(): void {
   ipcMain.handle(IPC.RECYCLE_BIN_SCAN, async (): Promise<ScanResult[]> => {
+    const trashPath = getPlatform().paths.trashPath()
+
+    if (trashPath) {
+      // macOS / Linux: scan trash directory as real files
+      try {
+        if (!existsSync(trashPath)) return []
+        const result = await scanDirectory(trashPath, CleanerType.RecycleBin, 'Trash', 0)
+        if (result.items.length > 0) {
+          cacheItems(result.items)
+          lastScannedItemIds = result.items.map((i) => i.id)
+          return [result]
+        }
+        return []
+      } catch {
+        return []
+      }
+    }
+
+    // Windows: COM-based recycle bin
     try {
       const { stdout } = await execFileAsync('powershell.exe', [
         '-NoProfile',
@@ -49,9 +74,22 @@ export function registerRecycleBinIpc(): void {
   })
 
   ipcMain.handle(IPC.RECYCLE_BIN_CLEAN, async (): Promise<CleanResult> => {
+    const trashPath = getPlatform().paths.trashPath()
+
+    if (trashPath) {
+      // macOS / Linux: delete cached trash items via standard file-utils flow
+      try {
+        const result = await cleanItems(lastScannedItemIds)
+        lastScannedItemIds = []
+        return result
+      } catch (err: any) {
+        return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [{ path: 'Trash', reason: err.message }], needsElevation: false }
+      }
+    }
+
+    // Windows: SHEmptyRecycleBin Win32 API
     const sizeBeforeClean = lastScannedSize
     try {
-      // Use SHEmptyRecycleBin Win32 API directly — the most reliable method.
       // Flags: SHERB_NOCONFIRMATION(1) | SHERB_NOPROGRESSUI(2) | SHERB_NOSOUND(4) = 7
       await execFileAsync('powershell.exe', [
         '-NoProfile',

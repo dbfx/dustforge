@@ -7,7 +7,7 @@ import { scanDirectory, cleanItems } from './file-utils'
 import { cacheItems } from './scan-cache'
 import { getPlatform } from '../platform'
 import { CleanerType } from '../../shared/enums'
-import { checkForUpdates, runUpdates } from './software-updater'
+import { checkForUpdates, runUpdates, isValidAppId } from './software-updater'
 import { scanRegistry, fixRegistryEntries } from '../ipc/registry-cleaner.ipc'
 import { scanMalware } from '../ipc/malware-scanner.ipc'
 import { scanPrivacy } from '../ipc/privacy-shield.ipc'
@@ -141,10 +141,12 @@ class CloudAgentService {
 
       // Discover server config and register device before persisting
       await this.discover()
+      const osInfo = await si.osInfo()
       await this.postApi(`/devices/${this.deviceId}/register`, {
         machineId,
         appVersion: app.getVersion(),
         hostname: hostname(),
+        os: osInfo.distro,
       })
 
       setSettings({ cloud: { ...settings.cloud, apiKey } })
@@ -209,10 +211,12 @@ class CloudAgentService {
       // Register/update device info (hostname, version) on every connect so the
       // server always has the current hostname — especially important for daemon
       // mode where link() is never called.
+      const osInfo = await si.osInfo()
       await this.postApi(`/devices/${this.deviceId}/register`, {
         machineId: getMachineId(),
         appVersion: app.getVersion(),
         hostname: hostname(),
+        os: osInfo.distro,
       })
       this.connect()
       this.reconnectAttempts = 0
@@ -1165,7 +1169,7 @@ class CloudAgentService {
           break
         case 'run-sfc':
         case 'run-dism':
-          if (process.platform !== 'win32') {
+          if (process.platform === 'darwin') {
             await this.postCommandResult(cmd.requestId, false, undefined, 'Not supported on this platform')
             break
           }
@@ -1205,13 +1209,9 @@ class CloudAgentService {
         case 'disk-health':
           await this.handleDiskHealth(cmd.requestId)
           break
-        // Phase 2: Compliance & security (Windows-only)
+        // Phase 2: Compliance & security
         case 'privacy-scan':
         case 'privacy-apply':
-          if (process.platform !== 'win32') {
-            await this.postCommandResult(cmd.requestId, false, undefined, 'Not supported on this platform')
-            break
-          }
           if (cmd.type === 'privacy-scan') await this.handlePrivacyScan(cmd.requestId)
           else await this.handlePrivacyApply(cmd.requestId, cmd.settingIds)
           break
@@ -1226,10 +1226,6 @@ class CloudAgentService {
           break
         case 'service-scan':
         case 'service-apply':
-          if (process.platform !== 'win32') {
-            await this.postCommandResult(cmd.requestId, false, undefined, 'Not supported on this platform')
-            break
-          }
           if (cmd.type === 'service-scan') await this.handleServiceScan(cmd.requestId)
           else await this.handleServiceApply(cmd.requestId, cmd.changes)
           break
@@ -1311,8 +1307,8 @@ class CloudAgentService {
       case 'restart': return `Restart${cmd.delaySec ? ` (${cmd.delaySec}s delay)` : ''}`
       case 'windows-update-check': return 'Check Windows updates'
       case 'windows-update-install': return 'Install Windows updates'
-      case 'run-sfc': return 'Run System File Checker'
-      case 'run-dism': return 'Run DISM repair'
+      case 'run-sfc': return process.platform === 'linux' ? 'Clean package cache' : 'Run System File Checker'
+      case 'run-dism': return process.platform === 'linux' ? 'Remove orphaned packages' : 'Run DISM repair'
       case 'get-network-config': return 'Get network config'
       case 'get-event-log': return `Get event log: ${cmd.logName ?? 'System'}`
       case 'get-installed-apps': return 'Get installed apps'
@@ -1465,7 +1461,8 @@ class CloudAgentService {
       majorCount: result.majorCount,
       minorCount: result.minorCount,
       patchCount: result.patchCount,
-      wingetAvailable: result.wingetAvailable,
+      packageManagerAvailable: result.packageManagerAvailable,
+      packageManagerName: result.packageManagerName,
     })
   }
 
@@ -1478,8 +1475,8 @@ class CloudAgentService {
       await this.postCommandResult(requestId, false, undefined, 'Invalid appIds')
       return
     }
-    // Validate appId format to prevent argument injection into winget
-    if (appIds.some((id) => !/^[\w][\w.\-]{0,200}$/.test(id))) {
+    // Validate appId format to prevent argument injection into package manager
+    if (appIds.some((id) => !isValidAppId(id))) {
       await this.postCommandResult(requestId, false, undefined, 'Invalid appId format')
       return
     }

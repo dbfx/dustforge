@@ -49,6 +49,24 @@ function computeSeverity(current: string, available: string): UpdateSeverity {
   return 'unknown'
 }
 
+function emptyResult(
+  packageManagerAvailable: boolean,
+  packageManagerName: UpdateCheckResult['packageManagerName'],
+): UpdateCheckResult {
+  return {
+    apps: [],
+    upToDate: [],
+    totalCount: 0,
+    majorCount: 0,
+    minorCount: 0,
+    patchCount: 0,
+    packageManagerAvailable,
+    packageManagerName,
+  }
+}
+
+// ─── Winget (Windows) ───────────────────────────────────────
+
 function parseWingetUpgradeOutput(stdout: string): UpdatableApp[] {
   const lines = cleanOutput(stdout).split(/\r?\n/)
 
@@ -168,18 +186,10 @@ async function isWingetAvailable(): Promise<boolean> {
   }
 }
 
-export async function checkForUpdates(): Promise<UpdateCheckResult> {
+async function checkForUpdatesWinget(): Promise<UpdateCheckResult> {
   const available = await isWingetAvailable()
   if (!available) {
-    return {
-      apps: [],
-      upToDate: [],
-      totalCount: 0,
-      majorCount: 0,
-      minorCount: 0,
-      patchCount: 0,
-      wingetAvailable: false,
-    }
+    return emptyResult(false, 'winget')
   }
 
   try {
@@ -197,15 +207,7 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
       if (err?.stdout) {
         stdout = err.stdout
       } else {
-        return {
-          apps: [],
-          upToDate: [],
-          totalCount: 0,
-          majorCount: 0,
-          minorCount: 0,
-          patchCount: 0,
-          wingetAvailable: true,
-        }
+        return emptyResult(true, 'winget')
       }
     }
 
@@ -241,18 +243,11 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
       majorCount: apps.filter((a) => a.severity === 'major').length,
       minorCount: apps.filter((a) => a.severity === 'minor').length,
       patchCount: apps.filter((a) => a.severity === 'patch').length,
-      wingetAvailable: true,
+      packageManagerAvailable: true,
+      packageManagerName: 'winget',
     }
   } catch {
-    return {
-      apps: [],
-      upToDate: [],
-      totalCount: 0,
-      majorCount: 0,
-      minorCount: 0,
-      patchCount: 0,
-      wingetAvailable: true,
-    }
+    return emptyResult(true, 'winget')
   }
 }
 
@@ -289,7 +284,7 @@ const ELEVATION_HINTS = [
 ]
 
 /** Attempt a single winget upgrade and return {success, output} */
-async function attemptUpgrade(
+async function attemptWingetUpgrade(
   appId: string,
   extraArgs: string[] = [],
 ): Promise<{ success: boolean; output: string }> {
@@ -363,15 +358,15 @@ async function attemptElevatedUpgrade(appId: string): Promise<{ success: boolean
 }
 
 /** Concurrency limit for parallel winget upgrades */
-const UPDATE_CONCURRENCY = 3
+const WINGET_UPDATE_CONCURRENCY = 3
 
-/** Run a single app through the upgrade pipeline: normal → elevated → force */
-async function upgradeApp(
+/** Run a single app through the winget upgrade pipeline: normal → elevated → force */
+async function upgradeAppWinget(
   appId: string,
   alreadyAdmin: boolean,
 ): Promise<{ success: boolean; error?: string }> {
   // First attempt: normal upgrade
-  let result = await attemptUpgrade(appId)
+  let result = await attemptWingetUpgrade(appId)
 
   // If failed and not already admin, retry with elevation
   if (!result.success && !alreadyAdmin) {
@@ -387,7 +382,7 @@ async function upgradeApp(
 
   // If still failed, retry once with --force (handles version mismatch issues)
   if (!result.success) {
-    const retryResult = await attemptUpgrade(appId, ['--force'])
+    const retryResult = await attemptWingetUpgrade(appId, ['--force'])
     if (retryResult.success) result = retryResult
   }
 
@@ -397,7 +392,7 @@ async function upgradeApp(
   return { success: false, error: lastLine.length > 200 ? lastLine.slice(0, 200) + '...' : lastLine }
 }
 
-export async function runUpdates(
+async function runUpdatesWinget(
   appIds: string[],
   onProgress: (progress: UpdateProgress) => void,
 ): Promise<UpdateResult> {
@@ -409,8 +404,8 @@ export async function runUpdates(
   const total = appIds.length
 
   // Process in concurrent batches
-  for (let batchStart = 0; batchStart < total; batchStart += UPDATE_CONCURRENCY) {
-    const batch = appIds.slice(batchStart, batchStart + UPDATE_CONCURRENCY)
+  for (let batchStart = 0; batchStart < total; batchStart += WINGET_UPDATE_CONCURRENCY) {
+    const batch = appIds.slice(batchStart, batchStart + WINGET_UPDATE_CONCURRENCY)
 
     // Report all in-progress
     for (const appId of batch) {
@@ -425,7 +420,7 @@ export async function runUpdates(
     }
 
     const results = await Promise.allSettled(
-      batch.map((appId) => upgradeApp(appId, alreadyAdmin).then((r) => ({ appId, ...r }))),
+      batch.map((appId) => upgradeAppWinget(appId, alreadyAdmin).then((r) => ({ appId, ...r }))),
     )
 
     for (const settled of results) {
@@ -460,4 +455,279 @@ export async function runUpdates(
   }
 
   return { succeeded, failed, errors }
+}
+
+// ─── Homebrew (macOS) ───────────────────────────────────────
+
+/** Brew formula/cask name: lowercase alphanumeric, hyphens, dots, underscores, optional tap prefix */
+const BREW_ID_PATTERN = /^[a-z0-9][a-z0-9@._+-]*(\/[a-z0-9][a-z0-9@._+-]*)?$/
+
+interface BrewOutdatedFormula {
+  name: string
+  installed_versions: string[]
+  current_version: string
+}
+
+interface BrewOutdatedCask {
+  name: string
+  token: string
+  installed_versions: string
+  current_version: string
+}
+
+interface BrewOutdatedJson {
+  formulae: BrewOutdatedFormula[]
+  casks: BrewOutdatedCask[]
+}
+
+interface BrewInfoFormula {
+  name: string
+  installed: { version: string }[]
+  versions: { stable: string }
+}
+
+interface BrewInfoCask {
+  token: string
+  installed: string | null
+  version: string
+}
+
+interface BrewInfoJson {
+  formulae: BrewInfoFormula[]
+  casks: BrewInfoCask[]
+}
+
+async function isBrewAvailable(): Promise<boolean> {
+  try {
+    await execFileAsync('brew', ['--version'], { timeout: 10_000 })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function parseBrewOutdatedJson(stdout: string): UpdatableApp[] {
+  let data: BrewOutdatedJson
+  try {
+    data = JSON.parse(stdout)
+  } catch {
+    return []
+  }
+
+  const apps: UpdatableApp[] = []
+
+  for (const f of data.formulae ?? []) {
+    const currentVersion = f.installed_versions?.[0] ?? ''
+    apps.push({
+      id: f.name,
+      name: f.name,
+      currentVersion,
+      availableVersion: f.current_version,
+      source: 'brew',
+      severity: computeSeverity(currentVersion, f.current_version),
+      selected: true,
+    })
+  }
+
+  for (const c of data.casks ?? []) {
+    const id = c.token || c.name
+    const currentVersion = typeof c.installed_versions === 'string'
+      ? c.installed_versions
+      : ''
+    apps.push({
+      id,
+      name: id,
+      currentVersion,
+      availableVersion: c.current_version,
+      source: 'brew',
+      severity: computeSeverity(currentVersion, c.current_version),
+      selected: true,
+    })
+  }
+
+  return apps
+}
+
+function parseBrewInstalledJson(stdout: string): UpToDateApp[] {
+  let data: BrewInfoJson
+  try {
+    data = JSON.parse(stdout)
+  } catch {
+    return []
+  }
+
+  const apps: UpToDateApp[] = []
+
+  for (const f of data.formulae ?? []) {
+    const version = f.installed?.[0]?.version ?? f.versions?.stable ?? ''
+    if (!version) continue
+    apps.push({ id: f.name, name: f.name, version, source: 'brew' })
+  }
+
+  for (const c of data.casks ?? []) {
+    const version = c.installed ?? c.version ?? ''
+    if (!version) continue
+    apps.push({ id: c.token, name: c.token, version, source: 'brew' })
+  }
+
+  return apps
+}
+
+async function checkForUpdatesBrew(): Promise<UpdateCheckResult> {
+  const available = await isBrewAvailable()
+  if (!available) {
+    return emptyResult(false, 'brew')
+  }
+
+  try {
+    // Get outdated packages as JSON
+    let outdatedStdout = ''
+    try {
+      const result = await execFileAsync(
+        'brew',
+        ['outdated', '--json=v2'],
+        { timeout: 60_000, maxBuffer: 10 * 1024 * 1024 },
+      )
+      outdatedStdout = result.stdout
+    } catch (err: any) {
+      if (err?.stdout) {
+        outdatedStdout = err.stdout
+      } else {
+        return emptyResult(true, 'brew')
+      }
+    }
+
+    const apps = parseBrewOutdatedJson(outdatedStdout)
+
+    // Get all installed packages for the "up to date" list
+    let upToDate: UpToDateApp[] = []
+    try {
+      let infoStdout = ''
+      try {
+        const infoResult = await execFileAsync(
+          'brew',
+          ['info', '--json=v2', '--installed'],
+          { timeout: 60_000, maxBuffer: 10 * 1024 * 1024 },
+        )
+        infoStdout = infoResult.stdout
+      } catch (err: any) {
+        if (err?.stdout) infoStdout = err.stdout
+      }
+      if (infoStdout) {
+        const allApps = parseBrewInstalledJson(infoStdout)
+        const outdatedIds = new Set(apps.map((a) => a.id))
+        upToDate = allApps.filter((a) => !outdatedIds.has(a.id))
+      }
+    } catch {
+      // Non-critical — just skip the up-to-date list
+    }
+
+    return {
+      apps,
+      upToDate,
+      totalCount: apps.length,
+      majorCount: apps.filter((a) => a.severity === 'major').length,
+      minorCount: apps.filter((a) => a.severity === 'minor').length,
+      patchCount: apps.filter((a) => a.severity === 'patch').length,
+      packageManagerAvailable: true,
+      packageManagerName: 'brew',
+    }
+  } catch {
+    return emptyResult(true, 'brew')
+  }
+}
+
+/** Attempt a single brew upgrade */
+async function attemptBrewUpgrade(
+  name: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!BREW_ID_PATTERN.test(name) || name.length > 200) {
+    return { success: false, error: 'Invalid package name format' }
+  }
+
+  try {
+    await execFileAsync(
+      'brew',
+      ['upgrade', name],
+      { timeout: 5 * 60 * 1000, maxBuffer: 10 * 1024 * 1024 },
+    )
+    return { success: true }
+  } catch (err: any) {
+    const output = cleanOutput(err?.stderr || err?.stdout || err?.message || 'Unknown error')
+    const lastLine = output.trim().split('\n').pop() || 'Upgrade failed'
+    return { success: false, error: lastLine.length > 200 ? lastLine.slice(0, 200) + '...' : lastLine }
+  }
+}
+
+async function runUpdatesBrew(
+  appIds: string[],
+  onProgress: (progress: UpdateProgress) => void,
+): Promise<UpdateResult> {
+  let succeeded = 0
+  let failed = 0
+  const errors: UpdateResult['errors'] = []
+  const total = appIds.length
+
+  // brew doesn't handle parallel upgrades well — run sequentially
+  for (let i = 0; i < total; i++) {
+    const appId = appIds[i]
+    onProgress({
+      phase: 'updating',
+      current: i + 1,
+      total,
+      currentApp: appId,
+      percent: Math.round((i / total) * 100),
+      status: 'in-progress',
+    })
+
+    const result = await attemptBrewUpgrade(appId)
+
+    if (result.success) {
+      succeeded++
+      onProgress({
+        phase: 'updating',
+        current: i + 1,
+        total,
+        currentApp: appId,
+        percent: Math.round(((i + 1) / total) * 100),
+        status: 'done',
+      })
+    } else {
+      failed++
+      errors.push({ appId, name: appId, reason: result.error || 'Upgrade failed' })
+      onProgress({
+        phase: 'updating',
+        current: i + 1,
+        total,
+        currentApp: appId,
+        percent: Math.round(((i + 1) / total) * 100),
+        status: 'failed',
+      })
+    }
+  }
+
+  return { succeeded, failed, errors }
+}
+
+// ─── Platform-dispatched exports ────────────────────────────
+
+export async function checkForUpdates(): Promise<UpdateCheckResult> {
+  if (process.platform === 'darwin') return checkForUpdatesBrew()
+  if (process.platform === 'win32') return checkForUpdatesWinget()
+  return emptyResult(false, null)
+}
+
+export async function runUpdates(
+  appIds: string[],
+  onProgress: (progress: UpdateProgress) => void,
+): Promise<UpdateResult> {
+  if (process.platform === 'darwin') return runUpdatesBrew(appIds, onProgress)
+  if (process.platform === 'win32') return runUpdatesWinget(appIds, onProgress)
+  return { succeeded: 0, failed: 0, errors: [] }
+}
+
+/** Validate an app ID for the current platform's package manager */
+export function isValidAppId(id: string): boolean {
+  if (process.platform === 'darwin') return BREW_ID_PATTERN.test(id) && id.length <= 200
+  return /^[\w][\w.\-]{0,200}$/.test(id)
 }

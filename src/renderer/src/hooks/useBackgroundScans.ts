@@ -23,7 +23,8 @@ export function useBackgroundScans(): void {
         const s = useUpdaterStore.getState()
         s.setApps(result.apps)
         s.setUpToDate(result.upToDate)
-        s.setWingetAvailable(result.wingetAvailable)
+        s.setPackageManagerAvailable(result.packageManagerAvailable)
+        s.setPackageManagerName(result.packageManagerName)
         s.setHasChecked(true)
       } catch {
         // Silent — don't set error so the page still shows its initial state

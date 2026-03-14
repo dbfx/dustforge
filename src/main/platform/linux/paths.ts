@@ -16,6 +16,16 @@ export function createLinuxPaths(): PlatformPaths {
         { path: '/var/tmp', subcategory: 'Persistent Temp Files' },
         { path: join(CACHE, 'thumbnails'), subcategory: 'Thumbnail Cache' },
         { path: '/var/crash', subcategory: 'Crash Reports', needsAdmin: true },
+        // Journal logs
+        { path: '/var/log/journal', subcategory: 'Journal Logs', needsAdmin: true },
+        // Package manager caches
+        { path: '/var/cache/apt/archives', subcategory: 'APT Package Cache', needsAdmin: true },
+        { path: '/var/cache/dnf', subcategory: 'DNF Package Cache', needsAdmin: true },
+        { path: '/var/cache/pacman/pkg', subcategory: 'Pacman Package Cache', needsAdmin: true },
+        // Snap caches
+        { path: '/var/lib/snapd/cache', subcategory: 'Snap Cache', needsAdmin: true },
+        // Flatpak caches
+        { path: join(HOME, '.var', 'app'), subcategory: 'Flatpak App Cache' },
       ]
     },
 

@@ -165,7 +165,7 @@ async function scanRecycleBin(): Promise<ScanResult[]> {
   if (trashPath) {
     // macOS / Linux: scan trash directory
     if (!existsSync(trashPath)) return []
-    const result = await scanDirectory(trashPath, CleanerType.RecycleBin, 'Trash')
+    const result = await scanDirectory(trashPath, CleanerType.RecycleBin, 'Trash', 0)
     if (result.items.length > 0) { cacheItems(result.items); return [result] }
     return []
   }
@@ -685,7 +685,7 @@ async function handleUpdates(args: string[], json: boolean): Promise<void> {
     if (json) {
       out(result, true)
     } else {
-      if (!result.wingetAvailable) { log('  winget is not available on this system'); return }
+      if (!result.packageManagerAvailable) { log(`  ${result.packageManagerName ?? 'package manager'} is not available on this system`); return }
       log(`Found ${result.apps.length} available updates, ${result.upToDate.length} up to date`)
       for (const a of result.apps) log(`  ${a.name}: ${a.currentVersion} → ${a.availableVersion} (${a.severity})`)
     }

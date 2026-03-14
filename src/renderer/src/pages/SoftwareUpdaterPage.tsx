@@ -72,7 +72,8 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
   const updateResult = useUpdaterStore((s) => s.updateResult)
   const error = useUpdaterStore((s) => s.error)
   const hasChecked = useUpdaterStore((s) => s.hasChecked)
-  const wingetAvailable = useUpdaterStore((s) => s.wingetAvailable)
+  const packageManagerAvailable = useUpdaterStore((s) => s.packageManagerAvailable)
+  const packageManagerName = useUpdaterStore((s) => s.packageManagerName)
   const searchQuery = useUpdaterStore((s) => s.searchQuery)
   const sortField = useUpdaterStore((s) => s.sortField)
   const sortDirection = useUpdaterStore((s) => s.sortDirection)
@@ -130,10 +131,11 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       const s = useUpdaterStore.getState()
       s.setApps(result.apps)
       s.setUpToDate(result.upToDate)
-      s.setWingetAvailable(result.wingetAvailable)
+      s.setPackageManagerAvailable(result.packageManagerAvailable)
+      s.setPackageManagerName(result.packageManagerName)
       s.setHasChecked(true)
 
-      if (result.wingetAvailable && result.totalCount === 0) {
+      if (result.packageManagerAvailable && result.totalCount === 0) {
         toast.success('All software is up to date!')
       } else if (result.totalCount > 0) {
         toast.info(`Found ${result.totalCount} update${result.totalCount !== 1 ? 's' : ''} available`)
@@ -259,7 +261,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       {!embedded && (
         <PageHeader
           title="Software Updater"
-          description="Check for outdated software and install updates via winget"
+          description="Check for outdated software and install updates"
         />
       )}
 
@@ -399,8 +401,8 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
         )}
       </div>
 
-      {/* Winget not available warning */}
-      {hasChecked && !wingetAvailable && (
+      {/* Package manager not available warning */}
+      {hasChecked && !packageManagerAvailable && (
         <div
           className="mb-5 flex items-center gap-3 rounded-2xl px-5 py-4"
           style={{
@@ -410,10 +412,24 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
         >
           <AlertTriangle className="h-5 w-5 shrink-0 text-red-400" strokeWidth={1.8} />
           <p className="text-[12px] text-zinc-400">
-            <span className="font-semibold text-red-400">winget not found</span> — Windows Package
-            Manager is required. Install it from the{' '}
-            <span className="text-zinc-300">Microsoft Store</span> (search "App Installer") or from
-            GitHub.
+            {packageManagerName === 'brew' ? (
+              <>
+                <span className="font-semibold text-red-400">brew not found</span> — Homebrew is
+                required. Install it from{' '}
+                <span className="text-zinc-300">brew.sh</span>.
+              </>
+            ) : packageManagerName === 'winget' ? (
+              <>
+                <span className="font-semibold text-red-400">winget not found</span> — Windows Package
+                Manager is required. Install it from the{' '}
+                <span className="text-zinc-300">Microsoft Store</span> (search "App Installer") or from
+                GitHub.
+              </>
+            ) : (
+              <span className="font-semibold text-red-400">
+                No supported package manager found on this platform.
+              </span>
+            )}
           </p>
         </div>
       )}
@@ -428,7 +444,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       )}
 
       {/* Stat cards */}
-      {hasChecked && wingetAvailable && apps.length > 0 && (
+      {hasChecked && packageManagerAvailable && apps.length > 0 && (
         <div className="grid grid-cols-4 gap-3 mb-5">
           <StatCard icon={Package} label="Outdated Apps" value={apps.length} variant="accent" />
           <StatCard icon={AlertTriangle} label="Major Updates" value={majorCount} variant="danger" />
@@ -578,7 +594,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
         <EmptyState
           icon={RefreshCw}
           title="No update check performed"
-          description="Scan your installed software to find available updates via Windows Package Manager."
+          description="Scan your installed software to find available updates."
           action={
             <button
               onClick={handleCheck}
@@ -602,13 +618,13 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
           <Loader2 className="h-10 w-10 animate-spin text-amber-400 mb-4" strokeWidth={1.5} />
           <p className="text-[13px] text-zinc-400">Checking for updates...</p>
           <p className="text-[11px] mt-1" style={{ color: '#52525e' }}>
-            This may take a moment while winget queries available updates
+            This may take a moment while your package manager queries available updates
           </p>
         </div>
       )}
 
       {/* All up to date */}
-      {hasChecked && !loading && apps.length === 0 && wingetAvailable && (
+      {hasChecked && !loading && apps.length === 0 && packageManagerAvailable && (
         <EmptyState
           icon={Sparkles}
           title="Everything is up to date!"
@@ -642,7 +658,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       )}
 
       {/* Up to date apps */}
-      {hasChecked && !loading && wingetAvailable && upToDate.length > 0 && (
+      {hasChecked && !loading && packageManagerAvailable && upToDate.length > 0 && (
         <div className="mb-6">
           <button
             onClick={() => setShowUpToDate(!showUpToDate)}

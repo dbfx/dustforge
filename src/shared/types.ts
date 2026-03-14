@@ -593,7 +593,8 @@ export interface UpdateCheckResult {
   majorCount: number
   minorCount: number
   patchCount: number
-  wingetAvailable: boolean
+  packageManagerAvailable: boolean
+  packageManagerName: 'winget' | 'brew' | null
 }
 
 export interface UpdateProgress {

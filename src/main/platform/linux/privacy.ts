@@ -7,12 +7,14 @@ const execFileAsync = promisify(execFile)
 export function createLinuxPrivacy(): PlatformPrivacy {
   return {
     getSettings(): PrivacySettingDef[] {
-      // Only return GNOME settings if running GNOME
       const desktop = process.env.XDG_CURRENT_DESKTOP?.toLowerCase() ?? ''
-      if (!desktop.includes('gnome') && !desktop.includes('unity')) {
-        return []
+      if (desktop.includes('gnome') || desktop.includes('unity')) {
+        return LINUX_PRIVACY_SETTINGS
       }
-      return LINUX_PRIVACY_SETTINGS
+      if (desktop.includes('kde') || desktop.includes('plasma')) {
+        return KDE_PRIVACY_SETTINGS
+      }
+      return []
     },
   }
 }
@@ -118,6 +120,88 @@ const LINUX_PRIVACY_SETTINGS: PrivacySettingDef[] = [
         'org.freedesktop.NetworkManager',
         'ConnectivityCheckEnabled', 'b', 'false',
       ], { timeout: 5_000 })
+    },
+  },
+]
+
+// ─── KDE Plasma helpers ──────────────────────────────────
+
+async function kdeConfigRead(file: string, group: string, key: string): Promise<string> {
+  const { stdout } = await execFileAsync('/usr/bin/kreadconfig5', [
+    '--file', file, '--group', group, '--key', key,
+  ], { timeout: 5_000 })
+  return stdout.trim()
+}
+
+async function kdeConfigWrite(file: string, group: string, key: string, value: string): Promise<void> {
+  await execFileAsync('/usr/bin/kwriteconfig5', [
+    '--file', file, '--group', group, '--key', key, value,
+  ], { timeout: 5_000 })
+}
+
+const KDE_PRIVACY_SETTINGS: PrivacySettingDef[] = [
+  {
+    id: 'kde-usage-stats',
+    category: 'telemetry',
+    label: 'Usage Statistics',
+    description: 'Disable KDE Plasma user feedback',
+    requiresAdmin: false,
+    async check() {
+      try {
+        const val = await kdeConfigRead('PlasmaUserFeedback', 'Global', 'FeedbackLevel')
+        return val === '0'
+      } catch { return false }
+    },
+    async apply() {
+      await kdeConfigWrite('PlasmaUserFeedback', 'Global', 'FeedbackLevel', '0')
+    },
+  },
+  {
+    id: 'kde-recent-files',
+    category: 'services',
+    label: 'Recent Files Tracking',
+    description: 'Disable KDE activity history for recent files',
+    requiresAdmin: false,
+    async check() {
+      try {
+        const val = await kdeConfigRead('kactivitymanagerdrc', 'Plugins', 'org.kde.ActivityManager.ResourceScoringEnabled')
+        return val === 'false'
+      } catch { return false }
+    },
+    async apply() {
+      await kdeConfigWrite('kactivitymanagerdrc', 'Plugins', 'org.kde.ActivityManager.ResourceScoringEnabled', 'false')
+    },
+  },
+  {
+    id: 'kde-baloo',
+    category: 'services',
+    label: 'File Indexing (Baloo)',
+    description: 'Disable Baloo file indexer',
+    requiresAdmin: false,
+    async check() {
+      try {
+        const val = await kdeConfigRead('baloofilerc', 'Basic Settings', 'Indexing-Enabled')
+        return val === 'false'
+      } catch { return false }
+    },
+    async apply() {
+      await kdeConfigWrite('baloofilerc', 'Basic Settings', 'Indexing-Enabled', 'false')
+    },
+  },
+  {
+    id: 'kde-crash-reporting',
+    category: 'telemetry',
+    label: 'Crash Reporting (DrKonqi)',
+    description: 'Disable KDE crash report handler',
+    requiresAdmin: false,
+    async check() {
+      try {
+        const val = await kdeConfigRead('drkonqirc', 'General', 'Enabled')
+        return val === 'false'
+      } catch { return false }
+    },
+    async apply() {
+      await kdeConfigWrite('drkonqirc', 'General', 'Enabled', 'false')
     },
   },
 ]

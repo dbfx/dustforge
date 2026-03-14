@@ -13,7 +13,8 @@ interface SoftwareUpdaterState {
   updateResult: UpdateResult | null
   error: string | null
   hasChecked: boolean
-  wingetAvailable: boolean
+  packageManagerAvailable: boolean
+  packageManagerName: string | null
   searchQuery: string
   sortField: SortField
   sortDirection: 'asc' | 'desc'
@@ -27,7 +28,8 @@ interface SoftwareUpdaterState {
   setUpdateResult: (result: UpdateResult | null) => void
   setError: (error: string | null) => void
   setHasChecked: (checked: boolean) => void
-  setWingetAvailable: (available: boolean) => void
+  setPackageManagerAvailable: (available: boolean) => void
+  setPackageManagerName: (name: string | null) => void
   setSearchQuery: (query: string) => void
   setSortField: (field: SortField) => void
   setSortDirection: (dir: 'asc' | 'desc') => void
@@ -50,7 +52,8 @@ export const useUpdaterStore = create<SoftwareUpdaterState>((set) => ({
   updateResult: null,
   error: null,
   hasChecked: false,
-  wingetAvailable: true,
+  packageManagerAvailable: true,
+  packageManagerName: null,
   searchQuery: '',
   sortField: 'name',
   sortDirection: 'asc',
@@ -64,7 +67,8 @@ export const useUpdaterStore = create<SoftwareUpdaterState>((set) => ({
   setUpdateResult: (updateResult) => set({ updateResult }),
   setError: (error) => set({ error }),
   setHasChecked: (hasChecked) => set({ hasChecked }),
-  setWingetAvailable: (wingetAvailable) => set({ wingetAvailable }),
+  setPackageManagerAvailable: (packageManagerAvailable) => set({ packageManagerAvailable }),
+  setPackageManagerName: (packageManagerName) => set({ packageManagerName }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setSortField: (sortField) =>
     set((state) => ({
@@ -99,7 +103,8 @@ export const useUpdaterStore = create<SoftwareUpdaterState>((set) => ({
       updateResult: null,
       error: null,
       hasChecked: false,
-      wingetAvailable: true,
+      packageManagerAvailable: true,
+      packageManagerName: null,
       searchQuery: '',
       sortField: 'name',
       sortDirection: 'asc',
