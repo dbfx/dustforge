@@ -1606,17 +1606,25 @@ class CloudAgentService {
 
     const ifaces = (Array.isArray(interfaces) ? interfaces : [interfaces])
       .filter((i) => i.ip4 || i.ip6)
-      .map((i) => ({
-        name: i.iface,
-        type: i.type,
-        ip4: i.ip4 || null,
-        ip4subnet: i.ip4subnet || null,
-        ip6: i.ip6 || null,
-        mac: i.mac,
-        speed: i.speed,
-        operstate: i.operstate,
-        dhcp: i.dhcp,
-      }))
+      .map((i) => {
+        // Virtual/tunnel adapters (e.g. Tailscale/WireGuard) often report
+        // operstate "down" even when active. If the interface has a valid IP
+        // assigned, treat it as up.
+        const hasValidIp = !!(i.ip4 && i.ip4 !== '0.0.0.0') || !!(i.ip6 && i.ip6 !== '::')
+        const operstate = i.operstate === 'down' && hasValidIp ? 'up' : i.operstate
+
+        return {
+          name: i.iface,
+          type: i.type,
+          ip4: i.ip4 || null,
+          ip4subnet: i.ip4subnet || null,
+          ip6: i.ip6 || null,
+          mac: i.mac,
+          speed: i.speed,
+          operstate,
+          dhcp: i.dhcp,
+        }
+      })
 
     await this.postCommandResult(requestId, true, {
       interfaces: ifaces,
