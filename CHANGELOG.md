@@ -1,3 +1,9 @@
+# [2.13.0](https://github.com/dbfx/dustforge/compare/v2.12.0...v2.13.0) (2026-03-14)
+
+
+### Features
+
+* add macOS system hardening and extract shared config utils ([684df60](https://github.com/dbfx/dustforge/commit/684df60852aa96149c244432a7d99539cb8c33ba))
 # [2.12.0](https://github.com/dbfx/dustforge/compare/v2.11.0...v2.12.0) (2026-03-14)
 
 
