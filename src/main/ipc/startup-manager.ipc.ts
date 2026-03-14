@@ -221,7 +221,7 @@ async function getScheduledLogonTasks(): Promise<StartupItem[]> {
             $hasLogon = $true; break
           }
         }
-        if ($hasLogon -and $task.TaskPath -notmatch '^\\\\Microsoft\\\\' -and $task.TaskPath -notmatch '^\\\\ASUS\\\\') {
+        if ($hasLogon -and $task.TaskName -ne 'DustForgeStartup' -and $task.TaskPath -notmatch '^\\\\Microsoft\\\\' -and $task.TaskPath -notmatch '^\\\\ASUS\\\\') {
           $action = ($task.Actions | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskExecAction' } | Select-Object -First 1)
           if ($action) {
             $exe = $action.Execute
@@ -383,7 +383,26 @@ export async function toggleStartupItem(
       // Validate registry location against whitelist
       if (!ALLOWED_STARTUP_LOCATIONS.has(location)) return false
 
+      // Determine the matching StartupApproved key so Windows itself
+      // honours the enable/disable state (same mechanism Task Manager uses).
+      const approvedKey = source === 'registry-hkcu'
+        ? 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run'
+        : 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run'
+
       if (!enabled) {
+        // Write a "disabled by user" marker (first byte 03) to StartupApproved.
+        // This is the authoritative signal Windows checks — even if the Run value
+        // is re-created by the app, Windows will skip it while the marker is 03.
+        // The value is a 12-byte REG_BINARY: status byte + 8-byte timestamp + padding.
+        try {
+          await execFileAsync('reg', [
+            'add', approvedKey, '/v', name, '/t', 'REG_BINARY',
+            '/d', '030000000000000000000000', '/f'
+          ], { timeout: 10000 })
+        } catch {
+          // May fail if key doesn't exist yet — fall through to Run deletion
+        }
+
         try {
           await execFileAsync('reg', [
             'delete', location, '/v', name, '/f'
@@ -414,6 +433,16 @@ export async function toggleStartupItem(
           ], { timeout: 10000 })
         } catch {
           // Registry op may fail for permissions — still persist state
+        }
+
+        // Write an "enabled" marker (first byte 02) to StartupApproved
+        try {
+          await execFileAsync('reg', [
+            'add', approvedKey, '/v', name, '/t', 'REG_BINARY',
+            '/d', '020000000000000000000000', '/f'
+          ], { timeout: 10000 })
+        } catch {
+          // Non-critical — Run key entry is sufficient for most apps
         }
 
         await withDisabledFileLock(() => {

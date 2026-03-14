@@ -1,5 +1,9 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell, Tray } from 'electron'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { join } from 'path'
+
+const execFileAsync = promisify(execFile)
 import { IPC } from '../shared/channels'
 import { registerCleanerIpc } from './ipc'
 import { getSettings } from './services/settings-store'
@@ -56,14 +60,60 @@ function getIconPath(): string {
     : join(__dirname, `../../resources/icon.${ext}`)
 }
 
+const TASK_NAME = 'DustForgeStartup'
+
+async function applyAutoLaunchWin32(enabled: boolean): Promise<void> {
+  // Use Task Scheduler with RunLevel Highest so the app starts elevated at
+  // logon — this avoids the Windows restriction that silently skips Run-key
+  // entries whose exe manifest requires (or previously required) admin.
+  // A scheduled task with Highest run-level triggers a one-time admin consent
+  // when created but then launches silently at every logon.
+  const exePath = app.getPath('exe')
+
+  if (enabled) {
+    // Remove any stale task first, then create a fresh one
+    try {
+      await execFileAsync('schtasks', [
+        '/Delete', '/TN', TASK_NAME, '/F'
+      ], { timeout: 10000 })
+    } catch { /* task may not exist yet */ }
+
+    await execFileAsync('schtasks', [
+      '/Create',
+      '/TN', TASK_NAME,
+      '/TR', `"${exePath}" --startup`,
+      '/SC', 'ONLOGON',
+      '/RL', 'HIGHEST',
+      '/IT',   // run only when user is logged on (interactive)
+      '/F',    // overwrite if exists
+    ], { timeout: 10000 })
+  } else {
+    try {
+      await execFileAsync('schtasks', [
+        '/Delete', '/TN', TASK_NAME, '/F'
+      ], { timeout: 10000 })
+    } catch { /* task may not exist */ }
+  }
+
+  // Also clear any leftover Electron Run-key entry so it doesn't conflict
+  app.setLoginItemSettings({ openAtLogin: false })
+}
+
 function applyAutoLaunch(enabled: boolean): void {
   // Only register auto-launch when packaged — in dev mode this would register
   // the bare Electron binary, causing a generic "Getting Started" window on reboot.
   if (!app.isPackaged) return
-  app.setLoginItemSettings({
-    openAtLogin: enabled,
-    args: ['--startup']
-  })
+
+  if (process.platform === 'win32') {
+    applyAutoLaunchWin32(enabled).catch((err) => {
+      console.error('Failed to configure auto-launch via Task Scheduler:', err)
+    })
+  } else {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      args: ['--startup']
+    })
+  }
 }
 
 function createTray(): void {
@@ -145,7 +195,10 @@ function createWindow(): void {
   })
 
   const settings = getSettings()
+  // Detect startup launch: --startup flag (Windows Task Scheduler / Linux),
+  // or macOS wasOpenedAtLogin (since macOS 13+ drops argv from login items).
   const isStartupLaunch = process.argv.includes('--startup')
+    || (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAtLogin)
 
   mainWindow.on('ready-to-show', () => {
     // If launched at startup with minimize-to-tray, stay hidden

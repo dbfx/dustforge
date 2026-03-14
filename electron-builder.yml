@@ -25,11 +25,11 @@ win:
       arch:
         - x64
   icon: resources/icon.ico
-  requestedExecutionLevel: requireAdministrator
+  requestedExecutionLevel: asInvoker
 
 nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
+  oneClick: true
+  allowToChangeInstallationDirectory: false
   deleteAppDataOnUninstall: false
   shortcutName: DustForge
   artifactName: DustForge-Setup-${version}.${ext}
