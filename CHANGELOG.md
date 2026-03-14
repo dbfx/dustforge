@@ -1,3 +1,9 @@
+## [2.9.1](https://github.com/dbfx/dustforge/compare/v2.9.0...v2.9.1) (2026-03-14)
+
+
+### Features
+
+* add daemon auto-update with auto-restart and Linux install script ([9a52d13](https://github.com/dbfx/dustforge/commit/9a52d13cb615e624f7e33d97a585318bed4b6999))
 # [2.9.0](https://github.com/dbfx/dustforge/compare/v2.8.2...v2.9.0) (2026-03-14)
 
 
