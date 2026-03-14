@@ -26,7 +26,7 @@ import { getHistory, addHistoryEntry, clearHistory } from '../services/history-s
 import { getCloudHistory, clearCloudHistory } from '../services/cloud-history-store'
 import { validateSettingsPartial, validateHistoryEntry } from '../services/ipc-validation'
 import { createRestorePoint } from '../services/restore-point'
-import { checkForUpdates, downloadUpdate, installUpdate, getUpdateStatus, setAutoDownload } from '../services/auto-updater'
+import { checkForUpdates, downloadUpdate, installUpdate, getUpdateStatus, setAutoDownload, updateCheckInterval } from '../services/auto-updater'
 
 export type WindowGetter = () => BrowserWindow | null
 
@@ -73,6 +73,9 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
     if (typeof validated.autoUpdate === 'boolean') {
       setAutoDownload(validated.autoUpdate)
     }
+    if (typeof validated.updateCheckIntervalHours === 'number') {
+      updateCheckInterval(validated.updateCheckIntervalHours)
+    }
     return { success: true }
   })
 
@@ -104,9 +107,9 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
         stdio: 'ignore',
       }).unref()
     } else if (process.platform === 'darwin') {
-      // AppleScript: set a variable so quoted form of handles special chars safely
-      const escaped = exePath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-      const script = `do shell script "${escaped}" with administrator privileges`
+      // Use AppleScript's "quoted form of" to safely handle any special
+      // characters in the path (quotes, backslashes, spaces, single quotes, etc.)
+      const script = `set appPath to "${exePath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}" as POSIX file\ndo shell script quoted form of POSIX path of appPath with administrator privileges`
       spawn('osascript', ['-e', script], {
         detached: true,
         stdio: 'ignore',

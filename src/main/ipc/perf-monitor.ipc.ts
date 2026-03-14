@@ -16,9 +16,17 @@ export function registerPerfMonitorIpc(): void {
   })
 
   ipcMain.handle(IPC.PERF_KILL_PROCESS, (_event, pid: number) => {
-    // Validate pid is a positive integer to prevent killing arbitrary/system processes
+    // Validate pid is a positive integer and not a critical system process
     if (!Number.isInteger(pid) || pid <= 0) {
       return { success: false, error: 'Invalid process ID' }
+    }
+    // Block PID 0 (System Idle / kernel), PID 1 (init/launchd), PID 4 (Windows System)
+    if (pid <= 4) {
+      return { success: false, error: 'Cannot kill critical system process' }
+    }
+    // Prevent the app from killing itself
+    if (pid === process.pid) {
+      return { success: false, error: 'Cannot kill own process' }
     }
     return service.killProcess(pid)
   })

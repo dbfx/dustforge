@@ -6,6 +6,7 @@ import type { UpdateStatus } from '../../shared/types'
 
 let status: UpdateStatus = { state: 'idle' }
 let daemonMode = false
+let checkInterval: ReturnType<typeof setInterval> | null = null
 
 function broadcast(s: UpdateStatus): void {
   status = s
@@ -63,8 +64,14 @@ export function initAutoUpdater(opts: InitOptions = {}): void {
   autoUpdater.on('update-downloaded', (info) => {
     broadcast({ state: 'downloaded', version: info.version })
     if (daemonMode) {
-      broadcast({ state: 'downloaded', version: info.version })
       process.stdout.write(`[${new Date().toISOString()}] [updater] Installing v${info.version} and restarting...\n`)
+      autoUpdater.quitAndInstall(false, true)
+      return
+    }
+    // GUI mode: auto-restart if the user opted in
+    const current = getSettings()
+    if (current.autoRestart) {
+      console.log(`Auto-updater: auto-restart enabled, installing v${info.version} and restarting...`)
       autoUpdater.quitAndInstall(false, true)
     }
   })
@@ -77,6 +84,28 @@ export function initAutoUpdater(opts: InitOptions = {}): void {
   autoUpdater.checkForUpdates().catch((err) => {
     console.error('Auto-updater check failed:', err?.message || err)
   })
+
+  // Periodic background checks
+  startPeriodicChecks(settings.updateCheckIntervalHours)
+}
+
+function startPeriodicChecks(intervalHours: number): void {
+  if (checkInterval) clearInterval(checkInterval)
+  if (intervalHours <= 0) return
+  const ms = intervalHours * 60 * 60 * 1000
+  checkInterval = setInterval(() => {
+    const settings = getSettings()
+    autoUpdater.autoDownload = daemonMode || settings.autoUpdate
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error('Auto-updater periodic check failed:', err?.message || err)
+    })
+  }, ms)
+}
+
+/** Call when the user changes updateCheckIntervalHours at runtime */
+export function updateCheckInterval(hours: number): void {
+  if (!app.isPackaged) return
+  startPeriodicChecks(hours)
 }
 
 export function checkForUpdates(): Promise<void> {

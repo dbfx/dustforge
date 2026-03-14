@@ -176,8 +176,21 @@ export function SettingsPage() {
         <Row label="Show notifications" desc="Display a notification when operations complete">
           <Toggle checked={settings.showNotificationOnComplete} onChange={(v) => save({ showNotificationOnComplete: v })} />
         </Row>
-        <Row label="Auto-update" desc="Automatically download and install updates" last>
+        <Row label="Auto-update" desc="Automatically download and install updates">
           <Toggle checked={settings.autoUpdate} onChange={(v) => save({ autoUpdate: v })} />
+        </Row>
+        <Row label="Auto-restart for updates" desc="Restart automatically when an update is downloaded">
+          <Toggle checked={settings.autoRestart} onChange={(v) => save({ autoRestart: v })} />
+        </Row>
+        <Row label="Update check interval" desc="How often to check for updates in the background" last>
+          <select value={settings.updateCheckIntervalHours}
+            onChange={(e) => save({ updateCheckIntervalHours: Number(e.target.value) })}
+            className={selectStyle} style={selectBorder}>
+            <option value={1}>Every hour</option>
+            <option value={4}>Every 4 hours</option>
+            <option value={12}>Every 12 hours</option>
+            <option value={24}>Once a day</option>
+          </select>
         </Row>
       </Section>
 

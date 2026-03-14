@@ -479,6 +479,10 @@ export interface DustForgeSettings {
   showNotificationOnComplete: boolean
   runAtStartup: boolean
   autoUpdate: boolean
+  /** Automatically restart the app to apply downloaded updates */
+  autoRestart: boolean
+  /** How often (in hours) to check for updates in the background */
+  updateCheckIntervalHours: number
   cleaner: {
     skipRecentMinutes: number
     secureDelete: boolean

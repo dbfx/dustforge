@@ -13,7 +13,8 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
 
   const allowedTopKeys = new Set([
     'minimizeToTray', 'showNotificationOnComplete', 'runAtStartup',
-    'autoUpdate', 'cleaner', 'exclusions', 'schedule', 'cloud'
+    'autoUpdate', 'autoRestart', 'updateCheckIntervalHours',
+    'cleaner', 'exclusions', 'schedule', 'cloud'
   ])
 
   for (const key of Object.keys(obj)) {
@@ -21,9 +22,14 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
   }
 
   // Validate boolean fields have correct types
-  const boolKeys = ['minimizeToTray', 'showNotificationOnComplete', 'runAtStartup', 'autoUpdate'] as const
+  const boolKeys = ['minimizeToTray', 'showNotificationOnComplete', 'runAtStartup', 'autoUpdate', 'autoRestart'] as const
   for (const bk of boolKeys) {
     if (bk in obj && obj[bk] !== undefined && typeof obj[bk] !== 'boolean') return null
+  }
+
+  // Validate updateCheckIntervalHours is a reasonable number
+  if ('updateCheckIntervalHours' in obj && obj.updateCheckIntervalHours !== undefined) {
+    if (typeof obj.updateCheckIntervalHours !== 'number' || obj.updateCheckIntervalHours < 1 || obj.updateCheckIntervalHours > 168) return null
   }
 
   // Validate exclusions is an array of safe strings if present

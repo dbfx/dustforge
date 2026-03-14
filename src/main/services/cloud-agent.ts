@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import * as si from 'systeminformation'
 import { hostname } from 'os'
+import { lookup } from 'dns/promises'
 import Pusher from 'pusher-js'
 import { getSettings, setSettings, getMachineId } from './settings-store'
 import { scanDirectory, cleanItems } from './file-utils'
@@ -61,6 +62,37 @@ function isAllowedMalwarePath(filePath: string): boolean {
   return getPlatform().malwarePaths.isAllowedMalwarePath(filePath)
 }
 
+/**
+ * Resolve a URL's hostname and reject if it resolves to a private/loopback IP.
+ * Prevents DNS rebinding attacks where a domain initially resolves to a public
+ * IP at settings-save time but later rebinds to 127.0.0.1 or a LAN address.
+ */
+async function assertPublicResolution(urlStr: string): Promise<void> {
+  if (!app.isPackaged) return // skip in dev builds
+
+  const host = new URL(urlStr).hostname
+  // Skip for IP literals — already validated at settings-save time
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.startsWith('[')) return
+
+  try {
+    const { address } = await lookup(host)
+    if (
+      address === '127.0.0.1' || address === '::1' || address === '0.0.0.0' ||
+      address.startsWith('10.') || address.startsWith('192.168.') ||
+      address.startsWith('169.254.') ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(address) ||
+      address.startsWith('fc') || address.startsWith('fd') ||
+      address.startsWith('fe8') || address.startsWith('fe9') ||
+      address.startsWith('fea') || address.startsWith('feb')
+    ) {
+      throw new Error(`DNS rebinding blocked: ${host} resolved to private address ${address}`)
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('DNS rebinding')) throw err
+    // DNS lookup failures are non-fatal — the fetch itself will fail if unreachable
+  }
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
@@ -92,7 +124,7 @@ class CloudAgentService {
   private runningCommands: number = 0
   private healthReportRunning: boolean = false
   private lastCommandFinishedAt: number = 0
-  private processedRequestIds = new Set<string>()
+  private processedRequestIds = new Map<string, number>() // requestId → timestamp
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private reconnectAttempts: number = 0
   private lastErrorReason: string | null = null
@@ -469,6 +501,7 @@ class CloudAgentService {
   /** Discover server config from GET {serverUrl}/api/connect */
   private async discover(): Promise<void> {
     cloudLog('DEBUG', `Discovery: GET ${this.serverUrl}/api/connect`)
+    await assertPublicResolution(this.serverUrl)
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 15_000)
     let res: Response
@@ -497,6 +530,7 @@ class CloudAgentService {
     if (!this.connectConfig) throw new Error('Not connected — no server config')
     const url = `${this.connectConfig.api}${path}`
     cloudLog('DEBUG', `POST ${url}`)
+    await assertPublicResolution(url)
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 30_000)
     let res: Response
@@ -593,16 +627,22 @@ class CloudAgentService {
     if (!('type' in cmd) || !allowedTypes.has(cmd.type)) return
     if (!('requestId' in cmd) || typeof cmd.requestId !== 'string' || cmd.requestId.length > 200) return
 
-    // Deduplicate — Pusher reconnects can re-deliver the same event
+    // Deduplicate — Pusher reconnects can re-deliver the same event.
+    // Uses a time-based TTL (10 minutes) so entries expire naturally and
+    // an attacker cannot poison the set by flooding fake request IDs to
+    // evict legitimate ones.
+    const now = Date.now()
+    const REQUEST_ID_TTL_MS = 10 * 60 * 1000 // 10 minutes
     if (this.processedRequestIds.has(cmd.requestId)) {
       cloudLog('DEBUG', `Ignoring duplicate command requestId=${cmd.requestId}`)
       return
     }
-    this.processedRequestIds.add(cmd.requestId)
-    // Prevent unbounded growth
-    if (this.processedRequestIds.size > 500) {
-      const keep = [...this.processedRequestIds].slice(-250)
-      this.processedRequestIds = new Set(keep)
+    this.processedRequestIds.set(cmd.requestId, now)
+    // Evict expired entries (older than TTL)
+    if (this.processedRequestIds.size > 200) {
+      for (const [id, ts] of this.processedRequestIds) {
+        if (now - ts > REQUEST_ID_TTL_MS) this.processedRequestIds.delete(id)
+      }
     }
 
     this.lastCommandAt = new Date().toISOString()
@@ -1758,7 +1798,16 @@ class CloudAgentService {
       await this.postCommandResult(requestId, false, undefined, 'Invalid source')
       return
     }
-    cloudLog('INFO', `Startup toggle: ${name} → ${enabled ? 'enabled' : 'disabled'}`)
+    // Security: cloud commands may only DISABLE existing startup items, not
+    // enable (re-create) them.  Re-enabling writes the `command` string into
+    // the registry / autostart file, so a compromised cloud server could
+    // inject arbitrary autorun commands.  Disabling only deletes an existing
+    // entry — safe even with untrusted parameters.
+    if (enabled) {
+      await this.postCommandResult(requestId, false, undefined, 'Remote enable of startup items is not permitted — only disable is allowed via cloud')
+      return
+    }
+    cloudLog('INFO', `Startup toggle: ${name} → disabled`)
     const success = process.platform === 'win32'
       ? await toggleStartupItemWin32(name, location, command, source as any, enabled)
       : await getPlatform().startup.toggleItem(name, location, command, source as any, enabled)
