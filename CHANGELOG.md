@@ -1,3 +1,9 @@
+# [2.7.0](https://github.com/dbfx/dustforge/compare/v2.6.1...v2.7.0) (2026-03-14)
+
+
+### Features
+
+* add Linux and macOS platform support for system cleaner features ([a556729](https://github.com/dbfx/dustforge/commit/a5567299160fcdc8bf8b4f9d312d66215296ac37))
 ## [2.6.1](https://github.com/dbfx/dustforge/compare/v2.6.0...v2.6.1) (2026-03-14)
 
 
