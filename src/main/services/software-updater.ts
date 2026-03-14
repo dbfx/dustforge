@@ -709,11 +709,386 @@ async function runUpdatesBrew(
   return { succeeded, failed, errors }
 }
 
+// ─── Linux (apt / dnf / pacman) ─────────────────────────────
+
+type LinuxPM = 'apt' | 'dnf' | 'pacman'
+
+async function detectLinuxPackageManager(): Promise<LinuxPM | null> {
+  const candidates: Array<{ name: LinuxPM; paths: string[] }> = [
+    { name: 'apt', paths: ['/usr/bin/apt', '/bin/apt'] },
+    { name: 'dnf', paths: ['/usr/bin/dnf', '/bin/dnf'] },
+    { name: 'pacman', paths: ['/usr/bin/pacman', '/bin/pacman'] },
+  ]
+  for (const { name, paths } of candidates) {
+    for (const p of paths) {
+      try {
+        await execFileAsync(p, ['--version'], { timeout: 3_000 })
+        return name
+      } catch { /* not found */ }
+    }
+  }
+  return null
+}
+
+/** Linux package name: alphanumeric (mixed case for RPM), hyphens, dots, underscores, plus, colons (for arch qualifiers) */
+const LINUX_PKG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9.+\-_:]{0,200}$/
+
+// ── apt ──
+
+/**
+ * Parse `apt list --upgradable` output.
+ * Format: package/distro version_new arch [upgradable from: version_old]
+ */
+function parseAptUpgradable(stdout: string): UpdatableApp[] {
+  const apps: UpdatableApp[] = []
+  for (const line of stdout.split('\n')) {
+    // Skip the "Listing..." header and empty lines
+    if (!line.trim() || line.startsWith('Listing')) continue
+    // e.g. "curl/jammy-updates 7.81.0-1ubuntu1.16 amd64 [upgradable from: 7.81.0-1ubuntu1.15]"
+    const match = line.match(/^(\S+?)\/\S+\s+(\S+)\s+\S+\s+\[upgradable from:\s+(\S+?)\]/)
+    if (!match) continue
+    const [, name, availableVersion, currentVersion] = match
+    apps.push({
+      id: name,
+      name,
+      currentVersion,
+      availableVersion,
+      source: 'apt',
+      severity: computeSeverity(currentVersion, availableVersion),
+      selected: true,
+    })
+  }
+  return apps
+}
+
+/** Parse `dpkg-query -W` output into up-to-date list */
+function parseDpkgInstalled(stdout: string): UpToDateApp[] {
+  return stdout.trim().split('\n').filter(Boolean).map((line) => {
+    const [name, version] = line.split('\t')
+    return { id: name, name, version: version ?? '', source: 'apt' }
+  })
+}
+
+async function checkForUpdatesApt(): Promise<UpdateCheckResult> {
+  try {
+    // Refresh package cache (may fail without root — that's OK, uses stale cache)
+    try {
+      await execFileAsync('/usr/bin/apt-get', ['update', '-qq'], { timeout: 60_000 })
+    } catch { /* non-root: use existing cache */ }
+
+    let upgradableStdout = ''
+    try {
+      const result = await execFileAsync('/usr/bin/apt', ['list', '--upgradable'], {
+        timeout: 30_000,
+        maxBuffer: 10 * 1024 * 1024,
+      })
+      upgradableStdout = result.stdout
+    } catch (err: any) {
+      if (err?.stdout) upgradableStdout = err.stdout
+      else return emptyResult(true, 'apt')
+    }
+
+    const apps = parseAptUpgradable(upgradableStdout)
+
+    // Get installed packages for the "up to date" list
+    let upToDate: UpToDateApp[] = []
+    try {
+      const { stdout: dpkgOut } = await execFileAsync('/usr/bin/dpkg-query', [
+        '-W', '-f', '${Package}\t${Version}\n',
+      ], { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 })
+      const allInstalled = parseDpkgInstalled(dpkgOut)
+      const outdatedIds = new Set(apps.map((a) => a.id))
+      upToDate = allInstalled.filter((a) => !outdatedIds.has(a.id))
+    } catch { /* non-critical */ }
+
+    return {
+      apps,
+      upToDate,
+      totalCount: apps.length,
+      majorCount: apps.filter((a) => a.severity === 'major').length,
+      minorCount: apps.filter((a) => a.severity === 'minor').length,
+      patchCount: apps.filter((a) => a.severity === 'patch').length,
+      packageManagerAvailable: true,
+      packageManagerName: 'apt',
+    }
+  } catch {
+    return emptyResult(true, 'apt')
+  }
+}
+
+// ── dnf ──
+
+/**
+ * Parse `dnf check-update` output.
+ * Format: package.arch   version   repo
+ * dnf exits with code 100 when updates are available.
+ */
+function parseDnfCheckUpdate(stdout: string): UpdatableApp[] {
+  const apps: UpdatableApp[] = []
+  for (const line of stdout.split('\n')) {
+    if (!line.trim() || line.startsWith('Last metadata') || line.startsWith('Obsoleting')) continue
+    // e.g. "curl.x86_64    7.76.1-23.el9    baseos"
+    // Use greedy match so we split on the LAST dot (arch never contains dots)
+    const match = line.match(/^(\S+)\.(\w+)\s+(\S+)\s+(\S+)/)
+    if (!match) continue
+    const [, nameWithoutArch, , availableVersion, repo] = match
+    apps.push({
+      id: nameWithoutArch,
+      name: nameWithoutArch,
+      currentVersion: '', // filled in below
+      availableVersion,
+      source: repo || 'dnf',
+      severity: 'unknown',
+      selected: true,
+    })
+  }
+  return apps
+}
+
+async function checkForUpdatesDnf(): Promise<UpdateCheckResult> {
+  try {
+    // dnf check-update exits 100 when updates are available
+    let checkStdout = ''
+    try {
+      const result = await execFileAsync('/usr/bin/dnf', ['check-update', '-q'], { timeout: 60_000, maxBuffer: 10 * 1024 * 1024 })
+      checkStdout = result.stdout
+    } catch (err: any) {
+      checkStdout = err?.stdout ?? ''
+    }
+
+    const apps = parseDnfCheckUpdate(checkStdout)
+
+    // Get installed versions to fill in currentVersion and build up-to-date list
+    let upToDate: UpToDateApp[] = []
+    try {
+      const { stdout: rpmOut } = await execFileAsync('/usr/bin/rpm', [
+        '-qa', '--queryformat', '%{NAME}\t%{VERSION}-%{RELEASE}\n',
+      ], { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 })
+
+      const installedMap = new Map<string, string>()
+      for (const line of rpmOut.trim().split('\n')) {
+        if (!line.trim()) continue
+        const [name, version] = line.split('\t')
+        installedMap.set(name, version ?? '')
+      }
+
+      // Fill in current versions and compute severity
+      for (const app of apps) {
+        const current = installedMap.get(app.id)
+        if (current) {
+          app.currentVersion = current
+          app.severity = computeSeverity(current, app.availableVersion)
+        }
+      }
+
+      // Build up-to-date list
+      const outdatedIds = new Set(apps.map((a) => a.id))
+      for (const [name, version] of installedMap) {
+        if (!outdatedIds.has(name)) {
+          upToDate.push({ id: name, name, version, source: 'dnf' })
+        }
+      }
+    } catch { /* non-critical */ }
+
+    return {
+      apps,
+      upToDate,
+      totalCount: apps.length,
+      majorCount: apps.filter((a) => a.severity === 'major').length,
+      minorCount: apps.filter((a) => a.severity === 'minor').length,
+      patchCount: apps.filter((a) => a.severity === 'patch').length,
+      packageManagerAvailable: true,
+      packageManagerName: 'dnf',
+    }
+  } catch {
+    return emptyResult(true, 'dnf')
+  }
+}
+
+// ── pacman ──
+
+/**
+ * Parse `pacman -Qu` output.
+ * Format: package old_version -> new_version
+ */
+function parsePacmanQu(stdout: string): UpdatableApp[] {
+  const apps: UpdatableApp[] = []
+  for (const line of stdout.split('\n')) {
+    if (!line.trim()) continue
+    // e.g. "curl 7.87.0-1 -> 7.88.0-1"
+    const match = line.match(/^(\S+)\s+(\S+)\s+->\s+(\S+)/)
+    if (!match) continue
+    const [, name, currentVersion, availableVersion] = match
+    apps.push({
+      id: name,
+      name,
+      currentVersion,
+      availableVersion,
+      source: 'pacman',
+      severity: computeSeverity(currentVersion, availableVersion),
+      selected: true,
+    })
+  }
+  return apps
+}
+
+async function checkForUpdatesPacman(): Promise<UpdateCheckResult> {
+  try {
+    // Sync database first
+    try {
+      await execFileAsync('/usr/bin/pacman', ['-Sy'], { timeout: 60_000 })
+    } catch { /* may need root — use stale db */ }
+
+    let quStdout = ''
+    try {
+      const result = await execFileAsync('/usr/bin/pacman', ['-Qu'], {
+        timeout: 30_000,
+        maxBuffer: 10 * 1024 * 1024,
+      })
+      quStdout = result.stdout
+    } catch (err: any) {
+      // pacman -Qu exits 1 when no updates available
+      if (err?.stdout) quStdout = err.stdout
+    }
+
+    const apps = parsePacmanQu(quStdout)
+
+    // Get all installed for up-to-date list
+    let upToDate: UpToDateApp[] = []
+    try {
+      const { stdout: qOut } = await execFileAsync('/usr/bin/pacman', ['-Q'], {
+        timeout: 30_000,
+        maxBuffer: 10 * 1024 * 1024,
+      })
+      const outdatedIds = new Set(apps.map((a) => a.id))
+      for (const line of qOut.trim().split('\n')) {
+        if (!line.trim()) continue
+        const [name, version] = line.split(' ')
+        if (name && !outdatedIds.has(name)) {
+          upToDate.push({ id: name, name, version: version ?? '', source: 'pacman' })
+        }
+      }
+    } catch { /* non-critical */ }
+
+    return {
+      apps,
+      upToDate,
+      totalCount: apps.length,
+      majorCount: apps.filter((a) => a.severity === 'major').length,
+      minorCount: apps.filter((a) => a.severity === 'minor').length,
+      patchCount: apps.filter((a) => a.severity === 'patch').length,
+      packageManagerAvailable: true,
+      packageManagerName: 'pacman',
+    }
+  } catch {
+    return emptyResult(true, 'pacman')
+  }
+}
+
+// ── Linux: check dispatcher ──
+
+async function checkForUpdatesLinux(): Promise<UpdateCheckResult> {
+  const pm = await detectLinuxPackageManager()
+  if (!pm) return emptyResult(false, null)
+  if (pm === 'apt') return checkForUpdatesApt()
+  if (pm === 'dnf') return checkForUpdatesDnf()
+  return checkForUpdatesPacman()
+}
+
+// ── Linux: run updates ──
+
+async function attemptLinuxUpgrade(
+  pm: LinuxPM,
+  appId: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!LINUX_PKG_PATTERN.test(appId)) {
+    return { success: false, error: 'Invalid package name format' }
+  }
+
+  try {
+    if (pm === 'apt') {
+      await execFileAsync('/usr/bin/apt-get', ['install', '-y', '-qq', appId], {
+        timeout: 5 * 60 * 1000,
+        maxBuffer: 10 * 1024 * 1024,
+      })
+    } else if (pm === 'dnf') {
+      await execFileAsync('/usr/bin/dnf', ['upgrade', '-y', '-q', appId], {
+        timeout: 5 * 60 * 1000,
+        maxBuffer: 10 * 1024 * 1024,
+      })
+    } else {
+      await execFileAsync('/usr/bin/pacman', ['-S', '--noconfirm', appId], {
+        timeout: 5 * 60 * 1000,
+        maxBuffer: 10 * 1024 * 1024,
+      })
+    }
+    return { success: true }
+  } catch (err: any) {
+    const output = cleanOutput(err?.stderr || err?.stdout || err?.message || 'Unknown error')
+    const lastLine = output.trim().split('\n').pop() || 'Upgrade failed'
+    return { success: false, error: lastLine.length > 200 ? lastLine.slice(0, 200) + '...' : lastLine }
+  }
+}
+
+async function runUpdatesLinux(
+  appIds: string[],
+  onProgress: (progress: UpdateProgress) => void,
+): Promise<UpdateResult> {
+  const pm = await detectLinuxPackageManager()
+  if (!pm) return { succeeded: 0, failed: 0, errors: [] }
+
+  let succeeded = 0
+  let failed = 0
+  const errors: UpdateResult['errors'] = []
+  const total = appIds.length
+
+  // Run sequentially — apt/dnf/pacman don't handle parallel installs
+  for (let i = 0; i < total; i++) {
+    const appId = appIds[i]
+    onProgress({
+      phase: 'updating',
+      current: i + 1,
+      total,
+      currentApp: appId,
+      percent: Math.round((i / total) * 100),
+      status: 'in-progress',
+    })
+
+    const result = await attemptLinuxUpgrade(pm, appId)
+
+    if (result.success) {
+      succeeded++
+      onProgress({
+        phase: 'updating',
+        current: i + 1,
+        total,
+        currentApp: appId,
+        percent: Math.round(((i + 1) / total) * 100),
+        status: 'done',
+      })
+    } else {
+      failed++
+      errors.push({ appId, name: appId, reason: result.error || 'Upgrade failed' })
+      onProgress({
+        phase: 'updating',
+        current: i + 1,
+        total,
+        currentApp: appId,
+        percent: Math.round(((i + 1) / total) * 100),
+        status: 'failed',
+      })
+    }
+  }
+
+  return { succeeded, failed, errors }
+}
+
 // ─── Platform-dispatched exports ────────────────────────────
 
 export async function checkForUpdates(): Promise<UpdateCheckResult> {
   if (process.platform === 'darwin') return checkForUpdatesBrew()
   if (process.platform === 'win32') return checkForUpdatesWinget()
+  if (process.platform === 'linux') return checkForUpdatesLinux()
   return emptyResult(false, null)
 }
 
@@ -723,11 +1098,13 @@ export async function runUpdates(
 ): Promise<UpdateResult> {
   if (process.platform === 'darwin') return runUpdatesBrew(appIds, onProgress)
   if (process.platform === 'win32') return runUpdatesWinget(appIds, onProgress)
+  if (process.platform === 'linux') return runUpdatesLinux(appIds, onProgress)
   return { succeeded: 0, failed: 0, errors: [] }
 }
 
 /** Validate an app ID for the current platform's package manager */
 export function isValidAppId(id: string): boolean {
   if (process.platform === 'darwin') return BREW_ID_PATTERN.test(id) && id.length <= 200
+  if (process.platform === 'linux') return LINUX_PKG_PATTERN.test(id)
   return /^[\w][\w.\-]{0,200}$/.test(id)
 }

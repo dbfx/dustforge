@@ -605,7 +605,7 @@ export interface UpdateCheckResult {
   minorCount: number
   patchCount: number
   packageManagerAvailable: boolean
-  packageManagerName: 'winget' | 'brew' | null
+  packageManagerName: 'winget' | 'brew' | 'apt' | 'dnf' | 'pacman' | null
 }
 
 export interface UpdateProgress {

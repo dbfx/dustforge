@@ -425,9 +425,24 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
                 <span className="text-zinc-300">Microsoft Store</span> (search "App Installer") or from
                 GitHub.
               </>
+            ) : packageManagerName === 'apt' ? (
+              <>
+                <span className="font-semibold text-red-400">apt not found</span> — APT package
+                manager is required. It should be pre-installed on Debian and Ubuntu systems.
+              </>
+            ) : packageManagerName === 'dnf' ? (
+              <>
+                <span className="font-semibold text-red-400">dnf not found</span> — DNF package
+                manager is required. It should be pre-installed on Fedora and RHEL systems.
+              </>
+            ) : packageManagerName === 'pacman' ? (
+              <>
+                <span className="font-semibold text-red-400">pacman not found</span> — Pacman package
+                manager is required. It should be pre-installed on Arch Linux systems.
+              </>
             ) : (
               <span className="font-semibold text-red-400">
-                No supported package manager found on this platform.
+                No supported package manager found. Supported: apt (Debian/Ubuntu), dnf (Fedora/RHEL), or pacman (Arch).
               </span>
             )}
           </p>
