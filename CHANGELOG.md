@@ -1,3 +1,9 @@
+# [2.6.0](https://github.com/dbfx/dustforge/compare/v2.5.0...v2.6.0) (2026-03-14)
+
+
+### Features
+
+* group history chart by day, harden platform code, remove docs site ([fb3b8d8](https://github.com/dbfx/dustforge/commit/fb3b8d8f908c0cb606c2bde82ed8e63c7cf1d0c3))
 # [2.5.0](https://github.com/dbfx/dustforge/compare/v2.4.7...v2.5.0) (2026-03-13)
 
 
