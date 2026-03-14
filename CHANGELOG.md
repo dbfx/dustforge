@@ -1,3 +1,9 @@
+# [2.8.0](https://github.com/dbfx/dustforge/compare/v2.7.0...v2.8.0) (2026-03-14)
+
+
+### Features
+
+* wire up cross-platform GUI and IPC handlers for Linux and macOS ([9aa5a14](https://github.com/dbfx/dustforge/commit/9aa5a14662695bc5372a459c4dc3520d88306a7f))
 # [2.7.0](https://github.com/dbfx/dustforge/compare/v2.6.1...v2.7.0) (2026-03-14)
 
 
