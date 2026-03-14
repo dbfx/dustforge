@@ -16,18 +16,18 @@ const REGISTRY_KEYS = [
   'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
 ]
 
-function parseRegValue(block: string, name: string): string {
+export function parseRegValue(block: string, name: string): string {
   // \b prevents matching substrings (e.g. "UninstallString" inside "QuietUninstallString")
   const match = block.match(new RegExp(`\\b${name}\\s+REG_SZ\\s+(.+)`, 'i'))
   return match ? match[1].trim() : ''
 }
 
-function parseRegDword(block: string, name: string): number {
+export function parseRegDword(block: string, name: string): number {
   const match = block.match(new RegExp(`\\b${name}\\s+REG_DWORD\\s+(0x[0-9a-fA-F]+)`, 'i'))
   return match ? parseInt(match[1], 16) : 0
 }
 
-function extractRegistryKey(block: string): string {
+export function extractRegistryKey(block: string): string {
   // First line of a block is the full registry key path
   const lines = block.split(/\r?\n/)
   for (const line of lines) {
@@ -226,7 +226,7 @@ export async function getInstalledProgramsFull(): Promise<InstalledProgram[]> {
 }
 
 /** Split an argument string respecting quoted segments (e.g. `/DIR="C:\Program Files\App"`) */
-function splitArgs(str: string): string[] {
+export function splitArgs(str: string): string[] {
   const args: string[] = []
   let current = ''
   let inQuote = false
@@ -248,7 +248,7 @@ function splitArgs(str: string): string[] {
 /**
  * Parse an UninstallString into command and arguments.
  */
-function parseUninstallCommand(program: InstalledProgram): { command: string; args: string[] } {
+export function parseUninstallCommand(program: InstalledProgram): { command: string; args: string[] } {
   const raw = program.uninstallString.trim()
 
   // MSI-based: extract GUID and use msiexec
@@ -329,7 +329,7 @@ export async function verifyUninstall(registryKey: string): Promise<boolean> {
 
 // ─── Targeted leftover scanning ─────────────────────────────
 
-function isSafeFolder(folderName: string): boolean {
+export function isSafeFolder(folderName: string): boolean {
   const lower = folderName.toLowerCase()
   if (SAFE_FOLDER_NAMES.has(lower)) return true
   for (const prefix of SAFE_PREFIXES) {
@@ -340,7 +340,7 @@ function isSafeFolder(folderName: string): boolean {
   return false
 }
 
-function folderMatchesProgram(folderName: string, program: InstalledProgram): boolean {
+export function folderMatchesProgram(folderName: string, program: InstalledProgram): boolean {
   const lower = folderName.toLowerCase()
   const nameTokens: string[] = []
 

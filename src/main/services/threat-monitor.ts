@@ -17,7 +17,7 @@ interface ParsedCidr {
   raw: string
 }
 
-function ipv4ToNumber(ip: string): number | null {
+export function ipv4ToNumber(ip: string): number | null {
   const parts = ip.split('.')
   if (parts.length !== 4) return null
   let num = 0
@@ -29,7 +29,7 @@ function ipv4ToNumber(ip: string): number | null {
   return num >>> 0 // ensure unsigned
 }
 
-function ipv6ToBigInt(ip: string): bigint | null {
+export function ipv6ToBigInt(ip: string): bigint | null {
   try {
     // Expand :: notation
     let expanded = ip.toLowerCase()
@@ -70,7 +70,7 @@ function ipv6ToBigInt(ip: string): bigint | null {
   }
 }
 
-function parseCidr(cidr: string): ParsedCidr | null {
+export function parseCidr(cidr: string): ParsedCidr | null {
   const slashIdx = cidr.indexOf('/')
   if (slashIdx === -1) return null
 
@@ -97,7 +97,7 @@ function parseCidr(cidr: string): ParsedCidr | null {
   return null
 }
 
-function ipMatchesCidr(ip: string, cidr: ParsedCidr): boolean {
+export function ipMatchesCidr(ip: string, cidr: ParsedCidr): boolean {
   if (cidr.isV6) {
     const v6 = ipv6ToBigInt(ip)
     if (v6 === null) return false

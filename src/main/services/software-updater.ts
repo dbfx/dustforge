@@ -12,7 +12,7 @@ import { isAdmin } from './elevation'
 
 const execFileAsync = promisify(execFile)
 
-function cleanOutput(str: string): string {
+export function cleanOutput(str: string): string {
   // Strip ANSI escape sequences
   let cleaned = str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '')
   // Handle \r (carriage return) used by spinners: for each line segment,
@@ -32,7 +32,7 @@ function cleanOutput(str: string): string {
   return cleaned
 }
 
-function computeSeverity(current: string, available: string): UpdateSeverity {
+export function computeSeverity(current: string, available: string): UpdateSeverity {
   const parse = (v: string): [number, number, number] | null => {
     const m = v.match(/^(\d+)\.(\d+)(?:\.(\d+))?/)
     if (!m) return null
@@ -67,7 +67,7 @@ function emptyResult(
 
 // ─── Winget (Windows) ───────────────────────────────────────
 
-function parseWingetUpgradeOutput(stdout: string): UpdatableApp[] {
+export function parseWingetUpgradeOutput(stdout: string): UpdatableApp[] {
   const lines = cleanOutput(stdout).split(/\r?\n/)
 
   // Find the header line
@@ -122,7 +122,7 @@ function parseWingetUpgradeOutput(stdout: string): UpdatableApp[] {
   return apps
 }
 
-function parseWingetListOutput(stdout: string): UpToDateApp[] {
+export function parseWingetListOutput(stdout: string): UpToDateApp[] {
   const lines = cleanOutput(stdout).split(/\r?\n/)
 
   // Find header — winget list has: Name  Id  Version  Available  Source
@@ -506,7 +506,7 @@ async function isBrewAvailable(): Promise<boolean> {
   }
 }
 
-function parseBrewOutdatedJson(stdout: string): UpdatableApp[] {
+export function parseBrewOutdatedJson(stdout: string): UpdatableApp[] {
   let data: BrewOutdatedJson
   try {
     data = JSON.parse(stdout)
@@ -548,7 +548,7 @@ function parseBrewOutdatedJson(stdout: string): UpdatableApp[] {
   return apps
 }
 
-function parseBrewInstalledJson(stdout: string): UpToDateApp[] {
+export function parseBrewInstalledJson(stdout: string): UpToDateApp[] {
   let data: BrewInfoJson
   try {
     data = JSON.parse(stdout)
@@ -739,7 +739,7 @@ const LINUX_PKG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9.+\-_:]{0,200}$/
  * Parse `apt list --upgradable` output.
  * Format: package/distro version_new arch [upgradable from: version_old]
  */
-function parseAptUpgradable(stdout: string): UpdatableApp[] {
+export function parseAptUpgradable(stdout: string): UpdatableApp[] {
   const apps: UpdatableApp[] = []
   for (const line of stdout.split('\n')) {
     // Skip the "Listing..." header and empty lines
@@ -762,7 +762,7 @@ function parseAptUpgradable(stdout: string): UpdatableApp[] {
 }
 
 /** Parse `dpkg-query -W` output into up-to-date list */
-function parseDpkgInstalled(stdout: string): UpToDateApp[] {
+export function parseDpkgInstalled(stdout: string): UpToDateApp[] {
   return stdout.trim().split('\n').filter(Boolean).map((line) => {
     const [name, version] = line.split('\t')
     return { id: name, name, version: version ?? '', source: 'apt' }
@@ -823,7 +823,7 @@ async function checkForUpdatesApt(): Promise<UpdateCheckResult> {
  * Format: package.arch   version   repo
  * dnf exits with code 100 when updates are available.
  */
-function parseDnfCheckUpdate(stdout: string): UpdatableApp[] {
+export function parseDnfCheckUpdate(stdout: string): UpdatableApp[] {
   const apps: UpdatableApp[] = []
   for (const line of stdout.split('\n')) {
     if (!line.trim() || line.startsWith('Last metadata') || line.startsWith('Obsoleting')) continue
@@ -911,7 +911,7 @@ async function checkForUpdatesDnf(): Promise<UpdateCheckResult> {
  * Parse `pacman -Qu` output.
  * Format: package old_version -> new_version
  */
-function parsePacmanQu(stdout: string): UpdatableApp[] {
+export function parsePacmanQu(stdout: string): UpdatableApp[] {
   const apps: UpdatableApp[] = []
   for (const line of stdout.split('\n')) {
     if (!line.trim()) continue

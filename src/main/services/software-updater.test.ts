@@ -1,0 +1,334 @@
+import { describe, it, expect, vi } from 'vitest'
+
+vi.mock('./elevation', () => ({ isAdmin: () => false }))
+
+import {
+  cleanOutput,
+  computeSeverity,
+  parseWingetUpgradeOutput,
+  parseWingetListOutput,
+  parseBrewOutdatedJson,
+  parseBrewInstalledJson,
+  parseAptUpgradable,
+  parseDpkgInstalled,
+  parseDnfCheckUpdate,
+  parsePacmanQu,
+  isValidAppId,
+} from './software-updater'
+
+// ─── cleanOutput ────────────────────────────────────────────
+
+describe('cleanOutput', () => {
+  it('strips ANSI escape sequences', () => {
+    expect(cleanOutput('\x1B[32mhello\x1B[0m')).toBe('hello')
+  })
+
+  it('handles carriage return (spinner overwrite)', () => {
+    expect(cleanOutput('loading...\rdone')).toBe('done')
+  })
+
+  it('handles \\r\\n line endings', () => {
+    expect(cleanOutput('line1\r\nline2\r\n')).toBe('line1\nline2\n')
+  })
+
+  it('returns empty for empty input', () => {
+    expect(cleanOutput('')).toBe('')
+  })
+
+  it('preserves normal text', () => {
+    expect(cleanOutput('hello world')).toBe('hello world')
+  })
+})
+
+// ─── computeSeverity ────────────────────────────────────────
+
+describe('computeSeverity', () => {
+  it('detects major version bump', () => {
+    expect(computeSeverity('1.2.3', '2.0.0')).toBe('major')
+  })
+
+  it('detects minor version bump', () => {
+    expect(computeSeverity('1.2.3', '1.3.0')).toBe('minor')
+  })
+
+  it('detects patch version bump', () => {
+    expect(computeSeverity('1.2.3', '1.2.4')).toBe('patch')
+  })
+
+  it('returns unknown for unparseable versions', () => {
+    expect(computeSeverity('latest', 'newest')).toBe('unknown')
+  })
+
+  it('returns unknown for equal versions', () => {
+    expect(computeSeverity('1.2.3', '1.2.3')).toBe('unknown')
+  })
+
+  it('handles two-segment versions', () => {
+    expect(computeSeverity('1.2', '1.3')).toBe('minor')
+    expect(computeSeverity('1.2', '2.0')).toBe('major')
+  })
+
+  it('handles versions with extra suffixes', () => {
+    // The regex stops at digits, so "1.2.3-beta" parses as 1.2.3
+    expect(computeSeverity('1.2.3-beta', '2.0.0-rc1')).toBe('major')
+  })
+})
+
+// ─── parseWingetUpgradeOutput ───────────────────────────────
+
+describe('parseWingetUpgradeOutput', () => {
+  it('parses standard winget upgrade output', () => {
+    const output = [
+      'Name                     Id                              Version     Available   Source',
+      '----------------------------------------------------------------------------------------',
+      'Google Chrome            Google.Chrome                   120.0.1     121.0.0     winget',
+      'Visual Studio Code       Microsoft.VisualStudioCode      1.85.0      1.86.0      winget',
+      '2 upgrades available.',
+    ].join('\n')
+
+    const apps = parseWingetUpgradeOutput(output)
+    expect(apps).toHaveLength(2)
+    expect(apps[0].id).toBe('Google.Chrome')
+    expect(apps[0].currentVersion).toBe('120.0.1')
+    expect(apps[0].availableVersion).toBe('121.0.0')
+    expect(apps[0].severity).toBe('major')
+    expect(apps[1].id).toBe('Microsoft.VisualStudioCode')
+  })
+
+  it('returns empty for no header', () => {
+    expect(parseWingetUpgradeOutput('no upgrades found')).toEqual([])
+  })
+
+  it('returns empty for empty input', () => {
+    expect(parseWingetUpgradeOutput('')).toEqual([])
+  })
+
+  it('handles > prefix in versions', () => {
+    const output = [
+      'Name    Id           Version     Available   Source',
+      '------------------------------------------------------',
+      'App     Some.App     > 1.0.0     > 2.0.0     winget',
+    ].join('\n')
+
+    const apps = parseWingetUpgradeOutput(output)
+    expect(apps).toHaveLength(1)
+    expect(apps[0].currentVersion).toBe('1.0.0')
+    expect(apps[0].availableVersion).toBe('2.0.0')
+  })
+})
+
+// ─── parseWingetListOutput ──────────────────────────────────
+
+describe('parseWingetListOutput', () => {
+  it('parses standard winget list output', () => {
+    const output = [
+      'Name              Id                    Version    Available  Source',
+      '---------------------------------------------------------------------',
+      'Google Chrome     Google.Chrome         121.0.0               winget',
+      'Node.js           OpenJS.NodeJS         20.10.0               winget',
+    ].join('\n')
+
+    const apps = parseWingetListOutput(output)
+    expect(apps).toHaveLength(2)
+    expect(apps[0].id).toBe('Google.Chrome')
+    expect(apps[0].version).toBe('121.0.0')
+  })
+
+  it('skips ARP entries', () => {
+    const output = [
+      'Name     Id              Version  Source',
+      '------------------------------------------',
+      'Legacy   ARP\\LegacyApp   1.0.0    ',
+    ].join('\n')
+
+    expect(parseWingetListOutput(output)).toEqual([])
+  })
+
+  it('skips Unknown versions', () => {
+    const output = [
+      'Name     Id          Version  Source',
+      '--------------------------------------',
+      'App      Some.App    Unknown  winget',
+    ].join('\n')
+
+    expect(parseWingetListOutput(output)).toEqual([])
+  })
+})
+
+// ─── parseBrewOutdatedJson ──────────────────────────────────
+
+describe('parseBrewOutdatedJson', () => {
+  it('parses formulae and casks', () => {
+    const json = JSON.stringify({
+      formulae: [
+        { name: 'curl', installed_versions: ['7.87.0'], current_version: '7.88.0' },
+      ],
+      casks: [
+        { name: 'firefox', token: 'firefox', installed_versions: '120.0', current_version: '121.0' },
+      ],
+    })
+
+    const apps = parseBrewOutdatedJson(json)
+    expect(apps).toHaveLength(2)
+    expect(apps[0].id).toBe('curl')
+    expect(apps[0].source).toBe('brew')
+    expect(apps[1].id).toBe('firefox')
+  })
+
+  it('returns empty for invalid JSON', () => {
+    expect(parseBrewOutdatedJson('not json')).toEqual([])
+  })
+
+  it('handles empty formulae/casks arrays', () => {
+    const json = JSON.stringify({ formulae: [], casks: [] })
+    expect(parseBrewOutdatedJson(json)).toEqual([])
+  })
+
+  it('handles missing formulae/casks', () => {
+    expect(parseBrewOutdatedJson('{}')).toEqual([])
+  })
+})
+
+// ─── parseBrewInstalledJson ─────────────────────────────────
+
+describe('parseBrewInstalledJson', () => {
+  it('parses formulae and casks', () => {
+    const json = JSON.stringify({
+      formulae: [
+        { name: 'curl', installed: [{ version: '7.88.0' }], versions: { stable: '7.88.0' } },
+      ],
+      casks: [
+        { token: 'firefox', installed: '121.0', version: '121.0' },
+      ],
+    })
+
+    const apps = parseBrewInstalledJson(json)
+    expect(apps).toHaveLength(2)
+    expect(apps[0].id).toBe('curl')
+    expect(apps[0].version).toBe('7.88.0')
+    expect(apps[1].id).toBe('firefox')
+  })
+
+  it('skips entries with empty version', () => {
+    const json = JSON.stringify({
+      formulae: [{ name: 'empty', installed: [], versions: {} }],
+      casks: [],
+    })
+    expect(parseBrewInstalledJson(json)).toEqual([])
+  })
+})
+
+// ─── parseAptUpgradable ─────────────────────────────────────
+
+describe('parseAptUpgradable', () => {
+  it('parses apt list --upgradable output', () => {
+    const output = [
+      'Listing... Done',
+      'curl/jammy-updates 7.81.0-1ubuntu1.16 amd64 [upgradable from: 7.81.0-1ubuntu1.15]',
+      'git/jammy-updates 1:2.34.1-1ubuntu1.11 amd64 [upgradable from: 1:2.34.1-1ubuntu1.10]',
+    ].join('\n')
+
+    const apps = parseAptUpgradable(output)
+    expect(apps).toHaveLength(2)
+    expect(apps[0].id).toBe('curl')
+    expect(apps[0].availableVersion).toBe('7.81.0-1ubuntu1.16')
+    expect(apps[0].currentVersion).toBe('7.81.0-1ubuntu1.15')
+    expect(apps[0].source).toBe('apt')
+  })
+
+  it('skips Listing header', () => {
+    expect(parseAptUpgradable('Listing... Done\n')).toEqual([])
+  })
+
+  it('returns empty for empty input', () => {
+    expect(parseAptUpgradable('')).toEqual([])
+  })
+})
+
+// ─── parseDpkgInstalled ─────────────────────────────────────
+
+describe('parseDpkgInstalled', () => {
+  it('parses tab-separated dpkg output', () => {
+    const output = 'curl\t7.81.0-1ubuntu1.15\ngit\t1:2.34.1-1ubuntu1.10\n'
+    const apps = parseDpkgInstalled(output)
+    expect(apps).toHaveLength(2)
+    expect(apps[0]).toEqual({ id: 'curl', name: 'curl', version: '7.81.0-1ubuntu1.15', source: 'apt' })
+  })
+
+  it('returns empty for empty input', () => {
+    expect(parseDpkgInstalled('')).toEqual([])
+  })
+})
+
+// ─── parseDnfCheckUpdate ────────────────────────────────────
+
+describe('parseDnfCheckUpdate', () => {
+  it('parses dnf check-update output', () => {
+    const output = [
+      'Last metadata expiration check: 0:30:00 ago.',
+      'curl.x86_64                    7.76.1-23.el9           baseos',
+      'git.x86_64                     2.43.0-1.el9            appstream',
+    ].join('\n')
+
+    const apps = parseDnfCheckUpdate(output)
+    expect(apps).toHaveLength(2)
+    expect(apps[0].id).toBe('curl')
+    expect(apps[0].availableVersion).toBe('7.76.1-23.el9')
+    expect(apps[0].source).toBe('baseos')
+  })
+
+  it('skips metadata and obsoleting lines', () => {
+    const output = 'Last metadata expiration check: 0:01:00 ago.\nObsoleting Packages\n'
+    expect(parseDnfCheckUpdate(output)).toEqual([])
+  })
+
+  it('returns empty for empty input', () => {
+    expect(parseDnfCheckUpdate('')).toEqual([])
+  })
+})
+
+// ─── parsePacmanQu ──────────────────────────────────────────
+
+describe('parsePacmanQu', () => {
+  it('parses pacman -Qu output', () => {
+    const output = 'curl 7.87.0-1 -> 7.88.0-1\ngit 2.43.0-1 -> 2.44.0-1\n'
+    const apps = parsePacmanQu(output)
+    expect(apps).toHaveLength(2)
+    expect(apps[0].id).toBe('curl')
+    expect(apps[0].currentVersion).toBe('7.87.0-1')
+    expect(apps[0].availableVersion).toBe('7.88.0-1')
+    expect(apps[0].source).toBe('pacman')
+  })
+
+  it('returns empty for empty input', () => {
+    expect(parsePacmanQu('')).toEqual([])
+  })
+
+  it('skips malformed lines', () => {
+    expect(parsePacmanQu('not a valid line\n')).toEqual([])
+  })
+})
+
+// ─── isValidAppId ───────────────────────────────────────────
+
+describe('isValidAppId', () => {
+  it('accepts a typical winget ID', () => {
+    expect(isValidAppId('Google.Chrome')).toBe(true)
+  })
+
+  it('accepts a typical winget ID with hyphens', () => {
+    expect(isValidAppId('Microsoft.VisualStudioCode')).toBe(true)
+  })
+
+  it('rejects empty string', () => {
+    expect(isValidAppId('')).toBe(false)
+  })
+
+  it('rejects strings starting with a dot', () => {
+    expect(isValidAppId('.hidden')).toBe(false)
+  })
+
+  it('rejects very long IDs', () => {
+    expect(isValidAppId('a'.repeat(300))).toBe(false)
+  })
+})
