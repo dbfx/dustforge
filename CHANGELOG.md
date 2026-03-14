@@ -1,3 +1,4 @@
+## [2.8.1](https://github.com/dbfx/dustforge/compare/v2.8.0...v2.8.1) (2026-03-14)
 # [2.8.0](https://github.com/dbfx/dustforge/compare/v2.7.0...v2.8.0) (2026-03-14)
 
 
