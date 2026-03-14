@@ -1,3 +1,9 @@
+## [2.6.1](https://github.com/dbfx/dustforge/compare/v2.6.0...v2.6.1) (2026-03-14)
+
+
+### Bug Fixes
+
+* correct operstate detection for virtual/tunnel network adapters ([ab34f3a](https://github.com/dbfx/dustforge/commit/ab34f3adaa8cb2f7b09b58a8ee49fa0054b55a22))
 # [2.6.0](https://github.com/dbfx/dustforge/compare/v2.5.0...v2.6.0) (2026-03-14)
 
 
