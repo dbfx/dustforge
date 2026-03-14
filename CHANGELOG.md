@@ -1,3 +1,9 @@
+# [2.9.0](https://github.com/dbfx/dustforge/compare/v2.8.2...v2.9.0) (2026-03-14)
+
+
+### Features
+
+* one-click installer, elevated auto-launch via Task Scheduler, and startup manager improvements ([50f8cff](https://github.com/dbfx/dustforge/commit/50f8cffc8671a706f47709752a62d334bdacdd23))
 ## [2.8.2](https://github.com/dbfx/dustforge/compare/v2.8.1...v2.8.2) (2026-03-14)
 
 
