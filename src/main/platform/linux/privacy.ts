@@ -1,4 +1,5 @@
 import { execFile } from 'child_process'
+import { readFile, writeFile, mkdir } from 'fs/promises'
 import { promisify } from 'util'
 import type { PlatformPrivacy, PrivacySettingDef } from '../types'
 
@@ -8,13 +9,18 @@ export function createLinuxPrivacy(): PlatformPrivacy {
   return {
     getSettings(): PrivacySettingDef[] {
       const desktop = process.env.XDG_CURRENT_DESKTOP?.toLowerCase() ?? ''
+      let desktopSettings: PrivacySettingDef[] = []
       if (desktop.includes('gnome') || desktop.includes('unity')) {
-        return LINUX_PRIVACY_SETTINGS
+        desktopSettings = LINUX_PRIVACY_SETTINGS
+      } else if (desktop.includes('kde') || desktop.includes('plasma')) {
+        desktopSettings = KDE_PRIVACY_SETTINGS
       }
-      if (desktop.includes('kde') || desktop.includes('plasma')) {
-        return KDE_PRIVACY_SETTINGS
-      }
-      return []
+      return [
+        ...desktopSettings,
+        ...SYSCTL_KERNEL_SETTINGS,
+        ...SYSCTL_NETWORK_SETTINGS,
+        ...ACCESS_CONTROL_SETTINGS,
+      ]
     },
   }
 }
@@ -138,6 +144,305 @@ async function kdeConfigWrite(file: string, group: string, key: string, value: s
     '--file', file, '--group', group, '--key', key, value,
   ], { timeout: 5_000 })
 }
+
+// ─── Sysctl helpers ─────────────────────────────────────────
+
+const SYSCTL_CONF = '/etc/sysctl.d/99-dustforge.conf'
+
+async function sysctlGet(param: string): Promise<string> {
+  const { stdout } = await execFileAsync('/usr/sbin/sysctl', ['-n', param], { timeout: 5_000 })
+  return stdout.trim()
+}
+
+async function sysctlApply(param: string, value: string): Promise<void> {
+  // Apply live first — if the kernel rejects the parameter (unsupported or
+  // invalid value) we fail fast WITHOUT writing it to the persistent config.
+  // This prevents a bad line from poisoning the config file and breaking
+  // future applies of other (valid) settings.
+  await execFileAsync('/usr/sbin/sysctl', ['-w', `${param}=${value}`], { timeout: 5_000 })
+
+  // Live apply succeeded — now persist to the drop-in config file
+  let existing = ''
+  try {
+    existing = await readFile(SYSCTL_CONF, 'utf8')
+  } catch { /* file doesn't exist yet */ }
+
+  // Strip trailing blank lines to prevent accumulation
+  const lines = existing.split('\n')
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop()
+
+  const newLine = `${param} = ${value}`
+  let found = false
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trimStart()
+    if (trimmed.startsWith(`${param} =`) || trimmed.startsWith(`${param}=`)) {
+      lines[i] = newLine
+      found = true
+      break
+    }
+  }
+  if (!found) {
+    // Append, but add header comment if file is new
+    if (lines.length === 0 || existing.length === 0) {
+      lines.length = 0
+      lines.push('# DustForge system hardening — managed automatically')
+      lines.push('# Remove this file and run "sysctl --system" to revert all changes')
+      lines.push('')
+    }
+    lines.push(newLine)
+  }
+
+  await mkdir('/etc/sysctl.d', { recursive: true })
+  await writeFile(SYSCTL_CONF, lines.join('\n') + '\n', 'utf8')
+}
+
+function sysctlSetting(
+  id: string,
+  param: string,
+  hardenedValue: string,
+  label: string,
+  description: string,
+  category: 'kernel' | 'network',
+): PrivacySettingDef {
+  return {
+    id,
+    category,
+    label,
+    description,
+    requiresAdmin: true,
+    async check() {
+      try {
+        return (await sysctlGet(param)) === hardenedValue
+      } catch { return false }
+    },
+    async apply() {
+      await sysctlApply(param, hardenedValue)
+    },
+  }
+}
+
+// ─── Kernel Hardening (sysctl) ──────────────────────────────
+
+const SYSCTL_KERNEL_SETTINGS: PrivacySettingDef[] = [
+  sysctlSetting(
+    'sysctl-aslr', 'kernel.randomize_va_space', '2',
+    'Address Space Randomization (ASLR)',
+    'Enable full randomization of memory address layout to prevent exploitation',
+    'kernel',
+  ),
+  sysctlSetting(
+    'sysctl-kptr-restrict', 'kernel.kptr_restrict', '2',
+    'Kernel Pointer Restriction',
+    'Hide kernel pointer addresses from all users to prevent information leaks',
+    'kernel',
+  ),
+  sysctlSetting(
+    'sysctl-dmesg-restrict', 'kernel.dmesg_restrict', '1',
+    'Restrict dmesg Access',
+    'Restrict kernel log (dmesg) access to root only',
+    'kernel',
+  ),
+  sysctlSetting(
+    'sysctl-ptrace-scope', 'kernel.yama.ptrace_scope', '1',
+    'Ptrace Scope Restriction',
+    'Restrict process tracing to parent processes only (requires Yama LSM)',
+    'kernel',
+  ),
+  sysctlSetting(
+    'sysctl-unprivileged-bpf', 'kernel.unprivileged_bpf_disabled', '1',
+    'Disable Unprivileged BPF',
+    'Prevent unprivileged users from loading BPF programs',
+    'kernel',
+  ),
+  sysctlSetting(
+    'sysctl-perf-paranoid', 'kernel.perf_event_paranoid', '3',
+    'Restrict Perf Events',
+    'Restrict performance monitoring events to root only',
+    'kernel',
+  ),
+  sysctlSetting(
+    'sysctl-sysrq', 'kernel.sysrq', '0',
+    'Disable Magic SysRq Key',
+    'Disable the SysRq key combination that allows low-level kernel commands',
+    'kernel',
+  ),
+  sysctlSetting(
+    'sysctl-unprivileged-userns', 'kernel.unprivileged_userns_clone', '0',
+    'Disable Unprivileged User Namespaces',
+    'Prevent unprivileged users from creating user namespaces (Debian/Ubuntu)',
+    'kernel',
+  ),
+]
+
+// ─── Network Hardening (sysctl) ─────────────────────────────
+
+const SYSCTL_NETWORK_SETTINGS: PrivacySettingDef[] = [
+  sysctlSetting(
+    'sysctl-ip-forward', 'net.ipv4.ip_forward', '0',
+    'Disable IP Forwarding',
+    'Prevent the system from forwarding packets between network interfaces. Warning: do not enable on routers or VPN gateways',
+    'network',
+  ),
+  sysctlSetting(
+    'sysctl-tcp-syncookies', 'net.ipv4.tcp_syncookies', '1',
+    'TCP SYN Cookie Protection',
+    'Enable SYN cookies to protect against SYN flood denial-of-service attacks',
+    'network',
+  ),
+  sysctlSetting(
+    'sysctl-icmp-broadcast', 'net.ipv4.icmp_echo_ignore_broadcasts', '1',
+    'Ignore ICMP Broadcasts',
+    'Ignore ICMP echo requests sent to broadcast addresses (Smurf attack defense)',
+    'network',
+  ),
+  sysctlSetting(
+    'sysctl-rp-filter', 'net.ipv4.conf.all.rp_filter', '1',
+    'Reverse Path Filtering',
+    'Enable strict source address verification to prevent IP spoofing',
+    'network',
+  ),
+  sysctlSetting(
+    'sysctl-accept-redirects', 'net.ipv4.conf.all.accept_redirects', '0',
+    'Reject ICMP Redirects',
+    'Reject ICMP redirect messages that could be used to alter routing tables',
+    'network',
+  ),
+  sysctlSetting(
+    'sysctl-source-route', 'net.ipv4.conf.all.accept_source_route', '0',
+    'Reject Source-Routed Packets',
+    'Reject packets with source routing options that bypass normal routing',
+    'network',
+  ),
+  sysctlSetting(
+    'sysctl-log-martians', 'net.ipv4.conf.all.log_martians', '1',
+    'Log Martian Packets',
+    'Log packets arriving with impossible source addresses for security auditing',
+    'network',
+  ),
+  sysctlSetting(
+    'sysctl-ipv6-redirects', 'net.ipv6.conf.all.accept_redirects', '0',
+    'Reject IPv6 ICMP Redirects',
+    'Reject IPv6 ICMP redirect messages to prevent routing table manipulation',
+    'network',
+  ),
+  sysctlSetting(
+    'sysctl-ipv6-accept-ra', 'net.ipv6.conf.all.accept_ra', '0',
+    'Reject IPv6 Router Advertisements',
+    'Reject IPv6 router advertisements. Warning: may break IPv6 on SLAAC networks',
+    'network',
+  ),
+]
+
+// ─── SSH config helper ──────────────────────────────────────
+
+/**
+ * Safely set an sshd_config directive by commenting out ALL existing
+ * occurrences (commented or active) and appending a single canonical line.
+ * This avoids the bug where a later uncommented line shadows our change.
+ */
+async function applySshdDirective(directive: string, value: string): Promise<void> {
+  const content = await readFile('/etc/ssh/sshd_config', 'utf8')
+  const canonicalLine = `${directive} ${value}`
+  const pattern = new RegExp(`^(\\s*#?\\s*${directive}\\s.*)$`, 'gm')
+  // Comment out every existing occurrence, except lines that already match
+  // the exact canonical value (keeps the file idempotent on repeated applies)
+  let updated = content.replace(pattern, (match) => {
+    const trimmed = match.trimStart()
+    if (trimmed === canonicalLine) return match // already correct, leave it
+    return trimmed.startsWith('#') ? match : `# ${trimmed}`
+  })
+  // Only append if no uncommented canonical line exists
+  const hasCanonical = new RegExp(`^\\s*${directive}\\s+${value}\\s*$`, 'm').test(updated)
+  if (!hasCanonical) {
+    updated = updated.trimEnd() + `\n${canonicalLine}\n`
+  }
+  await writeFile('/etc/ssh/sshd_config', updated, 'utf8')
+  // Reload sshd — service name varies by distro
+  try {
+    await execFileAsync('/usr/bin/systemctl', ['reload', 'sshd'], { timeout: 10_000 })
+  } catch {
+    await execFileAsync('/usr/bin/systemctl', ['reload', 'ssh'], { timeout: 10_000 })
+  }
+}
+
+// ─── Access Control Settings ────────────────────────────────
+
+const ACCESS_CONTROL_SETTINGS: PrivacySettingDef[] = [
+  {
+    id: 'core-dump-disable',
+    category: 'access',
+    label: 'Disable Core Dumps',
+    description: 'Prevent core dumps to avoid leaking sensitive memory contents',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const suid = await sysctlGet('fs.suid_dumpable')
+        if (suid !== '0') return false
+        const content = await readFile('/etc/security/limits.d/99-dustforge.conf', 'utf8')
+        return content.includes('* hard core 0')
+      } catch { return false }
+    },
+    async apply() {
+      await sysctlApply('fs.suid_dumpable', '0')
+      await mkdir('/etc/security/limits.d', { recursive: true })
+      await writeFile('/etc/security/limits.d/99-dustforge.conf', '* hard core 0\n', 'utf8')
+    },
+  },
+  {
+    id: 'usb-storage-disable',
+    category: 'access',
+    label: 'Block USB Mass Storage',
+    description: 'Prevent USB storage devices from being mounted to protect against data exfiltration',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const content = await readFile('/etc/modprobe.d/dustforge-usb.conf', 'utf8')
+        return content.includes('install usb-storage /bin/true')
+      } catch { return false }
+    },
+    async apply() {
+      await mkdir('/etc/modprobe.d', { recursive: true })
+      await writeFile(
+        '/etc/modprobe.d/dustforge-usb.conf',
+        '# DustForge: block USB mass storage\ninstall usb-storage /bin/true\n',
+        'utf8',
+      )
+    },
+  },
+  {
+    id: 'ssh-root-login',
+    category: 'access',
+    label: 'Disable SSH Root Login',
+    description: 'Prevent direct root login over SSH — use sudo from a regular account instead',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const content = await readFile('/etc/ssh/sshd_config', 'utf8')
+        // Match uncommented PermitRootLogin no (allowing whitespace variants)
+        return /^\s*PermitRootLogin\s+no\s*$/m.test(content)
+      } catch { return false }
+    },
+    async apply() {
+      await applySshdDirective('PermitRootLogin', 'no')
+    },
+  },
+  {
+    id: 'ssh-password-auth',
+    category: 'access',
+    label: 'Disable SSH Password Authentication',
+    description: 'Require key-based SSH authentication only. WARNING: ensure SSH keys are configured before enabling or you may be locked out',
+    requiresAdmin: true,
+    async check() {
+      try {
+        const content = await readFile('/etc/ssh/sshd_config', 'utf8')
+        return /^\s*PasswordAuthentication\s+no\s*$/m.test(content)
+      } catch { return false }
+    },
+    async apply() {
+      await applySshdDirective('PasswordAuthentication', 'no')
+    },
+  },
+]
 
 const KDE_PRIVACY_SETTINGS: PrivacySettingDef[] = [
   {

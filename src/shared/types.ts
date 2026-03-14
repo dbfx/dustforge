@@ -252,7 +252,7 @@ export interface MalwareActionResult {
 // ─── Privacy Shield ──────────────────────────────────────────
 export interface PrivacySetting {
   id: string
-  category: 'telemetry' | 'ads' | 'search' | 'services' | 'tasks' | 'sync'
+  category: 'telemetry' | 'ads' | 'search' | 'services' | 'tasks' | 'sync' | 'kernel' | 'network' | 'access'
   label: string
   description: string
   enabled: boolean          // true = privacy-friendly (tracking disabled)

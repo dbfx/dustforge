@@ -10,7 +10,10 @@ import {
   CalendarClock,
   CheckCircle2,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Cpu,
+  Globe,
+  Lock
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -35,7 +38,7 @@ const categories: CategoryDef[] = [
   {
     id: 'telemetry',
     label: 'Telemetry & Data Collection',
-    description: 'Control what diagnostic and usage data Windows sends to Microsoft',
+    description: 'Control diagnostic and usage data collection',
     icon: Radio,
     color: '#ef4444',
     bg: 'rgba(239,68,68,0.08)',
@@ -80,11 +83,38 @@ const categories: CategoryDef[] = [
   {
     id: 'tasks',
     label: 'Scheduled Tasks',
-    description: 'Disable Microsoft telemetry scheduled tasks running in the background',
+    description: 'Disable telemetry scheduled tasks running in the background',
     icon: CalendarClock,
     color: '#a3e635',
     bg: 'rgba(163,230,53,0.08)',
     border: 'rgba(163,230,53,0.15)'
+  },
+  {
+    id: 'kernel',
+    label: 'Kernel Hardening',
+    description: 'Kernel security parameters and memory protection via sysctl',
+    icon: Cpu,
+    color: '#a855f7',
+    bg: 'rgba(168,85,247,0.08)',
+    border: 'rgba(168,85,247,0.15)'
+  },
+  {
+    id: 'network',
+    label: 'Network Hardening',
+    description: 'Network stack hardening and traffic filtering via sysctl',
+    icon: Globe,
+    color: '#06b6d4',
+    bg: 'rgba(6,182,212,0.08)',
+    border: 'rgba(6,182,212,0.15)'
+  },
+  {
+    id: 'access',
+    label: 'Access Control',
+    description: 'Access control policies, SSH hardening, and system restrictions',
+    icon: Lock,
+    color: '#f97316',
+    bg: 'rgba(249,115,22,0.08)',
+    border: 'rgba(249,115,22,0.15)'
   }
 ]
 
@@ -315,7 +345,7 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
       {!embedded && (
         <PageHeader
           title="Privacy Shield"
-          description="Control telemetry, ads, tracking, and data collection across Windows"
+          description="Control telemetry, ads, tracking, and data collection across your system"
           action={headerAction}
         />
       )}
@@ -506,7 +536,7 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
         <EmptyState
           icon={Eye}
           title="Privacy Shield"
-          description='Click "Scan" to audit your Windows privacy settings and block telemetry, ads, and tracking.'
+          description='Click "Scan" to audit your privacy and security settings and apply recommended hardening.'
         />
       )}
 
