@@ -1,3 +1,9 @@
+# [2.10.0](https://github.com/dbfx/dustforge/compare/v2.9.1...v2.10.0) (2026-03-14)
+
+
+### Features
+
+* add Linux software updater support via apt, dnf, and pacman ([8215a16](https://github.com/dbfx/dustforge/commit/8215a16ca762a063aae9376d221144779fe5a655))
 ## [2.9.1](https://github.com/dbfx/dustforge/compare/v2.9.0...v2.9.1) (2026-03-14)
 
 
