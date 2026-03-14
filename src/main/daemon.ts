@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { cloudAgent } from './services/cloud-agent'
 import { getSettings, setSettings, flushSettings } from './services/settings-store'
 import { setDaemonMode } from './services/logger'
+import { initAutoUpdater } from './services/auto-updater'
 
 function log(msg: string): void {
   const ts = new Date().toISOString()
@@ -84,6 +85,9 @@ export async function runDaemon(): Promise<void> {
   log(`Platform: ${process.platform} (${process.arch})`)
   log(`PID: ${process.pid}`)
   log(`Config: ${app.getPath('userData')}`)
+
+  // ─── Auto-updater (download + auto-restart) ─────────────────
+  initAutoUpdater({ daemon: true })
 
   log('Starting cloud agent...')
   await cloudAgent.start()

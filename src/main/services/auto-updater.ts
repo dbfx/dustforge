@@ -5,9 +5,18 @@ import { getSettings } from './settings-store'
 import type { UpdateStatus } from '../../shared/types'
 
 let status: UpdateStatus = { state: 'idle' }
+let daemonMode = false
 
 function broadcast(s: UpdateStatus): void {
   status = s
+  if (daemonMode) {
+    const ts = new Date().toISOString()
+    const detail = s.version ? ` v${s.version}` : ''
+    const progress = s.progress != null ? ` ${s.progress}%` : ''
+    const error = s.error ? ` — ${s.error}` : ''
+    process.stdout.write(`[${ts}] [updater] ${s.state}${detail}${progress}${error}\n`)
+    return
+  }
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send(IPC.UPDATER_STATUS, s)
@@ -15,7 +24,11 @@ function broadcast(s: UpdateStatus): void {
   }
 }
 
-export function initAutoUpdater(): void {
+interface InitOptions {
+  daemon?: boolean
+}
+
+export function initAutoUpdater(opts: InitOptions = {}): void {
   if (!app.isPackaged) return
 
   // On Linux, electron-updater only supports AppImage.
@@ -25,8 +38,10 @@ export function initAutoUpdater(): void {
     return
   }
 
+  daemonMode = opts.daemon === true
+
   const settings = getSettings()
-  autoUpdater.autoDownload = settings.autoUpdate
+  autoUpdater.autoDownload = daemonMode || settings.autoUpdate
   autoUpdater.autoInstallOnAppQuit = true
 
   autoUpdater.on('checking-for-update', () => {
@@ -47,6 +62,11 @@ export function initAutoUpdater(): void {
 
   autoUpdater.on('update-downloaded', (info) => {
     broadcast({ state: 'downloaded', version: info.version })
+    if (daemonMode) {
+      broadcast({ state: 'downloaded', version: info.version })
+      process.stdout.write(`[${new Date().toISOString()}] [updater] Installing v${info.version} and restarting...\n`)
+      autoUpdater.quitAndInstall(false, true)
+    }
   })
 
   autoUpdater.on('error', (err) => {
