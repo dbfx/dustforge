@@ -1,3 +1,9 @@
+# [2.11.0](https://github.com/dbfx/dustforge/compare/v2.10.0...v2.11.0) (2026-03-14)
+
+
+### Bug Fixes
+
+* harden security across cloud agent, settings store, and IPC handlers ([b54d41b](https://github.com/dbfx/dustforge/commit/b54d41bdd94e0f4f3aff6b978594bac2bf071a5f))
 # [2.10.0](https://github.com/dbfx/dustforge/compare/v2.9.1...v2.10.0) (2026-03-14)
 
 
