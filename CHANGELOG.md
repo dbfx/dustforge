@@ -1,3 +1,9 @@
+# [2.12.0](https://github.com/dbfx/dustforge/compare/v2.11.0...v2.12.0) (2026-03-14)
+
+
+### Features
+
+* add Linux system hardening via sysctl and access control ([177fd8a](https://github.com/dbfx/dustforge/commit/177fd8a0f1674fa84a164bc2158d66a5e630f233))
 # [2.11.0](https://github.com/dbfx/dustforge/compare/v2.10.0...v2.11.0) (2026-03-14)
 
 
