@@ -27,11 +27,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate changelog and create release
+      - name: Extract release notes and create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          npx conventional-changelog -p angular -r 1 -o _RELEASE_NOTES.md
+          # Extract the current version's section from the committed CHANGELOG.md
+          node -e "
+            const fs = require('fs');
+            const log = fs.readFileSync('CHANGELOG.md', 'utf-8');
+            const sections = log.split(/^(?=##? \[)/m);
+            const current = sections.find(s => s.includes('${{ github.ref_name }}'));
+            if (current) {
+              // Remove the heading line, keep only the body
+              const body = current.replace(/^##? .+\n+/, '').trim();
+              fs.writeFileSync('_RELEASE_NOTES.md', body);
+            } else {
+              fs.writeFileSync('_RELEASE_NOTES.md', '');
+            }
+          "
           gh release create ${{ github.ref_name }} --title "${{ github.ref_name }}" --notes-file _RELEASE_NOTES.md
 
   build:

@@ -1,11 +1,11 @@
 # DustForge
 
 <p align="center">
-  <img src="logo.png" alt="DustForge" width="128" />
+  <a href="https://dustforge.net"><img src="logo.png" alt="DustForge" width="128" /></a>
 </p>
 
 <p align="center">
-  A modern, open-source system cleaner for Windows.
+  A modern, open-source system cleaner for Windows, MacOS, and Linux.
 </p>
 
 <p align="center">

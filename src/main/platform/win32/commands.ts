@@ -34,9 +34,14 @@ export function createWin32Commands(): PlatformCommands {
     },
 
     async getEventLog(logName: string, maxEntries: number): Promise<EventLogEntry[]> {
+      // Validate inputs to prevent injection — only allow known log names and numeric max
+      const allowedLogs = new Set(['System', 'Application', 'Security'])
+      const safeName = allowedLogs.has(logName) ? logName : 'System'
+      const safeMax = Math.max(1, Math.min(Math.floor(Number(maxEntries)) || 50, 200))
+
       const { stdout } = await execFileAsync('powershell.exe', [
         '-NoProfile', '-NonInteractive', '-Command',
-        `Get-WinEvent -LogName '${logName}' -MaxEvents ${maxEntries} | ` +
+        `Get-WinEvent -LogName '${safeName}' -MaxEvents ${safeMax} | ` +
         `Select-Object TimeCreated,Id,LevelDisplayName,ProviderName,Message | ` +
         `ForEach-Object { [PSCustomObject]@{ ` +
         `time=$_.TimeCreated.ToString('o'); id=$_.Id; level=$_.LevelDisplayName; ` +

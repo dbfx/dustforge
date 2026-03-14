@@ -51,12 +51,12 @@ export function registerRecycleBinIpc(): void {
   ipcMain.handle(IPC.RECYCLE_BIN_CLEAN, async (): Promise<CleanResult> => {
     const sizeBeforeClean = lastScannedSize
     try {
-      // Use Shell COM API to empty recycle bin - more reliable than Clear-RecycleBin
-      // which can silently fail in non-elevated or non-interactive contexts
+      // Use SHEmptyRecycleBin Win32 API directly — the most reliable method.
+      // Flags: SHERB_NOCONFIRMATION(1) | SHERB_NOPROGRESSUI(2) | SHERB_NOSOUND(4) = 7
       await execFileAsync('powershell.exe', [
         '-NoProfile',
         '-Command',
-        `$shell = New-Object -ComObject Shell.Application; $shell.NameSpace(0x0a).Items() | ForEach-Object { Remove-Item $_.Path -Recurse -Force -ErrorAction SilentlyContinue }; Clear-RecycleBin -Force -Confirm:$false -ErrorAction SilentlyContinue`
+        `Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class RecycleBin { [DllImport("Shell32.dll", CharSet = CharSet.Unicode)] public static extern uint SHEmptyRecycleBin(IntPtr hwnd, string pszRootPath, uint dwFlags); }'; [RecycleBin]::SHEmptyRecycleBin([IntPtr]::Zero, $null, 7)`
       ])
 
       // Verify the bin is actually empty

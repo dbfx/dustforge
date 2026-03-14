@@ -50,6 +50,9 @@ function getIconPath(): string {
 }
 
 function applyAutoLaunch(enabled: boolean): void {
+  // Only register auto-launch when packaged — in dev mode this would register
+  // the bare Electron binary, causing a generic "Getting Started" window on reboot.
+  if (!app.isPackaged) return
   app.setLoginItemSettings({
     openAtLogin: enabled,
     args: ['--startup']

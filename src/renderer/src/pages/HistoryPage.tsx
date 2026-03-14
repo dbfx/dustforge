@@ -59,15 +59,19 @@ export function HistoryPage() {
     return { totalSpace, totalItems, totalErrors, avgDuration, totalScans: entries.length }
   }, [entries])
 
-  // --- Chart data: space saved over time (last 30 entries, reversed for chronological) ---
+  // --- Chart data: space saved over time (grouped by day, last 30 days with data) ---
   const timelineData = useMemo(() => {
-    const recent = filtered.slice(0, 30).reverse()
-    return recent.map((e) => ({
-      date: new Date(e.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      space: e.totalSpaceSaved,
-      items: e.totalItemsCleaned,
-      type: e.type
-    }))
+    const byDay: Record<string, { space: number; items: number }> = {}
+    for (const e of filtered) {
+      const key = new Date(e.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      if (!byDay[key]) byDay[key] = { space: 0, items: 0 }
+      byDay[key].space += e.totalSpaceSaved
+      byDay[key].items += e.totalItemsCleaned
+    }
+    return Object.entries(byDay)
+      .slice(0, 30)
+      .reverse()
+      .map(([date, d]) => ({ date, space: d.space, items: d.items }))
   }, [filtered])
 
   // --- Chart data: breakdown by scan type ---
@@ -236,7 +240,7 @@ function OverviewView({
   entries
 }: {
   stats: { totalSpace: number; totalItems: number; totalErrors: number; avgDuration: number; totalScans: number }
-  timelineData: { date: string; space: number; items: number; type: string }[]
+  timelineData: { date: string; space: number; items: number }[]
   typeBreakdown: { name: string; count: number; space: number; items: number }[]
   categoryBreakdown: { name: string; items: number; space: number }[]
   weeklyData: { week: string; space: number; items: number; count: number }[]

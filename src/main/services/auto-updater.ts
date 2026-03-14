@@ -18,6 +18,13 @@ function broadcast(s: UpdateStatus): void {
 export function initAutoUpdater(): void {
   if (!app.isPackaged) return
 
+  // On Linux, electron-updater only supports AppImage.
+  // Skip if not running as an AppImage to avoid silent failures.
+  if (process.platform === 'linux' && !process.env.APPIMAGE) {
+    console.log('Auto-updater: skipping on Linux (not running as AppImage)')
+    return
+  }
+
   const settings = getSettings()
   autoUpdater.autoDownload = settings.autoUpdate
   autoUpdater.autoInstallOnAppQuit = true
@@ -47,7 +54,9 @@ export function initAutoUpdater(): void {
   })
 
   // Check on startup
-  autoUpdater.checkForUpdates().catch(() => {})
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.error('Auto-updater check failed:', err?.message || err)
+  })
 }
 
 export function checkForUpdates(): Promise<void> {

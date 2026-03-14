@@ -74,9 +74,15 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.ELEVATION_CHECK, () => isAdmin())
   ipcMain.handle(IPC.ELEVATION_RELAUNCH, () => {
     const exePath = app.getPath('exe')
-    spawn('powershell.exe', ['-Command', `Start-Process '${exePath.replace(/'/g, "''")}' -Verb RunAs`], {
+    // Use -EncodedCommand to avoid any string interpolation / quoting issues
+    const psScript = `Start-Process -FilePath '${exePath.replace(/'/g, "''")}' -Verb RunAs`
+    const encoded = Buffer.from(psScript, 'utf16le').toString('base64')
+    spawn('powershell.exe', [
+      '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded,
+    ], {
       detached: true,
-      stdio: 'ignore'
+      stdio: 'ignore',
+      windowsHide: true,
     }).unref()
     app.quit()
   })
