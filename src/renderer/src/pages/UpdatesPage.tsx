@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Download, Cpu } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { cn } from '@/lib/utils'
 import { SoftwareUpdaterPage } from './SoftwareUpdaterPage'
 import { DriverManagerPage } from './DriverManagerPage'
+import { usePlatform } from '@/hooks/usePlatform'
 import type { LucideIcon } from 'lucide-react'
 
 interface TabDef {
@@ -19,7 +20,16 @@ const tabs: TabDef[] = [
 ]
 
 export function UpdatesPage() {
+  const { features } = usePlatform()
   const [activeTab, setActiveTab] = useState('software')
+
+  const visibleTabs = useMemo(() =>
+    tabs.filter((tab) => {
+      if (tab.id === 'drivers' && !features.drivers) return false
+      return true
+    }),
+    [features.drivers]
+  )
 
   return (
     <div className="animate-fade-in">
@@ -33,7 +43,7 @@ export function UpdatesPage() {
         className="mb-6 flex rounded-xl p-1"
         style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}
       >
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const isActive = activeTab === tab.id
           const TabIcon = tab.icon
           return (

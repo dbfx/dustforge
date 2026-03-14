@@ -20,6 +20,7 @@ import logoSrc from '@/assets/logo.png'
 import { useAppUpdateStore } from '@/stores/app-update-store'
 import { useUpdaterStore } from '@/stores/updater-store'
 import { useDriverStore } from '@/stores/driver-store'
+import { usePlatform } from '@/hooks/usePlatform'
 
 interface NavItemDef {
   icon: LucideIcon
@@ -80,6 +81,16 @@ function useBadgeCounts(): Record<string, number> {
 
 export function Sidebar() {
   const badgeCounts = useBadgeCounts()
+  const { features } = usePlatform()
+
+  // Filter nav items based on platform features
+  const filteredNavGroups = navGroups.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      if (item.path === '/registry' && !features.registry) return false
+      return true
+    }),
+  }))
 
   return (
     <div
@@ -99,7 +110,7 @@ export function Sidebar() {
 
       {/* Nav items */}
       <nav className="mt-2 min-h-0 flex-1 overflow-y-auto px-3">
-        {navGroups.map((group, gi) => (
+        {filteredNavGroups.map((group, gi) => (
           <div key={gi} className={gi > 0 ? 'mt-4' : ''}>
             {group.heading && (
               <div

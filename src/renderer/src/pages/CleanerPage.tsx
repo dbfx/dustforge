@@ -388,7 +388,7 @@ export function CleanerPage() {
                   <div className="mt-1 max-h-32 overflow-y-auto space-y-0.5">
                     {store.cleanResult.errors.slice(0, 20).map((err, i) => (
                       <p key={i} className="text-[11px] font-mono truncate" style={{ color: '#52525e' }}>
-                        {err.path.split('\\').slice(-3).join('\\')} — {err.reason === 'permission-denied' ? 'permission denied (needs admin)' : err.reason}
+                        {err.path.split(/[/\\]/).slice(-3).join('/')} — {err.reason === 'permission-denied' ? 'permission denied (needs admin)' : err.reason}
                       </p>
                     ))}
                     {store.cleanResult.errors.length > 20 && (
@@ -534,7 +534,7 @@ export function CleanerPage() {
                               <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                                 {result.items.slice(0, 50).map((item) => {
                                   const checked = store.selectedItems.has(item.id)
-                                  const pathLabel = item.path.split('\\').slice(-2).join('\\') || item.path
+                                  const pathLabel = item.path.split(/[/\\]/).slice(-2).join('/') || item.path
                                   return (
                                     <label key={item.id}
                                       className="flex items-center gap-3 px-4 py-2 pl-14 cursor-pointer transition-colors"

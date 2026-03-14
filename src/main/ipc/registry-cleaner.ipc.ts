@@ -1100,6 +1100,7 @@ export async function fixRegistryEntries(
 
 export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.REGISTRY_SCAN, async (): Promise<RegistryEntry[]> => {
+    if (process.platform !== 'win32') return []
     const entries = await scanRegistry()
 
     // Store entries in a new scan session
@@ -1121,6 +1122,7 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
   })
 
   ipcMain.handle(IPC.REGISTRY_FIX, async (_event, entryIds: string[]): Promise<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] }> => {
+    if (process.platform !== 'win32') return { fixed: 0, failed: 0, failures: [] }
     const session = scanSessions.get(activeScanId)
     const entriesToFix: RegistryEntry[] = []
     for (const id of entryIds) {

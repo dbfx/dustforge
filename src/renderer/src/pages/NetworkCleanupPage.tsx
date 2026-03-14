@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import {
   Search,
   Sparkles,
@@ -18,6 +18,7 @@ import type { LucideIcon } from 'lucide-react'
 import { useHistoryStore } from '@/stores/history-store'
 import { useStatsStore } from '@/stores/stats-store'
 import { useNetworkStore } from '@/stores/network-store'
+import { usePlatform } from '@/hooks/usePlatform'
 
 type NetworkCategory = NetworkItem['type']
 
@@ -36,6 +37,14 @@ const categories: CategoryDef[] = [
 ]
 
 export function NetworkCleanupPage() {
+  const { platform } = usePlatform()
+  const visibleCategories = useMemo(() =>
+    categories.filter((c) => {
+      if (c.type === 'network-history' && platform !== 'win32') return false
+      return true
+    }),
+    [platform]
+  )
   const items = useNetworkStore((s) => s.items)
   const selectedIds = useNetworkStore((s) => s.selectedIds)
   const status = useNetworkStore((s) => s.status)
@@ -123,7 +132,7 @@ export function NetworkCleanupPage() {
     <div className="animate-fade-in">
       <PageHeader
         title="Network Cleanup"
-        description="Clear DNS cache, saved Wi-Fi profiles, and network history"
+        description={platform === 'win32' ? 'Clear DNS cache, saved Wi-Fi profiles, and network history' : 'Clear DNS cache and saved Wi-Fi profiles'}
         action={
           <div className="flex items-center gap-2.5">
             <button
@@ -155,7 +164,7 @@ export function NetworkCleanupPage() {
       <div className="flex gap-5">
         {/* Category sidebar */}
         <div className="w-56 shrink-0 space-y-1.5">
-          {categories.map((cat) => {
+          {visibleCategories.map((cat) => {
             const count = items.filter((i) => i.type === cat.type).length
             const isActive = activeCategory === cat.type
             return (
@@ -347,7 +356,7 @@ export function NetworkCleanupPage() {
         onConfirm={handleClean}
         onCancel={() => setShowConfirm(false)}
         title="Clean Network Items"
-        description={`This will clean ${selectedIds.size} network item${selectedIds.size === 1 ? '' : 's'}. DNS and ARP caches will rebuild automatically.${selectedIds.size > 0 && items.some((i) => i.type === 'wifi-profile' && selectedIds.has(i.id)) ? ' Warning: removing Wi-Fi profiles will delete saved passwords — you will need to re-enter them to reconnect.' : ''} Network history entries will be permanently removed.`}
+        description={`This will clean ${selectedIds.size} network item${selectedIds.size === 1 ? '' : 's'}. DNS and ARP caches will rebuild automatically.${selectedIds.size > 0 && items.some((i) => i.type === 'wifi-profile' && selectedIds.has(i.id)) ? ' Warning: removing Wi-Fi profiles will delete saved passwords — you will need to re-enter them to reconnect.' : ''}${platform === 'win32' && items.some((i) => i.type === 'network-history' && selectedIds.has(i.id)) ? ' Network history entries will be permanently removed.' : ''}`}
         confirmLabel="Clean Now"
         variant="warning"
       />

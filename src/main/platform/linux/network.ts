@@ -1,6 +1,6 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import type { PlatformNetwork, ActiveConnection, DnsCacheEntry } from '../types'
+import type { PlatformNetwork, ActiveConnection, DnsCacheEntry, WifiProfile } from '../types'
 
 const execFileAsync = promisify(execFile)
 
@@ -84,6 +84,58 @@ export function createLinuxNetwork(): PlatformNetwork {
       // Linux generally has no user-queryable DNS cache.
       // systemd-resolved does not expose a dump of cached entries.
       return []
+    },
+
+    async flushDnsCache(): Promise<boolean> {
+      try {
+        // Try systemd-resolved first
+        await execFileAsync('/usr/bin/resolvectl', ['flush-caches'], { timeout: 5000 })
+        return true
+      } catch {
+        try {
+          // Fallback to nscd
+          await execFileAsync('/usr/sbin/nscd', ['-i', 'hosts'], { timeout: 5000 })
+          return true
+        } catch {
+          return false
+        }
+      }
+    },
+
+    async getWifiProfiles(): Promise<WifiProfile[]> {
+      try {
+        const { stdout } = await execFileAsync('/usr/bin/nmcli', [
+          '-t', '-f', 'NAME,TYPE,DEVICE', 'connection', 'show',
+        ], { timeout: 10000 })
+        const profiles: WifiProfile[] = []
+        for (const line of stdout.split('\n').filter(Boolean)) {
+          const parts = line.split(':')
+          if (parts.length >= 2 && parts[1]?.includes('wireless')) {
+            profiles.push({ name: parts[0], security: 'Wi-Fi' })
+          }
+        }
+        return profiles
+      } catch {
+        return []
+      }
+    },
+
+    async deleteWifiProfile(name: string): Promise<boolean> {
+      try {
+        await execFileAsync('/usr/bin/nmcli', ['connection', 'delete', name], { timeout: 10000 })
+        return true
+      } catch {
+        return false
+      }
+    },
+
+    async clearArpCache(): Promise<boolean> {
+      try {
+        await execFileAsync('/usr/sbin/ip', ['neigh', 'flush', 'all'], { timeout: 5000 })
+        return true
+      } catch {
+        return false
+      }
     },
   }
 }

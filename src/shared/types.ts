@@ -1,3 +1,14 @@
+export interface PlatformInfo {
+  platform: 'win32' | 'darwin' | 'linux'
+  features: {
+    registry: boolean
+    debloater: boolean
+    drivers: boolean
+    restorePoint: boolean
+    bootTrace: boolean
+  }
+}
+
 export interface ScanHistoryCategory {
   name: string
   itemsFound: number

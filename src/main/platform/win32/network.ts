@@ -1,6 +1,6 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import type { PlatformNetwork, ActiveConnection, DnsCacheEntry } from '../types'
+import type { PlatformNetwork, ActiveConnection, DnsCacheEntry, WifiProfile } from '../types'
 
 const execFileAsync = promisify(execFile)
 
@@ -54,6 +54,58 @@ export function createWin32Network(): PlatformNetwork {
         }))
       } catch {
         return []
+      }
+    },
+
+    async flushDnsCache(): Promise<boolean> {
+      try {
+        await execFileAsync('ipconfig', ['/flushdns'], { timeout: 10000, windowsHide: true })
+        return true
+      } catch {
+        return false
+      }
+    },
+
+    async getWifiProfiles(): Promise<WifiProfile[]> {
+      try {
+        const { stdout } = await execFileAsync('netsh', ['wlan', 'show', 'profiles'], { timeout: 10000, windowsHide: true })
+        const profiles: WifiProfile[] = []
+        for (const line of stdout.split('\n')) {
+          const match = line.match(/All User Profile\s*:\s*(.+)/i) || line.match(/User Profile\s*:\s*(.+)/i)
+          if (match) {
+            const name = match[1].trim()
+            if (/["\x00-\x1f]/.test(name)) continue
+            let security = 'Unknown'
+            try {
+              const { stdout: detail } = await execFileAsync('netsh', ['wlan', 'show', 'profile', `name="${name}"`], { timeout: 5000, windowsHide: true })
+              const authMatch = detail.match(/Authentication\s*:\s*(.+)/i)
+              if (authMatch) security = authMatch[1].trim()
+            } catch { /* skip */ }
+            profiles.push({ name, security })
+          }
+        }
+        return profiles
+      } catch {
+        return []
+      }
+    },
+
+    async deleteWifiProfile(name: string): Promise<boolean> {
+      try {
+        if (/["\x00-\x1f]/.test(name)) return false
+        await execFileAsync('netsh', ['wlan', 'delete', 'profile', `name="${name}"`], { timeout: 10000, windowsHide: true })
+        return true
+      } catch {
+        return false
+      }
+    },
+
+    async clearArpCache(): Promise<boolean> {
+      try {
+        await execFileAsync('netsh', ['interface', 'ip', 'delete', 'arpcache'], { timeout: 10000, windowsHide: true })
+        return true
+      } catch {
+        return false
       }
     },
   }

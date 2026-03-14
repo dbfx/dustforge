@@ -12,6 +12,7 @@ import type {
   ServiceStartType
 } from '../../shared/types'
 import { lookupServiceSafety } from '../../shared/service-safety-kb'
+import { getPlatform } from '../platform'
 
 const execFileAsync = promisify(execFile)
 
@@ -46,6 +47,11 @@ function normalizeStatus(raw: string): ServiceStatus {
 export async function scanServices(
   onProgress?: (data: ServiceScanProgress) => void
 ): Promise<ServiceScanResult> {
+    // On non-Windows, delegate to platform abstraction
+    if (process.platform !== 'win32') {
+      return getPlatform().services.scan(onProgress)
+    }
+
     onProgress?.({ phase: 'enumerating', current: 0, total: 0, currentService: 'Enumerating services...' })
 
     // Single PowerShell call to enumerate all services with details
@@ -179,6 +185,11 @@ export async function applyServiceChanges(
 ): Promise<ServiceApplyResult> {
       if (!Array.isArray(changes) || changes.length === 0) {
         return { succeeded: 0, failed: 0, errors: [] }
+      }
+
+      // On non-Windows, delegate to platform abstraction
+      if (process.platform !== 'win32') {
+        return getPlatform().services.applyChanges(changes)
       }
 
       // Validate service names — only allow safe characters

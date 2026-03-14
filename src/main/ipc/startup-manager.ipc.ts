@@ -6,6 +6,7 @@ import { join, basename, extname, resolve, normalize } from 'path'
 import { createHash } from 'crypto'
 import { IPC } from '../../shared/channels'
 import type { StartupItem, StartupBootTrace, StartupBootEntry } from '../../shared/types'
+import { getPlatform } from '../platform'
 
 const execFileAsync = promisify(execFile)
 
@@ -276,6 +277,11 @@ const ALLOWED_STARTUP_LOCATIONS = new Set([
 // ── Exported core logic ──
 
 export async function listStartupItems(): Promise<StartupItem[]> {
+    // On non-Windows, delegate to platform abstraction
+    if (process.platform !== 'win32') {
+      return getPlatform().startup.listItems()
+    }
+
     const items: StartupItem[] = []
 
     // Read HKCU Run
@@ -354,6 +360,11 @@ export async function listStartupItems(): Promise<StartupItem[]> {
 export async function toggleStartupItem(
   name: string, location: string, command: string, source: StartupItem['source'], enabled: boolean
 ): Promise<boolean> {
+      // On non-Windows, delegate to platform abstraction
+      if (process.platform !== 'win32') {
+        return getPlatform().startup.toggleItem(name, location, command, source, enabled)
+      }
+
       if (source === 'task-scheduler') {
         if (!isSafeTaskName(name)) return false
         // Enable/disable scheduled tasks via PowerShell
@@ -416,6 +427,11 @@ export async function toggleStartupItem(
 export async function deleteStartupItem(
   name: string, location: string, source: StartupItem['source']
 ): Promise<boolean> {
+      // On non-Windows, delegate to platform abstraction
+      if (process.platform !== 'win32') {
+        return getPlatform().startup.deleteItem?.(name, location, source) ?? false
+      }
+
       let deletedSource = false
 
       try {
@@ -537,6 +553,12 @@ export async function getBootTrace(): Promise<StartupBootTrace> {
     entries: [],
     available: false,
     needsAdmin: false
+  }
+
+  // On non-Windows, delegate to platform abstraction (or return unavailable)
+  if (process.platform !== 'win32') {
+    const platformTrace = await getPlatform().startup.getBootTrace?.()
+    return platformTrace ?? empty
   }
 
   try {

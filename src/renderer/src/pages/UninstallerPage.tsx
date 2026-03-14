@@ -548,7 +548,7 @@ export function UninstallerPage() {
       {hasLoaded && !loading && programs.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16">
           <CheckCircle2 className="h-10 w-10 text-green-500 mb-4" strokeWidth={1.5} />
-          <p className="text-[13px] text-zinc-400">No programs found in the registry</p>
+          <p className="text-[13px] text-zinc-400">No installed programs found</p>
         </div>
       )}
 

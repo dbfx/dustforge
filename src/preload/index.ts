@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/channels'
 import type {
+  PlatformInfo,
   ScanResult,
   CleanResult,
   ProgressData,
@@ -47,6 +48,9 @@ import type {
 } from '../shared/types'
 
 const api = {
+  // Platform
+  platformInfo: (): Promise<PlatformInfo> => ipcRenderer.invoke(IPC.PLATFORM_INFO),
+
   // Window controls
   windowMinimize: () => ipcRenderer.send(IPC.WINDOW_MINIMIZE),
   windowMaximize: () => ipcRenderer.send(IPC.WINDOW_MAXIMIZE),

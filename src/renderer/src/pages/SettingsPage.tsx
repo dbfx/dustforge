@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppUpdateStore } from '@/stores/app-update-store'
+import { usePlatform } from '@/hooks/usePlatform'
 import logoSrc from '@/assets/logo.png'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -26,6 +27,7 @@ function formatNextScan(iso: string): string {
 }
 
 export function SettingsPage() {
+  const { features, platform } = usePlatform()
   const { settings, updateSettings, setSettings } = useSettingsStore()
   const [newExclusion, setNewExclusion] = useState('')
   const [nextScan, setNextScan] = useState<string | null>(null)
@@ -143,13 +145,14 @@ export function SettingsPage() {
   const addExclusion = () => {
     const value = newExclusion.trim()
     if (!value) return
-    // Must be an absolute path: drive letter (C:\...) or UNC path (\\server\share), or a *.ext glob
+    // Must be an absolute path or a *.ext glob
     const isDrivePath = /^[A-Za-z]:\\/.test(value)
     const isUncPath = /^\\\\[A-Za-z0-9]/.test(value)
+    const isUnixPath = /^\/[A-Za-z0-9]/.test(value)
     const isGlob = /^\*\.[A-Za-z0-9]+$/.test(value)
     // Reject relative path traversal sequences
     if (value.includes('..')) return
-    if (!isDrivePath && !isUncPath && !isGlob) return
+    if (!isDrivePath && !isUncPath && !isUnixPath && !isGlob) return
     // Prevent duplicates
     if (settings.exclusions.includes(value)) return
     save({ exclusions: [...settings.exclusions, value] })
@@ -185,9 +188,11 @@ export function SettingsPage() {
         <Row label="Close browsers before clean" desc="Automatically close browsers to unlock cache files">
           <Toggle checked={settings.cleaner.closeBrowsersBeforeClean} onChange={(v) => save({ cleaner: { ...settings.cleaner, closeBrowsersBeforeClean: v } })} />
         </Row>
-        <Row label="Create restore point" desc="Create a system restore point before cleaning (requires admin)">
-          <Toggle checked={settings.cleaner.createRestorePoint} onChange={(v) => save({ cleaner: { ...settings.cleaner, createRestorePoint: v } })} />
-        </Row>
+        {features.restorePoint && (
+          <Row label="Create restore point" desc="Create a system restore point before cleaning (requires admin)">
+            <Toggle checked={settings.cleaner.createRestorePoint} onChange={(v) => save({ cleaner: { ...settings.cleaner, createRestorePoint: v } })} />
+          </Row>
+        )}
         <Row label="Skip recent files" desc="Don't delete files modified within this time" last>
           <select value={settings.cleaner.skipRecentMinutes}
             onChange={(e) => save({ cleaner: { ...settings.cleaner, skipRecentMinutes: Number(e.target.value) } })}
@@ -223,7 +228,7 @@ export function SettingsPage() {
           <div className="flex items-center gap-2.5">
             <input type="text" value={newExclusion} onChange={(e) => setNewExclusion(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addExclusion()}
-              placeholder="C:\path\to\exclude or *.ext"
+              placeholder={platform === 'win32' ? 'C:\\path\\to\\exclude or *.ext' : '/path/to/exclude or *.ext'}
               className="flex-1 rounded-xl px-4 py-2.5 text-[13px] text-zinc-300 outline-none placeholder:text-zinc-700"
               style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }} />
             <button onClick={addExclusion}
@@ -326,7 +331,7 @@ export function SettingsPage() {
               </div>
             </div>
             <p className="text-[11px]" style={{ color: '#4e4e56' }}>
-              Data shared: CPU &amp; memory usage, disk space, network stats, uptime, and periodic health reports (registry, drivers, updates, privacy, malware). No file paths or personal data.
+              Data shared: CPU &amp; memory usage, disk space, network stats, uptime, and periodic health reports ({features.registry ? 'registry, drivers, ' : ''}updates, privacy, malware). No file paths or personal data.
             </p>
           </div>
         ) : (
@@ -382,7 +387,7 @@ export function SettingsPage() {
               </Row>
             )}
             {cloudStatus?.lastHealthReportAt && (
-              <Row label="Last health report" desc="Registry, drivers, updates, privacy, malware">
+              <Row label="Last health report" desc={features.registry ? 'Registry, drivers, updates, privacy, malware' : 'Updates, privacy, malware'}>
                 <span className="text-[12px] text-zinc-500">
                   {new Date(cloudStatus.lastHealthReportAt).toLocaleTimeString()}
                 </span>
@@ -410,10 +415,10 @@ export function SettingsPage() {
             <Row label="Remote power control" desc="Allow cloud to shutdown or restart this device">
               <Toggle checked={settings.cloud.allowRemotePower} onChange={(v) => save({ cloud: { ...settings.cloud, allowRemotePower: v } })} />
             </Row>
-            <Row label="Remote cleanup" desc="Allow cloud to delete files, remove bloatware, and fix registry">
+            <Row label="Remote cleanup" desc={features.registry ? 'Allow cloud to delete files, remove bloatware, and fix registry' : 'Allow cloud to delete files and perform cleanup'}>
               <Toggle checked={settings.cloud.allowRemoteCleanup} onChange={(v) => save({ cloud: { ...settings.cloud, allowRemoteCleanup: v } })} />
             </Row>
-            <Row label="Remote installs" desc="Allow cloud to install software, driver, and Windows updates">
+            <Row label="Remote installs" desc={platform === 'win32' ? 'Allow cloud to install software, driver, and Windows updates' : 'Allow cloud to install software and system updates'}>
               <Toggle checked={settings.cloud.allowRemoteInstalls} onChange={(v) => save({ cloud: { ...settings.cloud, allowRemoteInstalls: v } })} />
             </Row>
             <Row label="Remote config changes" desc="Allow cloud to toggle startup items, services, and privacy settings">

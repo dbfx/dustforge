@@ -176,9 +176,13 @@ export async function removeBloatware(
 // ── IPC registration ──
 
 export function registerDebloaterIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.DEBLOATER_SCAN, () => scanBloatware())
+  ipcMain.handle(IPC.DEBLOATER_SCAN, () => {
+    if (process.platform !== 'win32') return []
+    return scanBloatware()
+  })
 
   ipcMain.handle(IPC.DEBLOATER_REMOVE, async (_event, packageNames: string[]): Promise<{ removed: number; failed: number }> => {
+    if (process.platform !== 'win32') return { removed: 0, failed: 0 }
     return removeBloatware(packageNames, (current, total, currentApp, status) => {
       const win = getWindow()
       if (win && !win.isDestroyed()) win.webContents.send(IPC.DEBLOATER_REMOVE_PROGRESS, { current, total, currentApp, status })

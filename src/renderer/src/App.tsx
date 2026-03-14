@@ -26,6 +26,7 @@ import { useStatsStore } from './stores/stats-store'
 import { useHistoryStore } from './stores/history-store'
 import { useAppUpdateStore } from './stores/app-update-store'
 import { useBackgroundScans } from './hooks/useBackgroundScans'
+import { usePlatformLoader, PlatformContext } from './hooks/usePlatform'
 
 export function App() {
   const loadHistory = useHistoryStore((s) => s.load)
@@ -54,6 +55,8 @@ export function App() {
     if (historyLoaded) recomputeStats()
   }, [historyLoaded, recomputeStats])
 
+  const platformInfo = usePlatformLoader()
+
   useScheduledScan()
 
   // Run software-update & driver-update scans silently in the background
@@ -69,6 +72,7 @@ export function App() {
   if (!onboardingChecked) return null
 
   return (
+    <PlatformContext value={platformInfo}>
     <HashRouter>
       {showOnboarding && <Onboarding onComplete={handleOnboardingComplete} />}
       <AppShell>
@@ -107,5 +111,6 @@ export function App() {
         }}
       />
     </HashRouter>
+    </PlatformContext>
   )
 }

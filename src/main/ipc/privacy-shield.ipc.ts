@@ -8,6 +8,7 @@ import type {
   PrivacyApplyResult
 } from '../../shared/types'
 import type { WindowGetter } from './index'
+import { getPlatform } from '../platform'
 
 const execFileAsync = promisify(execFile)
 
@@ -489,14 +490,20 @@ const SETTINGS: SettingDef[] = [
 
 export { SETTINGS as PRIVACY_SETTINGS }
 
+function getSettingsForPlatform(): SettingDef[] {
+  if (process.platform === 'win32') return SETTINGS
+  return getPlatform().privacy.getSettings()
+}
+
 export async function scanPrivacy(
   onProgress?: (data: { current: number; total: number; currentLabel: string; category: string }) => void
 ): Promise<PrivacyShieldState> {
+    const settingDefs = getSettingsForPlatform()
     const settings: PrivacySetting[] = []
-    const total = SETTINGS.length
+    const total = settingDefs.length
 
-    for (let i = 0; i < SETTINGS.length; i++) {
-      const def = SETTINGS[i]
+    for (let i = 0; i < settingDefs.length; i++) {
+      const def = settingDefs[i]
 
       onProgress?.({
         current: i + 1,
@@ -529,12 +536,13 @@ export async function scanPrivacy(
 }
 
 export async function applyPrivacySettings(ids: string[]): Promise<PrivacyApplyResult> {
+    const settingDefs = getSettingsForPlatform()
     let succeeded = 0
     let failed = 0
     const errors: PrivacyApplyResult['errors'] = []
 
     for (const id of ids) {
-      const def = SETTINGS.find(s => s.id === id)
+      const def = settingDefs.find(s => s.id === id)
       if (!def) continue
 
       try {

@@ -119,6 +119,28 @@ function getExeNames(program: InstalledProgram): string[] {
  * Query the Windows Registry for all installed programs with full details.
  */
 export async function getInstalledProgramsFull(): Promise<InstalledProgram[]> {
+  // On non-Windows, use platform commands to list installed apps
+  if (process.platform !== 'win32') {
+    const platform = getPlatform()
+    const apps = await platform.commands.getInstalledApps()
+    return apps.map((app) => ({
+      id: createHash('sha256').update(`${app.name}::${app.publisher}`).digest('hex').substring(0, 16),
+      displayName: app.name,
+      publisher: app.publisher,
+      displayVersion: app.version,
+      installDate: app.installDate || '',
+      estimatedSize: (app.sizeKb || 0) * 1024,
+      installLocation: '',
+      uninstallString: '',
+      quietUninstallString: '',
+      displayIcon: '',
+      registryKey: '',
+      isSystemComponent: false,
+      isWindowsInstaller: false,
+      lastUsed: -1,
+    })).sort((a, b) => a.displayName.localeCompare(b.displayName))
+  }
+
   const programs: InstalledProgram[] = []
   const seen = new Set<string>() // dedup by displayName+publisher
 

@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { useHistoryStore } from '@/stores/history-store'
 import { useCloudHistoryStore } from '@/stores/cloud-history-store'
 import { formatBytes } from '@/lib/utils'
+import { usePlatform } from '@/hooks/usePlatform'
 import type { ScanHistoryEntry, HistoryEntryType, CloudActionEntry } from '@shared/types'
 
 const typeConfig: Record<HistoryEntryType, { label: string; icon: typeof Sparkles; color: string; bg: string }> = {
@@ -34,6 +35,7 @@ const PIE_COLORS = ['#f59e0b', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#14b
 type ViewMode = 'overview' | 'timeline' | 'cloud'
 
 export function HistoryPage() {
+  const { features } = usePlatform()
   const { entries, loaded, load, clear } = useHistoryStore()
   const { entries: cloudEntries, loaded: cloudLoaded, load: loadCloud, clear: clearCloud } = useCloudHistoryStore()
   const [showClearConfirm, setShowClearConfirm] = useState(false)
@@ -429,13 +431,14 @@ function TimelineView({
   selectedEntry: string | null
   setSelectedEntry: (id: string | null) => void
 }) {
+  const { features } = usePlatform()
   const filters: { label: string; value: 'all' | ScanHistoryEntry['type'] }[] = [
     { label: 'All', value: 'all' },
     { label: 'Cleaner', value: 'cleaner' },
-    { label: 'Registry', value: 'registry' },
-    { label: 'Debloater', value: 'debloater' },
+    ...(features.registry ? [{ label: 'Registry' as const, value: 'registry' as const }] : []),
+    ...(features.debloater ? [{ label: 'Debloater' as const, value: 'debloater' as const }] : []),
     { label: 'Network', value: 'network' },
-    { label: 'Drivers', value: 'drivers' },
+    ...(features.drivers ? [{ label: 'Drivers' as const, value: 'drivers' as const }] : []),
     { label: 'Malware', value: 'malware' },
     { label: 'Privacy', value: 'privacy' },
     { label: 'Startup', value: 'startup' },

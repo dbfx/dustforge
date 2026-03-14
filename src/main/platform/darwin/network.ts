@@ -1,6 +1,6 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import type { PlatformNetwork, ActiveConnection, DnsCacheEntry } from '../types'
+import type { PlatformNetwork, ActiveConnection, DnsCacheEntry, WifiProfile } from '../types'
 
 const execFileAsync = promisify(execFile)
 
@@ -71,6 +71,53 @@ export function createDarwinNetwork(): PlatformNetwork {
     async getDnsCacheEntries(): Promise<DnsCacheEntry[]> {
       // macOS has no user-accessible DNS cache dump API.
       return []
+    },
+
+    async flushDnsCache(): Promise<boolean> {
+      try {
+        await execFileAsync('/usr/bin/dscacheutil', ['-flushcache'], { timeout: 5000 })
+        // Also kill mDNSResponder to fully flush
+        await execFileAsync('/usr/bin/killall', ['-HUP', 'mDNSResponder'], { timeout: 5000 }).catch(() => {})
+        return true
+      } catch {
+        return false
+      }
+    },
+
+    async getWifiProfiles(): Promise<WifiProfile[]> {
+      try {
+        const { stdout } = await execFileAsync('/usr/sbin/networksetup', [
+          '-listpreferredwirelessnetworks', 'en0',
+        ], { timeout: 10000 })
+        const profiles: WifiProfile[] = []
+        for (const line of stdout.split('\n').slice(1)) {
+          const name = line.trim()
+          if (name) profiles.push({ name, security: 'Wi-Fi' })
+        }
+        return profiles
+      } catch {
+        return []
+      }
+    },
+
+    async deleteWifiProfile(name: string): Promise<boolean> {
+      try {
+        await execFileAsync('/usr/sbin/networksetup', [
+          '-removepreferredwirelessnetwork', 'en0', name,
+        ], { timeout: 10000 })
+        return true
+      } catch {
+        return false
+      }
+    },
+
+    async clearArpCache(): Promise<boolean> {
+      try {
+        await execFileAsync('/usr/sbin/arp', ['-a', '-d'], { timeout: 5000 })
+        return true
+      } catch {
+        return false
+      }
     },
   }
 }

@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Shield, Eye, PackageMinus, Server } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { cn } from '@/lib/utils'
 import { PrivacyShieldPage } from './PrivacyShieldPage'
 import { DebloaterPage } from './DebloaterPage'
 import { ServiceManagerPage } from './ServiceManagerPage'
+import { usePlatform } from '@/hooks/usePlatform'
 import type { LucideIcon } from 'lucide-react'
 
 interface TabDef {
@@ -21,13 +22,24 @@ const tabs: TabDef[] = [
 ]
 
 export function SystemHardeningPage() {
+  const { features, platform } = usePlatform()
   const [activeTab, setActiveTab] = useState('privacy')
+
+  const visibleTabs = useMemo(() =>
+    tabs.filter((tab) => {
+      if (tab.id === 'bloatware' && !features.debloater) return false
+      return true
+    }),
+    [features.debloater]
+  )
 
   return (
     <div className="animate-fade-in">
       <PageHeader
         title="System Hardening"
-        description="Strip down Windows — remove telemetry, bloatware, and unnecessary services"
+        description={platform === 'win32'
+          ? 'Strip down Windows — remove telemetry, bloatware, and unnecessary services'
+          : 'Harden your system — manage privacy settings and unnecessary services'}
       />
 
       {/* Tab bar */}
@@ -35,7 +47,7 @@ export function SystemHardeningPage() {
         className="mb-6 flex rounded-xl p-1"
         style={{ background: '#16161a', border: '1px solid rgba(255,255,255,0.05)' }}
       >
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const isActive = activeTab === tab.id
           const TabIcon = tab.icon
           return (

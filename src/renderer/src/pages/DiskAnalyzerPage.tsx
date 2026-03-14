@@ -7,6 +7,7 @@ import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { ScanProgress } from '@/components/shared/ScanProgress'
 import { cn, formatBytes } from '@/lib/utils'
 import { useDiskStore } from '@/stores/disk-store'
+import { usePlatform } from '@/hooks/usePlatform'
 import type { DiskNode, DriveInfo } from '@shared/types'
 
 type ViewMode = 'folders' | 'filetypes'
@@ -90,6 +91,8 @@ function layoutTreemap(items: { name: string; size: number; fill: string }[], wi
 }
 
 export function DiskAnalyzerPage() {
+  const { platform } = usePlatform()
+  const isWin = platform === 'win32'
   const drives = useDiskStore((s) => s.drives)
   const selectedDrive = useDiskStore((s) => s.selectedDrive)
   const data = useDiskStore((s) => s.data)
@@ -116,8 +119,8 @@ export function DiskAnalyzerPage() {
       store.setData(result); store.setBreadcrumb([result])
     } catch (err) {
       console.error('Disk analysis failed:', err)
-      toast.error(`Failed to analyze drive ${selectedDrive}:`, { description: 'Make sure the drive is accessible' })
-      store.setError(`Failed to analyze drive ${selectedDrive}:. Make sure the drive is accessible.`)
+      toast.error(`Failed to analyze drive ${selectedDrive}${isWin ? ':' : ''}`, { description: 'Make sure the drive is accessible' })
+      store.setError(`Failed to analyze drive ${selectedDrive}${isWin ? ':' : ''}. Make sure the drive is accessible.`)
     }
     store.setAnalyzing(false)
   }
@@ -129,7 +132,7 @@ export function DiskAnalyzerPage() {
       store.setFileTypes(result)
     } catch (err) {
       console.error('File type scan failed:', err)
-      store.setError(`Failed to scan file types on ${selectedDrive}:.`)
+      store.setError(`Failed to scan file types on ${selectedDrive}${isWin ? ':' : ''}.`)
     }
     store.setFileTypesLoading(false)
   }
@@ -159,8 +162,8 @@ export function DiskAnalyzerPage() {
             <select value={selectedDrive} onChange={(e) => store.setSelectedDrive(e.target.value)}
               className="rounded-xl px-4 py-2.5 text-[13px] text-zinc-400 outline-none"
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              {(drives.length > 0 ? drives : [{ letter: 'C', label: 'System', totalSize: 0, freeSpace: 0, usedSpace: 0 }]).map((d) => (
-                <option key={d.letter} value={d.letter}>{d.letter}: {d.label}</option>
+              {(drives.length > 0 ? drives : [{ letter: isWin ? 'C' : '/', label: 'System', totalSize: 0, freeSpace: 0, usedSpace: 0 }]).map((d) => (
+                <option key={d.letter} value={d.letter}>{isWin ? `${d.letter}: ${d.label}` : `${d.letter} ${d.label}`}</option>
               ))}
             </select>
             <button onClick={handleAnalyze} disabled={analyzing}
@@ -175,7 +178,7 @@ export function DiskAnalyzerPage() {
 
       {error && <ErrorAlert message={error} onDismiss={() => store.setError(null)} className="mb-5" />}
 
-      {analyzing && <ScanProgress status="scanning" progress={0} currentPath={`Analyzing ${selectedDrive}:\\...`} className="mb-5" />}
+      {analyzing && <ScanProgress status="scanning" progress={0} currentPath={isWin ? `Analyzing ${selectedDrive}:\\...` : `Analyzing ${selectedDrive}...`} className="mb-5" />}
       {!data && !analyzing && !error && <EmptyState icon={HardDrive} title="No analysis data" description="Select a drive and click Analyze to visualize disk space usage." />}
 
       {data && (
@@ -277,7 +280,7 @@ export function DiskAnalyzerPage() {
 
           {viewMode === 'filetypes' && (
             <>
-              {fileTypesLoading && <ScanProgress status="scanning" progress={0} currentPath={`Scanning file types on ${selectedDrive}:\\...`} className="mb-5" />}
+              {fileTypesLoading && <ScanProgress status="scanning" progress={0} currentPath={isWin ? `Scanning file types on ${selectedDrive}:\\...` : `Scanning file types on ${selectedDrive}...`} className="mb-5" />}
 
               {!fileTypesLoading && fileTypes.length === 0 && (
                 <EmptyState icon={FileType2} title="No file type data" description="Click Analyze first, then switch to File Types view to scan." />

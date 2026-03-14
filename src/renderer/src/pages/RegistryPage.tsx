@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { usePlatform } from '@/hooks/usePlatform'
 import {
   Database, Search, Wrench, Shield, CheckCircle2, ChevronDown,
   ShieldAlert, Gauge, Wifi, Server, CalendarClock, Trash2, Loader2, Check
@@ -117,6 +118,21 @@ function HealthRing({ percent, color, size = 36 }: { percent: number; color: str
 }
 
 export function RegistryPage() {
+  const { features } = usePlatform()
+
+  if (!features.registry) {
+    return (
+      <div className="animate-fade-in">
+        <PageHeader title="Registry Cleaner" description="Windows registry scanning and repair" />
+        <EmptyState icon={Database} title="Not available" description="Registry cleaning is only available on Windows" />
+      </div>
+    )
+  }
+
+  return <RegistryPageContent />
+}
+
+function RegistryPageContent() {
   const entries = useRegistryStore((s) => s.entries)
   const scanning = useRegistryStore((s) => s.scanning)
   const scanned = useRegistryStore((s) => s.scanned)

@@ -51,6 +51,19 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerSoftwareUpdaterIpc(getWindow)
   registerCloudAgentIpc()
 
+  // Platform info
+  const isWin = process.platform === 'win32'
+  ipcMain.handle(IPC.PLATFORM_INFO, () => ({
+    platform: process.platform as 'win32' | 'darwin' | 'linux',
+    features: {
+      registry: isWin,
+      debloater: isWin,
+      drivers: isWin,
+      restorePoint: isWin,
+      bootTrace: isWin,
+    },
+  }))
+
   // Settings — validate shape before persisting
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettings())
   ipcMain.handle(IPC.SETTINGS_SET, (_event, settings) => {
@@ -74,16 +87,32 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.ELEVATION_CHECK, () => isAdmin())
   ipcMain.handle(IPC.ELEVATION_RELAUNCH, () => {
     const exePath = app.getPath('exe')
-    // Use -EncodedCommand to avoid any string interpolation / quoting issues
-    const psScript = `Start-Process -FilePath '${exePath.replace(/'/g, "''")}' -Verb RunAs`
-    const encoded = Buffer.from(psScript, 'utf16le').toString('base64')
-    spawn('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded,
-    ], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    }).unref()
+
+    if (process.platform === 'win32') {
+      const psScript = `Start-Process -FilePath '${exePath.replace(/'/g, "''")}' -Verb RunAs`
+      const encoded = Buffer.from(psScript, 'utf16le').toString('base64')
+      spawn('powershell.exe', [
+        '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded,
+      ], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      }).unref()
+    } else if (process.platform === 'linux') {
+      spawn('pkexec', [exePath], {
+        detached: true,
+        stdio: 'ignore',
+      }).unref()
+    } else if (process.platform === 'darwin') {
+      // AppleScript: set a variable so quoted form of handles special chars safely
+      const escaped = exePath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+      const script = `do shell script "${escaped}" with administrator privileges`
+      spawn('osascript', ['-e', script], {
+        detached: true,
+        stdio: 'ignore',
+      }).unref()
+    }
+
     app.quit()
   })
 

@@ -65,7 +65,7 @@ function BootTracePanel({ trace, loading }: { trace: StartupBootTrace | null; lo
           <span className="text-[13px]">
             {trace?.needsAdmin
               ? 'Boot trace data requires administrator privileges — restart the app as administrator to view startup impact analysis.'
-              : 'Boot trace data unavailable — Windows diagnostics log may be disabled or no boot events recorded yet.'}
+              : 'Boot trace analysis is not available on this platform.'}
           </span>
         </div>
       </div>

@@ -268,11 +268,24 @@ export interface DnsCacheEntry {
   resolvedAddress: string | null
 }
 
+export interface WifiProfile {
+  name: string
+  security: string
+}
+
 export interface PlatformNetwork {
   /** Get established TCP connections with remote address, port, and PID */
   getEstablishedConnections(): Promise<ActiveConnection[]>
   /** Get DNS cache entries. Returns empty array if not supported on this platform. */
   getDnsCacheEntries(): Promise<DnsCacheEntry[]>
+  /** Flush the DNS resolver cache. Returns true on success. */
+  flushDnsCache?(): Promise<boolean>
+  /** List saved Wi-Fi profiles. */
+  getWifiProfiles?(): Promise<WifiProfile[]>
+  /** Delete a saved Wi-Fi profile by name. */
+  deleteWifiProfile?(name: string): Promise<boolean>
+  /** Clear the ARP cache. Returns true on success. */
+  clearArpCache?(): Promise<boolean>
 }
 
 // ─── Top-level Provider ─────────────────────────────────────

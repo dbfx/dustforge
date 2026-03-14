@@ -33,6 +33,7 @@ import { useServiceStore } from '@/stores/service-store'
 import { useStartupStore } from '@/stores/startup-store'
 import type { DriveInfo, ActivityEntry, ScanResult, CleanResult } from '@shared/types'
 import { CleanerType } from '@shared/enums'
+import { usePlatform } from '@/hooks/usePlatform'
 
 type OneClickPhase = 'idle' | 'scanning' | 'cleaning' | 'done'
 
@@ -53,6 +54,7 @@ const CLEANER_SCAN_FNS: { type: CleanerType; scan: () => Promise<ScanResult[]>; 
 ]
 
 export function DashboardPage() {
+  const { features } = usePlatform()
   const stats = useStatsStore((s) => s.stats)
   const recomputeStats = useStatsStore((s) => s.recompute)
   const historyStore = useHistoryStore()
@@ -87,8 +89,8 @@ export function DashboardPage() {
     // History-based tools
     const historyTools = [
       { key: 'cleaner' as const, label: 'Cleaner', icon: Search, color: '#f59e0b' },
-      { key: 'registry' as const, label: 'Registry', icon: Database, color: '#3b82f6' },
-      { key: 'drivers' as const, label: 'Drivers', icon: Cpu, color: '#a855f7' }
+      ...(features.registry ? [{ key: 'registry' as const, label: 'Registry', icon: Database, color: '#3b82f6' }] : []),
+      ...(features.drivers ? [{ key: 'drivers' as const, label: 'Drivers', icon: Cpu, color: '#a855f7' }] : [])
     ]
 
     const historyResults = historyTools.map((t) => ({
@@ -234,7 +236,7 @@ export function DashboardPage() {
     setStepProgress({ current: 1, total: 2 })
     const { space, files } = await runCleaners()
     setStepProgress({ current: 2, total: 2 })
-    const regFixed = await runRegistry()
+    const regFixed = features.registry ? await runRegistry() : 0
 
     const oneClickResult: OneClickResult = {
       spaceRecovered: space,
@@ -271,7 +273,7 @@ export function DashboardPage() {
     setResult(oneClickResult)
     setPhase('done')
     setPhaseLabel('')
-  }, [phase, runCleaners, runRegistry, historyStore, recomputeStats])
+  }, [phase, runCleaners, runRegistry, historyStore, recomputeStats, features])
 
   const handleFullClean = useCallback(async () => {
     if (phase !== 'idle' && phase !== 'done') return
@@ -284,11 +286,11 @@ export function DashboardPage() {
     setStepProgress({ current: 1, total: 4 })
     const { space, files } = await runCleaners()
     setStepProgress({ current: 2, total: 4 })
-    const regFixed = await runRegistry()
+    const regFixed = features.registry ? await runRegistry() : 0
     setStepProgress({ current: 3, total: 4 })
     const netCleaned = await runNetwork()
     setStepProgress({ current: 4, total: 4 })
-    const drivers = await runDrivers()
+    const drivers = features.drivers ? await runDrivers() : { removed: 0, space: 0 }
 
     const oneClickResult: OneClickResult = {
       spaceRecovered: space + drivers.space,
@@ -331,7 +333,7 @@ export function DashboardPage() {
     setResult(oneClickResult)
     setPhase('done')
     setPhaseLabel('')
-  }, [phase, runCleaners, runRegistry, runNetwork, runDrivers, historyStore, recomputeStats])
+  }, [phase, runCleaners, runRegistry, runNetwork, runDrivers, historyStore, recomputeStats, features])
 
   const isRunning = phase === 'scanning' || phase === 'cleaning'
   const activity = stats.recentActivity
@@ -421,7 +423,7 @@ export function DashboardPage() {
           <div className="flex-1 min-w-0">
             <p className="text-[14px] font-semibold text-zinc-200">Quick Clean</p>
             <p className="text-[12px]" style={{ color: '#52525e' }}>
-              Clean junk files + fix registry issues
+              {features.registry ? 'Clean junk files + fix registry issues' : 'Clean junk files and temporary data'}
             </p>
             <p className="text-[11px] mt-0.5" style={{ color: '#3f3f46' }}>
               Respects your category selections from the Cleaner page
@@ -447,10 +449,10 @@ export function DashboardPage() {
           <div className="flex-1 min-w-0">
             <p className="text-[14px] font-semibold text-zinc-200">Full Clean, Optimize & Protect</p>
             <p className="text-[12px]" style={{ color: '#52525e' }}>
-              Junk files + registry + network + stale drivers
+              {features.registry ? 'Junk files + registry + network + stale drivers' : 'Junk files + network cleanup'}
             </p>
             <p className="text-[11px] mt-0.5" style={{ color: '#3f3f46' }}>
-              Everything except Debloater, Startup, and Driver Updates
+              {features.debloater ? 'Everything except Debloater, Startup, and Driver Updates' : 'Everything except Startup'}
             </p>
           </div>
         </button>
@@ -540,7 +542,7 @@ export function DashboardPage() {
           </h3>
           <div className="grid grid-cols-4 gap-2.5">
             <QuickAction icon={Search} label="Cleaner" onClick={() => navigate('/cleaner')} />
-            <QuickAction icon={Database} label="Registry" onClick={() => navigate('/registry')} />
+            {features.registry && <QuickAction icon={Database} label="Registry" onClick={() => navigate('/registry')} />}
             <QuickAction icon={Wifi} label="Network" onClick={() => navigate('/network')} />
             <QuickAction icon={BarChart3} label="Disk Map" onClick={() => navigate('/disk')} />
           </div>
@@ -592,7 +594,9 @@ export function DashboardPage() {
         onConfirm={() => { setShowQuickConfirm(false); handleQuickClean() }}
         onCancel={() => setShowQuickConfirm(false)}
         title="Quick Clean"
-        description="This will scan and clean junk files across all non-excluded categories and fix selected registry issues. Your category exclusions from the Cleaner page are respected."
+        description={features.registry
+          ? 'This will scan and clean junk files across all non-excluded categories and fix selected registry issues. Your category exclusions from the Cleaner page are respected.'
+          : 'This will scan and clean junk files across all non-excluded categories. Your category exclusions from the Cleaner page are respected.'}
         confirmLabel="Start Quick Clean"
         variant="warning"
       />
@@ -602,7 +606,9 @@ export function DashboardPage() {
         onConfirm={() => { setShowFullConfirm(false); handleFullClean() }}
         onCancel={() => setShowFullConfirm(false)}
         title="Full Clean, Optimize & Protect"
-        description="This will clean junk files, fix registry issues, flush DNS and ARP caches, and remove stale driver packages. Network caches rebuild automatically, but this is a broad operation that touches multiple system areas."
+        description={features.registry
+          ? 'This will clean junk files, fix registry issues, flush DNS and ARP caches, and remove stale driver packages. Network caches rebuild automatically, but this is a broad operation that touches multiple system areas.'
+          : 'This will clean junk files, flush DNS and ARP caches, and perform network cleanup. Caches rebuild automatically, but this is a broad operation that touches multiple system areas.'}
         confirmLabel="Start Full Clean"
         variant="warning"
       />
@@ -656,6 +662,7 @@ function ActivityItem({ entry }: { entry: ActivityEntry }) {
 }
 
 function DriveBar({ drive }: { drive: DriveInfo }) {
+  const { platform } = usePlatform()
   const usedPercent = (drive.usedSpace / drive.totalSize) * 100
   const barColor = usedPercent > 90 ? '#ef4444' : usedPercent > 75 ? '#f59e0b' : '#22c55e'
 
@@ -665,7 +672,7 @@ function DriveBar({ drive }: { drive: DriveInfo }) {
         <div className="flex items-center gap-2.5">
           <HardDrive className="h-4 w-4" style={{ color: '#52525e' }} strokeWidth={1.6} />
           <span className="text-[13px] font-medium text-zinc-300">
-            {drive.letter}: {drive.label}
+            {platform === 'win32' ? `${drive.letter}: ${drive.label}` : `${drive.letter} ${drive.label}`}
           </span>
         </div>
         <span className="font-mono text-[11px]" style={{ color: '#6e6e76' }}>

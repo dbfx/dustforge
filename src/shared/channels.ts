@@ -143,6 +143,9 @@ export const IPC = {
   HISTORY_CHANGED: 'history:changed',
   CLOUD_HISTORY_CHANGED: 'cloud:history:changed',
 
+  // Platform
+  PLATFORM_INFO: 'platform:info',
+
   // Window controls
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_MAXIMIZE: 'window:maximize',
