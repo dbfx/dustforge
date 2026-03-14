@@ -18,6 +18,13 @@ if (process.argv.includes('--daemon') || process.argv.includes('--cli')) {
   app.commandLine.appendSwitch('ozone-platform', 'headless')
 }
 
+// ─── Linux root detection ────────────────────────────────────
+// Chromium refuses to run as root without --no-sandbox.  This is hit when
+// the user relaunches via pkexec or runs with sudo for privileged ops.
+if (process.platform === 'linux' && typeof process.getuid === 'function' && process.getuid() === 0) {
+  app.commandLine.appendSwitch('no-sandbox')
+}
+
 // ─── CLI / Daemon mode ───────────────────────────────────────
 // If --cli is passed, run headless and exit — no GUI, no tray.
 // If --daemon is passed, run headless cloud agent and stay alive.

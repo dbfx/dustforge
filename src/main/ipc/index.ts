@@ -99,7 +99,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
         windowsHide: true,
       }).unref()
     } else if (process.platform === 'linux') {
-      spawn('pkexec', [exePath], {
+      spawn('pkexec', [exePath, '--no-sandbox'], {
         detached: true,
         stdio: 'ignore',
       }).unref()
